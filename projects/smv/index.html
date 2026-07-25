@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SmoothMotionVectors — 4D bundle web player</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- non-blocking: never delay first paint or compete with the scene download -->
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  :root{
+    --bg:#f4f2ec; --surface:#ffffff; --ink:#211d17; --muted:#7c746a;
+    --line:#e8e3d9; --accent:#5a3ec8; --accent-2:#9a86f2; --ok:#1c9b6b; --err:#c0392b; --view:#0c0c0f;
+  }
+  *{box-sizing:border-box}
+  html{height:100%}
+  body{margin:0;min-height:100%;color:var(--ink);
+    background:var(--bg);
+    font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .inner{max-width:1180px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  header{background:linear-gradient(180deg,#fffdf9,#fbf9f3);border-bottom:1px solid var(--line);padding:32px 0 22px}
+  h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(34px,5vw,52px);line-height:1.0;letter-spacing:-.018em;color:var(--ink)}
+  h1 .accent{color:var(--accent)}
+  .tagline{margin:12px 0 0;font-family:'Fraunces',Georgia,serif;font-style:italic;
+     font-size:clamp(15px,1.7vw,19px);color:var(--muted)}
+  .tagline em{color:var(--accent);font-style:italic}
+  .subtitle{margin:8px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;font-size:clamp(15px,2vw,22px);color:var(--ink);opacity:.92;line-height:1.2}
+  footer .paper em{font-style:normal;color:var(--ink);font-weight:600}
+  .byline{margin:14px 0 0;font-size:13.5px;line-height:1.75;color:var(--muted)}
+  .byline .authors{color:var(--ink);font-weight:500}
+  /* author links stay in the byline's ink so four names still read as one line; the rule is the
+     only affordance, and it warms to the accent on hover */
+  .byline .authors a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);transition:color .15s,border-color .15s}
+  .byline .authors a:hover{color:var(--accent);border-bottom-color:var(--accent)}
+  .byline .affil{display:block;font-size:12px}
+  .byline sup{color:var(--accent);font-size:.7em;padding:0 1px}
+  .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:24px}
+  select{font:inherit;font-size:14px;color:var(--ink);background:#fff;border:1px solid var(--line);
+     border-radius:9px;padding:9px 13px;min-width:300px;max-width:60vw;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  #bwSel,#specSel{min-width:auto}
+  .btn{font:inherit;font-weight:600;font-size:14px;border:0;border-radius:9px;padding:9px 18px;cursor:pointer;
+     color:#fff;background:var(--accent);box-shadow:0 3px 12px rgba(90,62,200,.28);transition:background .15s}
+  .btn:hover:not(:disabled){background:#4a31b0}
+  .btn:disabled{opacity:.45;cursor:default;box-shadow:none}
+  .btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);box-shadow:none}
+  .btn.ghost:hover:not(:disabled){background:#f3f1ec;border-color:#d8d3c8}
+  #stats{flex:0 0 100%;text-align:left;min-height:1.3em;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}#stats .ok{color:var(--ok);font-weight:600}
+  main{padding:26px 0 46px}
+  #wrap{position:relative;height:clamp(360px,58vh,680px);border:1px solid var(--line);border-radius:16px;
+     overflow:hidden;background:var(--view);box-shadow:0 18px 50px -14px rgba(30,22,60,.22)}
+  #gl{position:absolute;inset:0;width:100%;height:100%;display:none}
+  #idle{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#b7b1a4;font-size:14px}
+  #idleDec{font-size:12px;opacity:.7}
+  #idleDec.ready{color:var(--ok);opacity:.95}
+  .minispin{display:inline-block;width:12px;height:12px;vertical-align:-2px;margin-right:7px;border-radius:50%;border:2px solid rgba(255,255,255,.25);border-top-color:var(--accent-2);animation:spin .8s linear infinite}
+  #idle b{color:#ece7db;font-weight:600}
+  #load{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+     background:radial-gradient(circle at 50% 40%,#17171c,#08080a);color:#ece8df}
+  #load.setup .ring{border-top-color:#ffb347}
+  #load.setup #stage{color:#ffcf8a}
+  .loadring{position:relative;width:90px;height:90px;display:grid;place-items:center}
+  .ring{position:absolute;inset:0;border-radius:50%;border:4px solid rgba(255,255,255,.14);border-top-color:var(--accent-2);animation:spin .9s linear infinite}
+  .pct{font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #timer{font-family:'Fraunces',Georgia,serif;font-size:30px;font-variant-numeric:tabular-nums;letter-spacing:1px;color:#fff}#timer small{font-size:12px;opacity:.55}
+  #stage{font-size:13px;font-weight:600;color:#fff}#sub{font-size:12px;color:#aaa498;min-height:1.2em}
+  #fs{position:absolute;top:12px;right:12px;z-index:5;display:none;font:inherit;color:#fff;background:rgba(255,255,255,.12);
+     border:1px solid rgba(255,255,255,.28);border-radius:8px;padding:5px 10px;cursor:pointer}
+  #fs:hover{background:rgba(255,255,255,.22)}
+  #buf{position:absolute;left:12px;bottom:12px;z-index:5;display:none;align-items:center;gap:8px;font-size:12px;color:#fff;
+     background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.2);border-radius:9px;padding:6px 12px;backdrop-filter:blur(4px)}
+  #buf .dot{width:13px;height:13px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite}
+  #wrap:fullscreen{height:100vh;width:100vw;border:0;border-radius:0;box-shadow:none}
+  #bar{display:none;gap:14px;align-items:center;margin-top:16px;background:var(--surface);border:1px solid var(--line);
+     border-radius:12px;padding:12px 18px;box-shadow:0 4px 16px -8px rgba(0,0,0,.12)}
+  #bar button{font:inherit;font-weight:600;font-size:13px;color:#fff;background:var(--accent);border:0;border-radius:8px;padding:7px 16px;cursor:pointer}
+  #bar button:hover{background:#4a31b0}
+  #bar input[type=range]{flex:1;accent-color:var(--accent);height:4px}
+  #bar .lbl{white-space:nowrap;font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  #bar .lbl input{accent-color:var(--accent)}
+  #bar .lbl select{min-width:auto;padding:4px 8px;font-size:12.5px;border-radius:7px}
+  #panel{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 4px 16px -8px rgba(0,0,0,.1)}
+  #panelHdr{width:100%;text-align:left;font:inherit;font-weight:600;font-size:14px;color:var(--ink);background:none;border:0;padding:13px 18px;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+  #panelHdr .chev{color:var(--muted);transition:transform .2s}
+  #panel.open #panelHdr .chev{transform:rotate(90deg)}
+  #panelBody{max-height:0;overflow:hidden;transition:max-height .28s ease}
+  #panel.open #panelBody{max-height:300px}
+  .panelInner{padding:2px 18px 18px;display:flex;flex-direction:column;gap:16px}
+  .help{display:flex;flex-wrap:wrap;gap:10px 16px;font-size:12.5px;color:var(--muted);align-items:center}
+  kbd{font:inherit;font-size:11px;background:#f3f1ec;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--ink);margin:0 1px}
+  .settings{display:flex;flex-wrap:wrap;gap:20px;align-items:center;font-size:13px;color:var(--muted)}
+  .settings label{display:flex;align-items:center;gap:8px}
+  .settings input[type=range]{accent-color:var(--accent);width:120px}
+  .settings input[type=checkbox]{accent-color:var(--accent)}
+  /* an option the loaded scene can't express: dimmed, disabled, and tagged, so a control that
+     does nothing here never reads as a broken one. The tick itself is left alone — it's the
+     user's standing preference, and it takes effect again on a scene that supports it. */
+  label.na{opacity:.42}
+  .na input,.na select{cursor:not-allowed}
+  .naTag{font-size:9.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-left:-3px}
+  #mvPanel{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 4px 16px -8px rgba(0,0,0,.1)}
+  #mvPanel .mvHdr{font:inherit;font-weight:600;font-size:14px;color:var(--ink);padding:13px 18px 2px;display:flex;align-items:baseline;gap:8px}
+  #mvPanel .mvHdr small{font-weight:400;font-size:11.5px;color:var(--muted)}
+  #mvPanel .mvBody{padding:10px 18px 4px;display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+  .mvViz{flex:0 0 auto;display:flex;flex-direction:column;gap:5px;align-items:center}
+  #mvCanvas{width:150px;height:150px;border:1px solid var(--line);border-radius:8px;background:#0c0c0f;image-rendering:pixelated;display:block}
+  .mvViz .mvCap{font-size:10.5px;color:var(--muted);letter-spacing:.02em}
+  #mvPanel .mvStats{flex:1;min-width:210px;align-self:center;font-size:12.5px;color:var(--muted);line-height:1.85;font-variant-numeric:tabular-nums}
+  #mvPanel .mvStats b{color:var(--ink);font-weight:600}
+  .mvMapWrap{padding:6px 18px 14px;border-top:1px solid var(--line);margin-top:8px}
+  .mvMapLbl{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px}
+  #mvGops{display:flex;flex-wrap:wrap;gap:3px}
+  .gd{display:inline-block;width:11px;height:11px;border-radius:50%;background:var(--line);box-shadow:inset 0 0 0 1px rgba(0,0,0,.07)}
+  .gd-active{background:#16a34a;box-shadow:0 0 0 2px rgba(22,163,74,.25)}
+  .gd-resident{background:#3b82f6}
+  .gd-decoding{background:#f59e0b}
+  .gd-pending{background:#ece7db}
+  .mvLegend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:11px;color:var(--muted)}
+  .mvLegend span{display:inline-flex;align-items:center;gap:5px}
+  .mvLegend .gd{width:9px;height:9px}
+  /* One row per visualization: its toggle first, then the sliders that only affect it. A flat
+     wrap of eight controls gave no clue which slider belonged to which checkbox. */
+  .mvTraj{padding:11px 18px;border-top:1px solid var(--line);margin-top:8px;display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--muted)}
+  .mvRow{display:flex;flex-wrap:wrap;gap:18px;align-items:center}
+  .mvTraj label{display:flex;align-items:center;gap:8px}
+  .mvTraj input[type=range]{accent-color:var(--accent);width:120px}
+  .mvTraj input[type=checkbox]{accent-color:var(--accent)}
+  #vctrl{position:absolute;inset:0;z-index:6;display:none;pointer-events:none}
+  #vctrl.on{display:block}
+  #joy{position:absolute;left:18px;bottom:18px;width:108px;height:108px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(4px);pointer-events:auto;touch-action:none}
+  #joyknob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;background:rgba(255,255,255,.85);box-shadow:0 2px 10px rgba(0,0,0,.35)}
+  #vbtns{position:absolute;right:18px;bottom:18px;display:flex;flex-direction:column;gap:12px;pointer-events:auto}
+  #vbtns button{width:52px;height:52px;border-radius:50%;font-size:17px;color:#fff;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(4px);cursor:pointer;touch-action:none}
+  #vbtns button:active{background:rgba(255,255,255,.32)}
+  footer{border-top:1px solid var(--line);margin-top:40px;padding:30px 0 56px}
+  footer h2{font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;margin:0 0 14px;color:var(--ink)}
+  footer .paper{font-size:14px;color:var(--muted);margin:0 0 22px;line-height:1.65}
+  footer a{color:var(--accent);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+  .citebox{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+  .citehd{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--line);font-size:13px;font-weight:600;color:var(--ink)}
+  .citebox pre{margin:0;padding:16px;font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink);white-space:pre-wrap;word-break:break-word}
+  .copybtn{font:inherit;font-size:12px;font-weight:600;color:#fff;background:var(--accent);border:0;border-radius:7px;padding:5px 12px;cursor:pointer}
+  .copybtn:hover{background:#4a31b0}
+  footer .ack{font-size:13px;color:var(--muted);line-height:1.7;margin:0 0 6px}
+  footer .ack .ref{display:block;margin-top:8px;padding-left:20px;text-indent:-20px;font-size:12.5px}
+  footer .note{font-size:12.5px;color:var(--muted);line-height:1.6;margin:22px 0 0;padding:12px 15px;background:#faf6ee;border:1px solid #ece2cf;border-radius:10px}
+  footer .contact{margin:26px 0 0;font-size:13.5px;color:var(--ink)}
+  .globecard{margin:0 0 26px}
+  .globewrap{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+     background:radial-gradient(120% 90% at 50% 32%, #16151f 0%, #0b0b10 62%, #08080c 100%)}
+  .globewrap canvas{display:block;width:100%;height:340px;touch-action:none}
+  .globelegend{position:absolute;top:11px;right:13px;font-size:11px;letter-spacing:.02em;
+     color:#9a93a6;pointer-events:none;user-select:none}
+  .globelegend b{font-weight:600}
+  .globecap{position:absolute;left:0;right:0;bottom:0;padding:26px 16px 13px;font-size:13px;
+     line-height:1.5;color:#cfc8dd;pointer-events:none;
+     background:linear-gradient(0deg,rgba(8,8,12,.9) 0%,rgba(8,8,12,.55) 55%,rgba(8,8,12,0) 100%)}
+  .globecap .n{color:#d17bff;font-weight:600}
+  .globecap .loc{color:#8fe3c9;font-weight:600}
+  .globecap .dim{color:#8a8494}
+  #err{position:fixed;left:0;bottom:0;right:0;z-index:99;color:#fff;background:rgba(150,30,30,.95);font:12px ui-monospace,monospace;padding:8px;white-space:pre-wrap;display:none}
+</style>
+</head>
+<body>
+<script>
+  function _showErr(m){var e=document.getElementById('err');e.style.display='block';e.textContent=m;}
+  window.addEventListener('error',function(ev){_showErr('JS error: '+(ev.message||ev)+'\n'+(ev.filename||'')+':'+(ev.lineno||''));});
+  window.addEventListener('unhandledrejection',function(ev){_showErr('Promise rejection: '+((ev.reason&&ev.reason.stack)||(ev.reason&&ev.reason.message)||ev.reason));});
+  // Cache the vendored ffmpeg.wasm decoder across sessions / HTTP-cache evictions
+  // (esp. on cellular). Best-effort: needs https (or localhost); silently skipped otherwise.
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(e){console.warn('[smv] service worker registration skipped:',e&&e.message||e);});
+</script>
+<header>
+  <div class="inner">
+    <h1><span class="accent">Smooth</span>MotionVectors</h1>
+    <p class="subtitle">Optimizing Your Content for Video Codecs in Free View Video Compression</p>
+    <div class="byline">
+      <span class="authors">Mingyang Song<sup>1,2</sup>, <a href="https://scholar.google.com/citations?user=gwP_ARgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Yang Zhang</a><sup>1</sup>, <a href="https://vlg.inf.ethz.ch/team/Prof-Dr-Siyu-Tang.html" target="_blank" rel="noopener">Siyu Tang</a><sup>2</sup>, <a href="https://scholar.google.com/citations?user=E0fxZeUAAAAJ&amp;hl=en" target="_blank" rel="noopener">Tunç Ozan Aydın</a><sup>1</sup></span>
+      <span class="affil"><sup>1</sup>Disney Research Studios, Switzerland &nbsp;&nbsp; <sup>2</sup>ETH Zürich, Switzerland &nbsp;·&nbsp; SIGGRAPH Conference Papers ’26</span>
+    </div>
+    <p class="tagline">Web player — compressed 4D Gaussian scene decoded <em>entirely in your browser</em>. No GPU, no install.</p>
+    <div class="controls">
+      <select id="methodSel" title="Dataset"></select>
+      <select id="sceneSel" title="Scene — kept across dataset changes when it exists in both"></select>
+      <select id="bwSel" title="Simulated link speed for the download (for the transmission demo)">
+        <option value="0" selected>Link: full speed</option>
+        <option value="2">2 Mb/s (slow)</option>
+        <option value="10">10 Mb/s</option>
+        <option value="50">50 Mb/s</option>
+        <option value="100">100 Mb/s</option>
+        <option value="200">200 Mb/s</option>
+      </select>
+      <button class="btn" id="loadBtn">▶ Load &amp; view</button>
+      <button class="btn ghost" id="clearBtn" disabled>✕ Clear</button>
+      <span id="stats"></span>
+    </div>
+  </div>
+</header>
+<main class="inner">
+  <div id="wrap">
+    <canvas id="gl"></canvas>
+    <div id="idle"><div>Choose a scene above and press <b>Load &amp; view</b>.</div><div id="idleDec"><span class="minispin"></span>preparing decoder…</div></div>
+    <div id="load">
+      <div class="loadring"><div class="ring"></div><div class="pct" id="pct">0%</div></div>
+      <div id="timer">0.0<small>s</small></div>
+      <div id="stage">…</div>
+      <div id="sub"></div>
+    </div>
+    <button id="fs" title="Fullscreen">⛶</button>
+    <div id="buf"><span class="dot"></span><span id="bufMsg">buffering…</span></div>
+    <div id="vctrl"><div id="joy"><div id="joyknob"></div></div><div id="vbtns"><button id="vup" title="up">▲</button><button id="vdn" title="down">▼</button></div></div>
+  </div>
+  <div id="bar">
+    <button id="play" disabled>▶ play</button>
+    <span class="lbl" id="frameLbl">—</span>
+    <input type="range" id="scrub" min="0" max="0" value="0" step="1"/>
+    <label class="lbl" title="Cross-fade gaussians across GOP boundaries (smoothstep)"><input type="checkbox" id="blendChk" checked/> blend</label>
+    <label class="lbl" title="View-dependent specular SH degree. High bands extrapolate badly at novel views; full (l3) matches the reference renderer.">specular
+      <select id="specSel">
+        <option value="0">off (DC)</option>
+        <option value="3">low (l1)</option>
+        <option value="8">med (l2)</option>
+        <option value="15" selected>full (l3)</option>
+      </select></label>
+  </div>
+  <div id="mvPanel">
+    <div class="mvHdr">Stream Monitor <small>in-browser HEVC decode · live telemetry</small></div>
+    <div class="mvBody">
+      <div class="mvViz">
+        <canvas id="mvCanvas" width="1" height="1"></canvas>
+        <div class="mvCap">motion vectors (colorized)</div>
+      </div>
+      <div id="mvStats" class="mvStats">Load a scene to view stream telemetry.</div>
+    </div>
+    <div class="mvTraj">
+      <div class="mvRow">
+        <label class="lbl" title="Tint each dynamic gaussian by its per-frame motion offset (colorized like the MV preview) and blend it with the gaussian's real color"><input type="checkbox" id="offColChk"/> Colorize motion</label>
+        <label title="Blend weight: 0 = original colour, 100 = pure motion-vector colour">Offset blend <input type="range" id="offColMix" min="0" max="100" value="60"/></label>
+      </div>
+      <div class="mvRow">
+        <label class="lbl" title="Overlay motion trails on a sample of dynamic gaussians (blue = oldest → red = newest)"><input type="checkbox" id="trajChk"/> Trajectories</label>
+        <label>Traj. count <input type="range" id="trajCount" min="100" max="5000" step="100" value="1500"/></label>
+        <label>Trail frames <input type="range" id="trajTrail" min="2" max="60" value="24"/></label>
+      </div>
+      <div class="mvRow">
+        <label class="lbl" title="Render each gaussian as a hard-edged ellipsoid (no soft 3DGS falloff) so the underlying 3D point-based representation is visible"><input type="checkbox" id="ellipChk"/> Hard ellipsoids</label>
+        <label title="Ellipsoid radius in std-devs — shrink to separate individual points">Ellipsoid radius <input type="range" id="ellipRad" min="20" max="200" value="100"/></label>
+      </div>
+      <div class="mvRow">
+        <label class="lbl" title="Parity A/B: render at the dataset camera's native resolution then upscale, so splat size / low-pass match the GPU reference (rendered at that resolution) instead of the sharper display-res render"><input type="checkbox" id="nativeResChk"/> Native camera res</label>
+      </div>
+    </div>
+    <div class="mvMapWrap">
+      <div class="mvMapLbl">GOP buffer map</div>
+      <div id="mvGops"></div>
+      <div class="mvLegend">
+        <span><i class="gd gd-active"></i> rendering</span>
+        <span><i class="gd gd-resident"></i> decoded (RAM)</span>
+        <span><i class="gd gd-decoding"></i> decoding</span>
+        <span><i class="gd gd-pending"></i> pending</span>
+      </div>
+    </div>
+  </div>
+  <div id="panel" class="open">
+    <button id="panelHdr" aria-expanded="true">⚙ Controls &amp; navigation <span class="chev">▸</span></button>
+    <div id="panelBody"><div class="panelInner">
+      <div class="help"><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span><span><kbd>E</kbd> / <kbd>Q</kbd> up / down</span><span><b>drag</b> look</span><span><b>scroll</b> move speed</span><span><kbd>Shift</kbd> faster</span></div>
+      <div class="settings">
+        <button class="btn ghost" id="resetView">⟲ Reset view</button>
+        <label>Speed <input type="range" id="speedSlider" min="1" max="50" value="30"/></label>
+        <label><input type="checkbox" id="touchToggle"/> Touch controls (phone)</label>
+      </div>
+    </div></div>
+  </div>
+</main>
+<footer>
+  <div class="inner">
+    <h2>Live viewers</h2>
+    <p class="paper" style="margin-bottom:14px">A live look at who's streaming these scenes. Each arc links our lab at ETH Zürich to a viewer, fading as it settles — including yours, right now. (Pages are actually served worldwide via CDN; the Zürich node is our symbolic home.)</p>
+    <div class="globecard">
+      <div class="globewrap" id="globeWrap">
+        <canvas id="globeCanvas"></canvas>
+        <div class="globelegend"><b style="color:#d17bff">●</b> you &nbsp; <b style="color:#f0c674">●</b> origin · ETH Zürich</div>
+        <div class="globecap" id="globeCap"><span class="dim">Establishing connection…</span></div>
+      </div>
+    </div>
+
+    <h2>Citation</h2>
+    <p class="paper">📄 <a href="https://doi.org/10.1145/3799902.3811112" target="_blank" rel="noopener">SmoothMotionVectors: Optimizing Your Content for Video Codecs in Free View Video Compression</a><br>SIGGRAPH Conference Papers ’26, Los Angeles, CA, USA · DOI <a href="https://doi.org/10.1145/3799902.3811112" target="_blank" rel="noopener">10.1145/3799902.3811112</a></p>
+    <div class="citebox">
+      <div class="citehd"><span>ACM Reference Format</span><button class="copybtn" data-target="citeAcm">Copy</button></div>
+      <pre id="citeAcm">Mingyang Song, Yang Zhang, Siyu Tang, and Tunç Ozan Aydın. 2026. SmoothMotionVectors: Optimizing Your Content for Video Codecs in Free View Video Compression. In Special Interest Group on Computer Graphics and Interactive Techniques Conference Conference Papers (SIGGRAPH Conference Papers ’26), July 19–23, 2026, Los Angeles, CA, USA. ACM, New York, NY, USA, 11 pages. https://doi.org/10.1145/3799902.3811112</pre>
+    </div>
+    <div class="citebox">
+      <div class="citehd"><span>BibTeX</span><button class="copybtn" data-target="citeBib">Copy</button></div>
+      <pre id="citeBib">@inproceedings{song2026smoothmotionvectors,
+  author    = {Song, Mingyang and Zhang, Yang and Tang, Siyu and Ayd{\i}n, Tun\c{c} Ozan},
+  title     = {SmoothMotionVectors: Optimizing Your Content for Video Codecs in Free View Video Compression},
+  year      = {2026},
+  isbn      = {979-8-4007-2554-8/26/07},
+  publisher = {Association for Computing Machinery},
+  address   = {New York, NY, USA},
+  url       = {https://doi.org/10.1145/3799902.3811112},
+  doi       = {10.1145/3799902.3811112},
+  booktitle = {Special Interest Group on Computer Graphics and Interactive Techniques Conference Conference Papers (SIGGRAPH Conference Papers '26)},
+  numpages  = {11},
+  location  = {Los Angeles, CA, USA},
+  series    = {SIGGRAPH Conference Papers '26}
+}</pre>
+    </div>
+
+    <h2>Built with</h2>
+    <p class="paper">Our contribution is the <em>compressor</em> — the in-browser player itself is only possible thanks to antimatter15's <a href="https://github.com/antimatter15/splat" target="_blank" rel="noopener">splat</a> WebGL2 rasterizer (after <a href="https://www.cs.umd.edu/~zwicker/publications/EWASplatting-TVCG02.pdf" target="_blank" rel="noopener">EWA splatting</a> &amp; <a href="https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/" target="_blank" rel="noopener">3D Gaussian Splatting</a>), <a href="https://ffmpeg.org/" target="_blank" rel="noopener">FFmpeg</a> via <a href="https://github.com/ffmpegwasm/ffmpeg.wasm" target="_blank" rel="noopener">ffmpeg.wasm</a> for in-browser HEVC decode, and <a href="https://github.com/101arrowz/fflate" target="_blank" rel="noopener">fflate</a> for keyframe NPZ unzip.</p>
+
+    <h2>Datasets</h2>
+    <p class="ack">The sample scenes come from open-source dynamic-scene datasets, used here for research demonstration. Please cite the original authors:</p>
+    <p class="ack">
+      <span class="ref"><strong><a href="https://www.albertpumarola.com/research/D-NeRF/index.html" target="_blank" rel="noopener">D-NeRF</a></strong> — synthetic dynamic scenes.<br>
+      Albert Pumarola, Enric Corona, Gerard Pons-Moll, and Francesc Moreno-Noguer. 2021. D-NeRF: Neural Radiance Fields for Dynamic Scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR).</span>
+      <span class="ref"><strong><a href="https://hypernerf.github.io/" target="_blank" rel="noopener">HyperNeRF</a></strong> — casually captured real-world scenes.<br>
+      Keunhong Park, Utkarsh Sinha, Peter Hedman, Jonathan T. Barron, Sofien Bouaziz, Dan B Goldman, Ricardo Martin-Brualla, and Steven M. Seitz. 2021. HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields. ACM Transactions on Graphics (Proc. SIGGRAPH Asia) 40, 6 (2021).</span>
+      <span class="ref"><strong><a href="https://jokeryan.github.io/projects/nerf-ds/" target="_blank" rel="noopener">NeRF-DS</a></strong> — real-world captures of dynamic specular objects.<br>
+      Zhiwen Yan, Chen Li, and Gim Hee Lee. 2023. NeRF-DS: Neural Radiance Fields for Dynamic Specular Objects. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR).</span>
+    </p>
+
+    <p class="note">🔄 An evolving gallery — we'll keep adding scenes to these datasets, with more datasets to come. Check back for new results.</p>
+
+    <p class="note">Note: this lightweight in-browser pipeline may differ slightly from the original GPU rendering — small differences arise from the CPU depth sort and the simplified rasterizer.</p>
+
+    <p class="contact">Please contact Mingyang Song (<a href="mailto:mingyang.song@inf.ethz.ch">mingyang.song@inf.ethz.ch</a>) for questions.</p>
+  </div>
+</footer>
+
+<script type="module">
+import { parseNpz, decodeShared, buildKeyframe } from './decode.js';
+import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle } from './decode_motion.js';
+
+// ===== renderer (antimatter15-style WebGL2 gaussian splatting) =====
+const canvas=document.getElementById('gl'),wrap=document.getElementById('wrap');
+const gl=canvas.getContext('webgl2',{antialias:false,premultipliedAlpha:true,alpha:true});
+if(!gl){_showErr('WebGL2 unavailable');throw 0;}
+const VERT=`#version 300 es
+precision highp float;precision highp int;uniform highp usampler2D u_tex;uniform highp sampler2D u_sh;uniform mat4 u_proj,u_view;uniform vec2 u_focal,u_viewport;uniform vec3 u_campos;uniform bool u_hasSH;uniform float u_lowpass;
+uniform int u_shCols;   // SH codebook entries per texture row (2D-tiled so height stays within MAX_TEXTURE_SIZE)
+uniform int u_shBands;  // number of rest bands to evaluate: 3=l1, 8=l1+l2, 15=l1+l2+l3
+in vec2 a_pos;in uint a_index;out vec4 vColor;out vec2 vPos;
+vec3 shRest(vec3 d,int e){float x=d.x,y=d.y,z=d.z,xx=x*x,yy=y*y,zz=z*z,xy=x*y,yz=y*z,xz=x*z;vec3 r=vec3(0.0);
+ int row=e/u_shCols, b=(e-row*u_shCols)*15;   // tile (col,row): coeff k at column b+k
+ r+=-0.4886025119*y*texelFetch(u_sh,ivec2(b+0,row),0).rgb; r+=0.4886025119*z*texelFetch(u_sh,ivec2(b+1,row),0).rgb; r+=-0.4886025119*x*texelFetch(u_sh,ivec2(b+2,row),0).rgb;
+ if(u_shBands<=3) return r;
+ r+=1.0925484306*xy*texelFetch(u_sh,ivec2(b+3,row),0).rgb; r+=-1.0925484306*yz*texelFetch(u_sh,ivec2(b+4,row),0).rgb; r+=0.3153915653*(2.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+5,row),0).rgb;
+ r+=-1.0925484306*xz*texelFetch(u_sh,ivec2(b+6,row),0).rgb; r+=0.5462742153*(xx-yy)*texelFetch(u_sh,ivec2(b+7,row),0).rgb;
+ if(u_shBands<=8) return r;
+ r+=-0.5900435899*y*(3.0*xx-yy)*texelFetch(u_sh,ivec2(b+8,row),0).rgb; r+=2.8906114426*xy*z*texelFetch(u_sh,ivec2(b+9,row),0).rgb; r+=-0.4570457995*y*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+10,row),0).rgb;
+ r+=0.3731763326*z*(2.0*zz-3.0*xx-3.0*yy)*texelFetch(u_sh,ivec2(b+11,row),0).rgb; r+=-0.4570457995*x*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+12,row),0).rgb; r+=1.4453057213*z*(xx-yy)*texelFetch(u_sh,ivec2(b+13,row),0).rgb; r+=-0.5900435899*x*(xx-3.0*yy)*texelFetch(u_sh,ivec2(b+14,row),0).rgb;
+ return r;}
+void main(){uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10),0);vec3 wp=uintBitsToFloat(cen.xyz);
+ vec4 cam=u_view*vec4(wp,1.0);vec4 p=u_proj*cam;float clip=1.2*p.w;
+ if(p.z<-clip||p.x<-clip||p.x>clip||p.y<-clip||p.y>clip){gl_Position=vec4(0.,0.,2.,1.);return;}
+ uvec4 cov=texelFetch(u_tex,ivec2(((i&0x3ffu)<<1)|1u,i>>10),0);vec2 u1=unpackHalf2x16(cov.x),u2=unpackHalf2x16(cov.y),u3=unpackHalf2x16(cov.z);
+ mat3 Vrk=mat3(u1.x,u1.y,u2.x,u1.y,u2.y,u3.x,u2.x,u3.x,u3.y);
+ mat3 J=mat3(u_focal.x/cam.z,0.,-(u_focal.x*cam.x)/(cam.z*cam.z),0.,-u_focal.y/cam.z,(u_focal.y*cam.y)/(cam.z*cam.z),0.,0.,0.);
+ mat3 T=transpose(mat3(u_view))*J;mat3 cov2d=transpose(T)*Vrk*T;
+ cov2d[0][0]+=u_lowpass;cov2d[1][1]+=u_lowpass;   // 3DGS/fast-GS screen-space low-pass (min ~1px). u_lowpass = 4*0.3 * (renderW/cameraW)^2: scaled so the splat footprint matches the training resolution at any display res (x4 because Vrk is packed as 4*Sigma).
+ float mid=(cov2d[0][0]+cov2d[1][1])/2.0;
+ float rad=length(vec2((cov2d[0][0]-cov2d[1][1])/2.0,cov2d[0][1]));float l1=mid+rad,l2=mid-rad;if(l2<0.0)return;
+ vec2 dv=normalize(vec2(cov2d[0][1],l1-cov2d[0][0]));vec2 maj=min(sqrt(2.0*l1),1024.0)*dv;vec2 mn=min(sqrt(2.0*l2),1024.0)*vec2(dv.y,-dv.x);
+ vec3 base=vec3(float((cov.w)&0xffu),float((cov.w>>8)&0xffu),float((cov.w>>16)&0xffu))/255.0;float al=float((cov.w>>24)&0xffu)/255.0;
+ if(u_hasSH)base=clamp(base+shRest(normalize(wp-u_campos),int(cen.w)),0.0,1.0);
+ vColor=clamp(p.z/p.w+1.0,0.0,1.0)*vec4(base,al);
+ vPos=a_pos;vec2 c=vec2(p)/p.w;gl_Position=vec4(c+a_pos.x*maj/u_viewport+a_pos.y*mn/u_viewport,0.0,1.0);}`;
+const FRAG=`#version 300 es
+precision highp float;uniform float u_opacity;uniform int u_hardEdge;uniform float u_hardR;in vec4 vColor;in vec2 vPos;out vec4 frag;
+void main(){float d2=dot(vPos,vPos);
+ if(u_hardEdge==1){ // hard-boundary ellipsoid: solid fill out to u_hardR std-devs (1px AA), exposes point-based structure
+  float d=sqrt(d2),aa=max(fwidth(d),1e-4),edge=1.0-smoothstep(u_hardR-aa,u_hardR+aa,d);
+  if(edge<=0.0)discard;float B=vColor.a*u_opacity*edge;frag=vec4(B*vColor.rgb,B);return;}
+ float A=-d2;if(A<-4.0)discard;float B=exp(A)*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);}`;
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+const prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VERT));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));gl.useProgram(prog);
+const u_proj=gl.getUniformLocation(prog,'u_proj'),u_view=gl.getUniformLocation(prog,'u_view'),u_focal=gl.getUniformLocation(prog,'u_focal'),u_viewport=gl.getUniformLocation(prog,'u_viewport'),u_op=gl.getUniformLocation(prog,'u_opacity'),u_texL=gl.getUniformLocation(prog,'u_tex'),u_hardEdgeL=gl.getUniformLocation(prog,'u_hardEdge'),u_hardRL=gl.getUniformLocation(prog,'u_hardR'),u_lowpassL=gl.getUniformLocation(prog,'u_lowpass');
+const u_shL=gl.getUniformLocation(prog,'u_sh'),u_camposL=gl.getUniformLocation(prog,'u_campos'),u_hasSHL=gl.getUniformLocation(prog,'u_hasSH'),u_shColsL=gl.getUniformLocation(prog,'u_shCols'),u_shBandsL=gl.getUniformLocation(prog,'u_shBands');
+const MAX_TEX=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+const shTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,shTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,1,1,0,gl.RGBA,gl.FLOAT,new Float32Array(4));
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+let shData=null,shHas=false,shBands=15,shIdx=null,shCols=1;   // shBands: 0=off,3=L1,8=L2,15=L3(default, matches render_gs)
+function uploadSH(cb){
+  if(!cb){shHas=false;return;}
+  const K=cb.length/45|0;
+  const maxRows=Math.max(1,(MAX_TEX/2)|0);
+  shCols=Math.max(1,Math.ceil(K/maxRows));
+  while(shCols*15>MAX_TEX)shCols--;
+  const rows=Math.ceil(K/shCols),W=shCols*15;
+  if(!shData||shData.length!==W*rows*4)shData=new Float32Array(W*rows*4);else shData.fill(0);
+  for(let e=0;e<K;e++){const col=e%shCols,row=(e/shCols)|0,ob=e*45,rb=(row*W+col*15)*4;
+    for(let k=0;k<15;k++){const o=rb+k*4,c=ob+k*3;shData[o]=cb[c];shData[o+1]=cb[c+1];shData[o+2]=cb[c+2];}}
+  gl.bindTexture(gl.TEXTURE_2D,shTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,W,rows,0,gl.RGBA,gl.FLOAT,shData);shHas=true;}
+const vao=gl.createVertexArray();gl.bindVertexArray(vao);
+const qb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,qb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-2,-2,2,-2,2,2,-2,2]),gl.STATIC_DRAW);
+const a_pos=gl.getAttribLocation(prog,'a_pos');gl.enableVertexAttribArray(a_pos);gl.vertexAttribPointer(a_pos,2,gl.FLOAT,false,0,0);
+const a_index=gl.getAttribLocation(prog,'a_index');const ib=gl.createBuffer();gl.enableVertexAttribArray(a_index);gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.vertexAttribIPointer(a_index,1,gl.UNSIGNED_INT,0,0);gl.vertexAttribDivisor(a_index,1);
+const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);gl.blendEquation(gl.FUNC_ADD);
+const CVERT=`#version 300 es
+out vec2 uv;void main(){vec2 p=vec2((gl_VertexID==1)?3.0:-1.0,(gl_VertexID==2)?3.0:-1.0);uv=p*0.5+0.5;gl_Position=vec4(p,0.0,1.0);}`;
+const CFRAG=`#version 300 es
+precision highp float;uniform sampler2D texA,texB;uniform float u_a;in vec2 uv;out vec4 o;void main(){o=mix(texture(texA,uv),texture(texB,uv),u_a);}`;
+const cprog=gl.createProgram();gl.attachShader(cprog,sh(gl.VERTEX_SHADER,CVERT));gl.attachShader(cprog,sh(gl.FRAGMENT_SHADER,CFRAG));gl.linkProgram(cprog);
+const cu_a=gl.getUniformLocation(cprog,'u_a'),cu_tA=gl.getUniformLocation(cprog,'texA'),cu_tB=gl.getUniformLocation(cprog,'texB');
+const emptyVAO=gl.createVertexArray();let fboA=null,fboB=null,fboN=null;
+// offscreen buffer for the native-resolution A/B compare (sized to the dataset camera)
+function ensureFBON(w,h){if(fboN&&fboN.w===w&&fboN.h===h)return;if(fboN){gl.deleteFramebuffer(fboN.f);gl.deleteTexture(fboN.t);}fboN=makeFBO(w,h);}
+// trajectory overlay: line segments of sampled dynamic gaussians, blue(old)->red(new)
+const TVERT=`#version 300 es
+precision highp float;in vec3 a_p;in float a_t;uniform mat4 u_proj,u_view;out float vt;
+void main(){vt=a_t;gl_Position=u_proj*u_view*vec4(a_p,1.0);}`;
+const TFRAG=`#version 300 es
+precision highp float;uniform float u_alpha;in float vt;out vec4 o;
+void main(){vec3 c=mix(vec3(0.263,0.576,0.765),vec3(0.839,0.376,0.302),vt);o=vec4(c,u_alpha);}`;
+const tprog=gl.createProgram();gl.attachShader(tprog,sh(gl.VERTEX_SHADER,TVERT));gl.attachShader(tprog,sh(gl.FRAGMENT_SHADER,TFRAG));gl.linkProgram(tprog);
+const tu_proj=gl.getUniformLocation(tprog,'u_proj'),tu_view=gl.getUniformLocation(tprog,'u_view'),tu_alpha=gl.getUniformLocation(tprog,'u_alpha');
+const tvao=gl.createVertexArray();gl.bindVertexArray(tvao);
+const tbuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,tbuf);
+const ta_p=gl.getAttribLocation(tprog,'a_p'),ta_t=gl.getAttribLocation(tprog,'a_t');
+gl.enableVertexAttribArray(ta_p);gl.vertexAttribPointer(ta_p,3,gl.FLOAT,false,16,0);
+gl.enableVertexAttribArray(ta_t);gl.vertexAttribPointer(ta_t,1,gl.FLOAT,false,16,12);
+gl.bindVertexArray(null);
+function makeFBO(w,h){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+ const f=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,f);gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);gl.bindFramebuffer(gl.FRAMEBUFFER,null);return{f,t,w,h};}
+function ensureFBOs(w,h){if(fboA&&fboA.w===w&&fboA.h===h)return;for(const o of[fboA,fboB])if(o){gl.deleteFramebuffer(o.f);gl.deleteTexture(o.t);}fboA=makeFBO(w,h);fboB=makeFBO(w,h);}
+const _f=new Float32Array(1),_i=new Int32Array(_f.buffer);
+function toHalf(v){_f[0]=v;const x=_i[0];let b=(x>>16)&0x8000,m=(x>>12)&0x07ff,e=(x>>23)&0xff;if(e<103)return b;if(e>142){b|=0x7c00;b|=((e==255)?0:1)&&(x&0x007fffff);return b;}if(e<113){m|=0x0800;b|=(m>>(114-e))+((m>>(113-e))&1);return b;}b|=((e-112)<<10)|(m>>1);b+=m&1;return b;}
+function packHalf2(a,b){return (toHalf(a)|(toHalf(b)<<16))>>>0;}
+function quatRotMat(w,x,y,z){return[1-2*(y*y+z*z),2*(x*y-w*z),2*(x*z+w*y),2*(x*y+w*z),1-2*(x*x+z*z),2*(y*z-w*x),2*(x*z-w*y),2*(y*z+w*x),1-2*(x*x+y*y)];}
+let N=0,staticIdx=0,numDyn=0,numFrames=1,motion=null,baseCenter,baseScale,baseQuat,baseColor,texW,texH,texU32,texF32,depthIndex,needSort=false;
+function writeSplat(i,cx,cy,cz,quat,rgba){const o=8*i;texF32[o]=cx;texF32[o+1]=cy;texF32[o+2]=cz;
+ const R=quatRotMat(quat[0],quat[1],quat[2],quat[3]);const sx=baseScale[3*i],sy=baseScale[3*i+1],sz=baseScale[3*i+2];
+ const M=[R[0]*sx,R[1]*sy,R[2]*sz,R[3]*sx,R[4]*sy,R[5]*sz,R[6]*sx,R[7]*sy,R[8]*sz];
+ const s0=M[0]*M[0]+M[1]*M[1]+M[2]*M[2],s1=M[0]*M[3]+M[1]*M[4]+M[2]*M[5],s2=M[0]*M[6]+M[1]*M[7]+M[2]*M[8];
+ const s3=M[3]*M[3]+M[4]*M[4]+M[5]*M[5],s4=M[3]*M[6]+M[4]*M[7]+M[5]*M[8],s5=M[6]*M[6]+M[7]*M[7]+M[8]*M[8];
+ texU32[o+3]=shIdx?shIdx[i]:0;
+ texU32[o+4]=packHalf2(4*s0,4*s1);texU32[o+5]=packHalf2(4*s2,4*s3);texU32[o+6]=packHalf2(4*s4,4*s5);texU32[o+7]=rgba;}
+function buildTexture(){texW=2048;texH=Math.ceil(N/1024);texU32=new Uint32Array(texW*texH*4);texF32=new Float32Array(texU32.buffer);
+ for(let i=0;i<N;i++)writeSplat(i,baseCenter[3*i],baseCenter[3*i+1],baseCenter[3*i+2],baseQuat.subarray(4*i,4*i+4),baseColor[i]);}
+function uploadTexture(){gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32UI,texW,texH,0,gl.RGBA_INTEGER,gl.UNSIGNED_INT,texU32);}
+function applyFrame(f){if(!motion)return;const base=f*numDyn*7;
+ if(offsetColorOn){
+   // per-channel min/max of the displacement (pos - keyframe) across dynamic gaussians this
+   // frame — same normalization the Stream Monitor MV preview uses — then map to RGB and
+   // blend with the gaussian's real color by offsetColorMix.
+   let n0=1e30,n1=1e30,n2=1e30,x0=-1e30,x1=-1e30,x2=-1e30;
+   for(let j=0;j<numDyn;j++){const gi=staticIdx+j,b=base+j*7,c=gi*3;
+     const dx=motion[b]-baseCenter[c],dy=motion[b+1]-baseCenter[c+1],dz=motion[b+2]-baseCenter[c+2];
+     if(dx<n0)n0=dx;if(dx>x0)x0=dx;if(dy<n1)n1=dy;if(dy>x1)x1=dy;if(dz<n2)n2=dz;if(dz>x2)x2=dz;}
+   const r0=(x0-n0)||1,r1=(x1-n1)||1,r2=(x2-n2)||1,m=offsetColorMix;
+   for(let j=0;j<numDyn;j++){const gi=staticIdx+j,b=base+j*7,c=gi*3,oc=baseColor[gi];
+     const cr=(motion[b]-baseCenter[c]-n0)/r0*255,cg=(motion[b+1]-baseCenter[c+1]-n1)/r1*255,cb=(motion[b+2]-baseCenter[c+2]-n2)/r2*255;
+     const rr=((oc&0xff)+(cr-(oc&0xff))*m)|0,rg=(((oc>>8)&0xff)+(cg-((oc>>8)&0xff))*m)|0,rb=(((oc>>16)&0xff)+(cb-((oc>>16)&0xff))*m)|0;
+     const rgba=((rr&0xff)|((rg&0xff)<<8)|((rb&0xff)<<16)|(oc&0xff000000))>>>0;
+     writeSplat(gi,motion[b],motion[b+1],motion[b+2],[motion[b+3],motion[b+4],motion[b+5],motion[b+6]],rgba);}
+ }else{
+   for(let j=0;j<numDyn;j++){const gi=staticIdx+j,b=base+j*7;
+     writeSplat(gi,motion[b],motion[b+1],motion[b+2],[motion[b+3],motion[b+4],motion[b+5],motion[b+6]],baseColor[gi]);}
+ }
+ uploadTexture();}
+function applyKeyframe(){for(let j=0;j<numDyn;j++){const gi=staticIdx+j;writeSplat(gi,baseCenter[3*gi],baseCenter[3*gi+1],baseCenter[3*gi+2],baseQuat.subarray(4*gi,4*gi+4),baseColor[gi]);}uploadTexture();}
+let counts=new Uint32Array(65536);
+function sortSplats(view){if(!depthIndex||depthIndex.length!==N)depthIndex=new Uint32Array(N);
+ const v2=view[2],v6=view[6],v10=view[10],v14=view[14];const d=new Int32Array(N);
+ // sort by the CURRENT (motion-deformed) positions in the upload buffer, not the keyframe baseCenter.
+ // Bucket over the EXACT [min,max] view-depth of all splats (tracked in the same pass). The old code
+ // used a sampled 0.5–99.5 percentile range and clamped the ~1% of splats outside it into the two end
+ // buckets, whose arbitrary intra-bucket order popped as the camera moved; full-range 16-bit bucketing
+ // has no clamp (and can't int-overflow the bucket multiply), so no popping. (matches antimatter15)
+ const P=texF32;let dlo=Infinity,dhi=-Infinity;
+ for(let i=0;i<N;i++){const o=8*i;const z=(v2*P[o]+v6*P[o+1]+v10*P[o+2]+v14)*4096|0;d[i]=z;if(z<dlo)dlo=z;if(z>dhi)dhi=z;}
+ const sc=65535/((dhi-dlo)||1);counts.fill(0);
+ for(let i=0;i<N;i++){let b=(d[i]-dlo)*sc|0;b=b<0?0:b>65535?65535:b;d[i]=b;counts[b]++;}
+ const st=new Uint32Array(65536);for(let i=1;i<65536;i++)st[i]=st[i-1]+counts[i-1];for(let i=0;i<N;i++)depthIndex[st[d[i]]++]=i;
+ gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.bufferData(gl.ARRAY_BUFFER,depthIndex,gl.DYNAMIC_DRAW);}
+const worldUp=[0,-1,0];let camPos=[0,0,0],camQ=[1,0,0,0],radius=10,speed=5;
+// PCA nav-alignment reorients the up-axis/orbit-center to the scene's first-frame PCA. It's meant for
+// the synthetic D-NeRF scenes (arbitrary dataloader world frame, no meaningful test camera). Real-capture
+// datasets (nerfds, future real-world) ship a genuine test camera, so use that pose verbatim instead.
+// Set per-scene from the dataset in loadScene(); default off.
+let pcaAlign=false;
+function vrot(q,v){const[w,x,y,z]=q,[a,b,c]=v;const ix=w*a+y*c-z*b,iy=w*b+z*a-x*c,iz=w*c+x*b-y*a,iw=-x*a-y*b-z*c;return[ix*w+iw*-x+iy*-z-iz*-y,iy*w+iw*-y+iz*-x-ix*-z,iz*w+iw*-z+ix*-y-iy*-x];}
+function qmul(a,b){const[aw,ax,ay,az]=a,[bw,bx,by,bz]=b;return[aw*bw-ax*bx-ay*by-az*bz,aw*bx+ax*bw+ay*bz-az*by,aw*by-ax*bz+ay*bw+az*bx,aw*bz+ax*by-ay*bx+az*bw];}
+function qaxis(ax,an){const h=an/2,s=Math.sin(h);return[Math.cos(h),ax[0]*s,ax[1]*s,ax[2]*s];}
+function qn(q){const l=Math.hypot(...q)||1;return q.map(v=>v/l);}
+function vsub(a,b){return[a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+function vdot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function vcross(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function vnorm(a){const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];}
+// symmetric 3x3 eigendecomposition (cyclic Jacobi). a=[a00,a01,a02,a11,a12,a22].
+// returns {vec:[v0,v1,v2], val:[l0,l1,l2]} with eigenvectors sorted by descending eigenvalue.
+function symEig3(a){
+ const A=[[a[0],a[1],a[2]],[a[1],a[3],a[4]],[a[2],a[4],a[5]]];
+ const V=[[1,0,0],[0,1,0],[0,0,1]];
+ for(let sweep=0;sweep<32;sweep++){
+   let p=0,q=1,mx=Math.abs(A[0][1]);
+   if(Math.abs(A[0][2])>mx){mx=Math.abs(A[0][2]);p=0;q=2;}
+   if(Math.abs(A[1][2])>mx){mx=Math.abs(A[1][2]);p=1;q=2;}
+   if(mx<1e-12)break;
+   const phi=0.5*Math.atan2(2*A[p][q],A[q][q]-A[p][p]),c=Math.cos(phi),s=Math.sin(phi);
+   for(let k=0;k<3;k++){const akp=A[k][p],akq=A[k][q];A[k][p]=c*akp-s*akq;A[k][q]=s*akp+c*akq;}
+   for(let k=0;k<3;k++){const apk=A[p][k],aqk=A[q][k];A[p][k]=c*apk-s*aqk;A[q][k]=s*apk+c*aqk;}
+   for(let k=0;k<3;k++){const vkp=V[k][p],vkq=V[k][q];V[k][p]=c*vkp-s*vkq;V[k][q]=s*vkp+c*vkq;}
+ }
+ const idx=[0,1,2].sort((i,j)=>A[j][j]-A[i][i]);
+ return{vec:idx.map(i=>[V[0][i],V[1][i],V[2][i]]),val:idx.map(i=>A[i][i])};
+}
+// quaternion from a camera basis (columns r=right,u=up,f=forward in world); matches vrot/viewMatrix convention
+function mat3Quat(r,u,f){
+ const m00=r[0],m01=u[0],m02=f[0],m10=r[1],m11=u[1],m12=f[1],m20=r[2],m21=u[2],m22=f[2];
+ const tr=m00+m11+m22;let w,x,y,z,s;
+ if(tr>0){s=Math.sqrt(tr+1)*2;w=0.25*s;x=(m21-m12)/s;y=(m02-m20)/s;z=(m10-m01)/s;}
+ else if(m00>m11&&m00>m22){s=Math.sqrt(1+m00-m11-m22)*2;w=(m21-m12)/s;x=0.25*s;y=(m01+m10)/s;z=(m02+m20)/s;}
+ else if(m11>m22){s=Math.sqrt(1+m11-m00-m22)*2;w=(m02-m20)/s;x=(m01+m10)/s;y=0.25*s;z=(m12+m21)/s;}
+ else{s=Math.sqrt(1+m22-m00-m11)*2;w=(m10-m01)/s;x=(m02+m20)/s;y=(m12+m21)/s;z=0.25*s;}
+ return qn([w,x,y,z]);
+}
+function lookAtQuat(eye,target,up){
+ const f=vnorm(vsub(target,eye));let r=vcross(up,f);
+ if(Math.hypot(r[0],r[1],r[2])<1e-6)r=vcross([0,0,1],f);   // up∥forward fallback
+ r=vnorm(r);return mat3Quat(r,vcross(f,r),f);
+}
+// PCA of the active keyframe point cloud -> centroid + principal axes (desc by spread)
+function pcaWorld(){
+ let mx=0,my=0,mz=0;for(let i=0;i<N;i++){mx+=baseCenter[3*i];my+=baseCenter[3*i+1];mz+=baseCenter[3*i+2];}
+ mx/=N;my/=N;mz/=N;
+ let c00=0,c01=0,c02=0,c11=0,c12=0,c22=0;
+ for(let i=0;i<N;i++){const dx=baseCenter[3*i]-mx,dy=baseCenter[3*i+1]-my,dz=baseCenter[3*i+2]-mz;
+   c00+=dx*dx;c01+=dx*dy;c02+=dx*dz;c11+=dy*dy;c12+=dy*dz;c22+=dz*dz;}
+ const e=symEig3([c00/N,c01/N,c02/N,c11/N,c12/N,c22/N]);
+ return{centroid:[mx,my,mz],axes:e.vec,val:e.val};
+}
+function viewMatrix(){const f=vrot(camQ,[0,0,1]),r=vrot(camQ,[1,0,0]),u=vrot(camQ,[0,1,0]);
+ const dr=-(r[0]*camPos[0]+r[1]*camPos[1]+r[2]*camPos[2]),du=-(u[0]*camPos[0]+u[1]*camPos[1]+u[2]*camPos[2]),df=-(f[0]*camPos[0]+f[1]*camPos[1]+f[2]*camPos[2]);
+ return[r[0],u[0],f[0],0,r[1],u[1],f[1],0,r[2],u[2],f[2],0,dr,du,df,1];}
+function projMatrix(w,h,fx,fy){const zn=0.2,zf=500;return[2*fx/w,0,0,0,0,-2*fy/h,0,0,0,0,zf/(zf-zn),1,0,0,-(zf*zn)/(zf-zn),0];}
+const keys=new Set();let drag=false,lx=0,ly=0,joyX=0,joyY=0,joyUp=0,lookTouchId=null;
+canvas.tabIndex=0;canvas.style.outline='none';
+canvas.addEventListener('mousedown',e=>{drag=true;lx=e.clientX;ly=e.clientY;canvas.focus();});
+addEventListener('mouseup',()=>drag=false);
+addEventListener('mousemove',e=>{if(!drag)return;const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;camQ=qn(qmul(qmul(qaxis(worldUp,-dx*0.003),qaxis(vrot(camQ,[1,0,0]),-dy*0.003)),camQ));});
+canvas.addEventListener('wheel',e=>{e.preventDefault();speed*=Math.exp(-e.deltaY*0.001);speed=Math.min(Math.max(speed,radius*0.02),radius*40);syncSpeed();},{passive:false});
+canvas.addEventListener('touchstart',e=>{const t=e.changedTouches[0];lookTouchId=t.identifier;drag=true;lx=t.clientX;ly=t.clientY;},{passive:true});
+canvas.addEventListener('touchmove',e=>{if(!drag)return;let t=null;for(const c of e.changedTouches)if(c.identifier===lookTouchId){t=c;break;}if(!t)return;const dx=t.clientX-lx,dy=t.clientY-ly;lx=t.clientX;ly=t.clientY;camQ=qn(qmul(qmul(qaxis(worldUp,-dx*0.004),qaxis(vrot(camQ,[1,0,0]),-dy*0.004)),camQ));e.preventDefault();},{passive:false});
+canvas.addEventListener('touchend',e=>{for(const c of e.changedTouches)if(c.identifier===lookTouchId)drag=false;});
+canvas.addEventListener('touchcancel',()=>drag=false);
+addEventListener('keydown',e=>{if(e.target.tagName==='SELECT')return;const k=e.key.toLowerCase();if(['w','a','s','d','q','e',' '].includes(k))e.preventDefault();keys.add(k);});
+addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+let lastT=null;
+function moveCam(t){if(lastT==null){lastT=t;return;}const dt=Math.min((t-lastT)/1000,0.1);lastT=t;const f=vrot(camQ,[0,0,1]),r=vrot(camQ,[1,0,0]);let mv=[0,0,0];const add=(v,s)=>{mv[0]+=v[0]*s;mv[1]+=v[1]*s;mv[2]+=v[2]*s;};
+ if(keys.has('w'))add(f,1);if(keys.has('s'))add(f,-1);if(keys.has('d'))add(r,1);if(keys.has('a'))add(r,-1);if(keys.has('e')||keys.has(' '))add(worldUp,-1);if(keys.has('q')||keys.has('control'))add(worldUp,1);
+ if(joyX||joyY)add(f,-joyY),add(r,joyX);if(joyUp)add(worldUp,-joyUp);
+ const len=Math.hypot(...mv);if(len>0){const s=speed*(keys.has('shift')?4:1)*dt/len;camPos=[camPos[0]+mv[0]*s,camPos[1]+mv[1]*s,camPos[2]+mv[2]*s];}}
+function resize(){const dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.max(1,Math.floor(wrap.clientWidth*dpr));canvas.height=Math.max(1,Math.floor(wrap.clientHeight*dpr));}
+addEventListener('resize',resize);
+document.addEventListener('fullscreenchange',()=>setTimeout(resize,60));
+
+// ===== timeline driver (bundle-format, eager decode) =====
+let gops=[],activeGop=-1,totalFrames=1,gFrame=0,playing=false,FPS=30,started=false,overlap=0,camMeta=null;
+let builtFrame=-1,curView=null,curVw=1,curVh=1,curVx=0,curVy=0,curFx=1,curFy=1,lastView=null,frameAcc=0,lastFrameT=0,fps=0,fpsN=0,fpsT=0,blendOn=true,_decodingGop=-1;
+let trajOn=false,trajCount=1500,trajTrail=24,trajAlpha=0.75,trajArr=null,trajVerts=0,trajKey='';
+let offsetColorOn=false,offsetColorMix=0.6;   // blend dynamic gaussians' real color with their colorized motion offset
+let nativeRes=false;   // A/B parity: rasterize at the dataset camera's native resolution, then upscale (matches GPU reference)
+let ellipOn=false,ellipR=1.0;   // hard-boundary ellipsoids: render each gaussian as a solid disc of radius ellipR std-devs (default off)
+function activateGop(gi){const g=gops[gi],k=g.kf;baseCenter=k.center;baseScale=k.scale;baseQuat=k.quat;baseColor=k.color;
+ N=k.numTotal;staticIdx=k.staticIdx;numDyn=k.numDyn;numFrames=g.F;motion=g.motion;activeGop=gi;
+ shIdx=k.shIndex||null;uploadSH(k.shCodebook||null);buildTexture();uploadTexture();}
+function gotoGlobal(gf){gFrame=((gf%totalFrames)+totalFrames)%totalFrames;builtFrame=-1;needSort=true;
+ scrub.value=gFrame;frameLbl.textContent=`frame ${gFrame}/${totalFrames-1}`;}
+function drawSplats(op){gl.useProgram(prog);gl.bindVertexArray(vao);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(u_texL,0);
+ gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,shTex);gl.uniform1i(u_shL,1);gl.uniform3fv(u_camposL,camPos);gl.uniform1i(u_hasSHL,(shHas&&shBands>0)?1:0);gl.uniform1i(u_shColsL,shCols);gl.uniform1i(u_shBandsL,shBands);
+ gl.uniformMatrix4fv(u_proj,false,projMatrix(curVw,curVh,curFx,curFy));gl.uniformMatrix4fv(u_view,false,curView);gl.uniform2f(u_focal,curFx,curFy);gl.uniform2f(u_viewport,curVw,curVh);gl.uniform1f(u_op,op);
+ gl.uniform1i(u_hardEdgeL,ellipOn?1:0);gl.uniform1f(u_hardRL,ellipR);
+ const nw=camMeta?camMeta.width:curVw,k=curVw/nw;gl.uniform1f(u_lowpassL,1.2*k*k);   // scale the 0.3px low-pass to the training (camera) resolution, so splat size matches the GPU render at any display res
+ gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,N);gl.activeTexture(gl.TEXTURE0);}
+function drawGopFrame(gi,mi,op){if(activeGop!==gi)activateGop(gi);
+ if(mi<0||!motion)applyKeyframe();else applyFrame(Math.min(mi,numFrames-1));
+ sortSplats(curView);drawSplats(op);}
+// Build line segments for a sample of dynamic gaussians over the trailing window of the
+// active GOP. Position at local frame L = keyframe (L==0) or motion[L-1]; clamped to the GOP.
+function buildTraj(){trajVerts=0;
+ if(!trajOn||activeGop<0||!motion||numDyn<=0)return;
+ const g=gops[activeGop],localO=gFrame-g.start;if(localO<=0)return;          // keyframe → no trail
+ const lo=Math.max(0,localO-trajTrail),segs=localO-lo;if(segs<1)return;       // need ≥1 segment
+ const stride=Math.max(1,(numDyn/trajCount)|0);let nPts=0;for(let j=0;j<numDyn;j+=stride)nPts++;
+ const nVerts=nPts*segs*2;if(!trajArr||trajArr.length<nVerts*4)trajArr=new Float32Array(nVerts*4);
+ const posAt=(j,L,out)=>{const gi=staticIdx+j;
+   if(L===0){out[0]=baseCenter[gi*3];out[1]=baseCenter[gi*3+1];out[2]=baseCenter[gi*3+2];}
+   else{const b=(Math.min(L,numFrames)-1)*numDyn*7+j*7;out[0]=motion[b];out[1]=motion[b+1];out[2]=motion[b+2];}};
+ const p0=[0,0,0],p1=[0,0,0];let o=0;
+ for(let j=0;j<numDyn;j+=stride){
+   for(let s=0;s<segs;s++){const t=segs>1?s/(segs-1):1;posAt(j,lo+s,p0);posAt(j,lo+s+1,p1);
+     trajArr[o++]=p0[0];trajArr[o++]=p0[1];trajArr[o++]=p0[2];trajArr[o++]=t;
+     trajArr[o++]=p1[0];trajArr[o++]=p1[1];trajArr[o++]=p1[2];trajArr[o++]=t;}}
+ trajVerts=nVerts;
+ gl.bindBuffer(gl.ARRAY_BUFFER,tbuf);gl.bufferData(gl.ARRAY_BUFFER,trajArr.subarray(0,nVerts*4),gl.DYNAMIC_DRAW);}
+function drawTraj(){if(!trajVerts)return;
+ gl.viewport(curVx,curVy,curVw,curVh);gl.useProgram(tprog);gl.bindVertexArray(tvao);
+ gl.uniformMatrix4fv(tu_proj,false,projMatrix(curVw,curVh,curFx,curFy));gl.uniformMatrix4fv(tu_view,false,curView);gl.uniform1f(tu_alpha,trajAlpha);
+ gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.drawArrays(gl.LINES,0,trajVerts);
+ gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);gl.bindVertexArray(vao);}
+function covering(gf){const out=[];for(let g=0;g<gops.length;g++)if(gops[g].start<=gf&&gf<gops[g].end)out.push(g);return out;}
+// Playback frontier: end (exclusive) of the last GOP that is contiguously decoded from GOP 0.
+// GOPs decode sequentially, so this is the highest global frame we can show WITH motion.
+function decodedEnd(){let e=0;for(let i=0;i<gops.length;i++){if(!gops[i].motion)break;e=gops[i].end;}return e;}
+const smoothstep=t=>t*t*(3-2*t);
+function blendWeight(g,gf){if(overlap<=0)return 1;const G=gops[g],local=gf-G.start,n=G.end-G.start;
+ if(local<overlap&&G.gop_id>0)return smoothstep(local/overlap);
+ const fromEnd=n-local;if(fromEnd<=overlap&&g<gops.length-1)return smoothstep(fromEnd/overlap);
+ return 1;}
+function frame(t){requestAnimationFrame(frame);moveCam(t);
+ if(!N||!gops.length)return;
+ if(playing&&totalFrames>1){frameAcc+=(t-(lastFrameT||t))/1000*FPS;lastFrameT=t;
+   if(frameAcc>=1){const adv=Math.floor(frameAcc);frameAcc-=adv;
+     // Don't let playback outrun the decode: hold at the last contiguously-decoded frame instead of
+     // advancing into an undecoded GOP (which would just freeze on its static keyframe). The buffering
+     // bar stays up while GOPs decode in the background; playback resumes as the frontier grows.
+     const de=decodedEnd();
+     if(de>=totalFrames)gotoGlobal(gFrame+adv);          // fully buffered → free-run + loop
+     else if(de<=0)frameAcc=0;                           // GOP 0 not decoded yet → hold
+     else{const nx=gFrame+adv;
+       if(nx<de)gotoGlobal(nx);                          // room left inside the decoded range
+       else if(gFrame<de-1)gotoGlobal(de-1);             // catch up to the frontier, then
+       else frameAcc=0;}}}                               // hold there until more GOPs land
+ else lastFrameT=t;
+ fpsN++;if(t-fpsT>500){fps=Math.round(fpsN*1000/(t-fpsT));fpsN=0;fpsT=t;updateStats();}
+ let vw=canvas.width,vh=canvas.height,vx=0,vy=0,fx,fy;
+ if(camMeta){const asp=camMeta.width/camMeta.height;
+   if(canvas.width/canvas.height>asp){vh=canvas.height;vw=Math.round(vh*asp);}else{vw=canvas.width;vh=Math.round(vw/asp);}
+   vx=(canvas.width-vw)>>1;vy=(canvas.height-vh)>>1;fy=0.5*vh/Math.tan(camMeta.fovy/2);fx=0.5*vw/Math.tan(camMeta.fovx/2);
+ }else{fy=0.5*canvas.height/Math.tan(0.5*1.1);fx=fy;}
+ curVw=vw;curVh=vh;curVx=vx;curVy=vy;curFx=fx;curFy=fy;curView=viewMatrix();
+ let moved=!lastView;if(lastView)for(let i=0;i<16;i++)if(Math.abs(curView[i]-lastView[i])>1e-6)moved=true;lastView=curView.slice();
+ gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.viewport(vx,vy,vw,vh);
+ const cov=covering(gFrame);
+ if(blendOn&&cov.length===2){
+   const gA=cov[0],gB=cov[1];
+   const wA=blendWeight(gA,gFrame),wB=blendWeight(gB,gFrame),a=wB/((wA+wB)||1);
+   ensureFBOs(canvas.width,canvas.height);
+   gl.bindFramebuffer(gl.FRAMEBUFFER,fboA.f);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.viewport(vx,vy,vw,vh);
+   drawGopFrame(gA,(gFrame-gops[gA].start)-1,1.0);
+   gl.bindFramebuffer(gl.FRAMEBUFFER,fboB.f);gl.clear(gl.COLOR_BUFFER_BIT);gl.viewport(vx,vy,vw,vh);
+   drawGopFrame(gB,(gFrame-gops[gB].start)-1,1.0);
+   gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);
+   gl.disable(gl.BLEND);gl.useProgram(cprog);gl.bindVertexArray(emptyVAO);
+   gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,fboA.t);gl.uniform1i(cu_tA,0);
+   gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,fboB.t);gl.uniform1i(cu_tB,1);
+   gl.uniform1f(cu_a,a);gl.drawArrays(gl.TRIANGLES,0,3);
+   gl.enable(gl.BLEND);gl.activeTexture(gl.TEXTURE0);builtFrame=-1;
+   paintMV(gB,(gFrame-gops[gB].start));
+ }else{
+   let owner=cov.length?cov[0]:Math.min(Math.floor(gFrame/Math.max(1,(gops[0].end-gops[0].start))),gops.length-1);
+   if(cov.length>1){let bw=-1;for(const g of cov){const w=blendWeight(g,gFrame);if(w>bw){bw=w;owner=g;}}}
+   const localO=gFrame-gops[owner].start,mi=localO-1;
+   if(activeGop!==owner||builtFrame!==gFrame){if(activeGop!==owner)activateGop(owner);if(mi<0||!motion)applyKeyframe();else applyFrame(Math.min(mi,numFrames-1));builtFrame=gFrame;needSort=true;}
+   if(moved||needSort){sortSplats(curView);needSort=false;}
+   if(nativeRes&&camMeta){
+     // Render into an offscreen buffer sized to the dataset camera (native res), then upscale to the
+     // canvas. The 0.3px screen-space low-pass is relative to *render* pixels, so this reproduces the
+     // GPU reference's splat footprint/sharpness (rendered at that native res) instead of the sharper
+     // display-resolution render. FoV is unchanged (proj normalizes fx/vw). Debug/parity A-B tool.
+     const nw=camMeta.width,nh=camMeta.height;
+     curVw=nw;curVh=nh;curFx=0.5*nw/Math.tan(camMeta.fovx/2);curFy=0.5*nh/Math.tan(camMeta.fovy/2);
+     ensureFBON(nw,nh);
+     gl.bindFramebuffer(gl.FRAMEBUFFER,fboN.f);gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.viewport(0,0,nw,nh);
+     drawSplats(1.0);
+     gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(vx,vy,vw,vh);
+     gl.disable(gl.BLEND);gl.useProgram(cprog);gl.bindVertexArray(emptyVAO);
+     gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,fboN.t);gl.uniform1i(cu_tA,0);
+     gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,fboN.t);gl.uniform1i(cu_tB,1);
+     gl.uniform1f(cu_a,0.0);gl.drawArrays(gl.TRIANGLES,0,3);           // u_a=0 -> just copy texA (fboN), upscaled
+     gl.enable(gl.BLEND);gl.activeTexture(gl.TEXTURE0);
+     curVw=vw;curVh=vh;curFx=fx;curFy=fy;                              // restore display coords for traj/paintMV
+   }else{
+     drawSplats(1.0);
+   }
+   paintMV(owner,localO);
+ }
+ // trajectory overlay — rebuild only when the frame or settings change, then draw over the splats
+ if(trajOn){const k=activeGop+'|'+gFrame+'|'+trajCount+'|'+trajTrail;if(k!==trajKey){trajKey=k;buildTraj();}drawTraj();}
+}
+function frameScene(){let cx=0,cy=0,cz=0;for(let i=0;i<N;i++){cx+=baseCenter[3*i];cy+=baseCenter[3*i+1];cz+=baseCenter[3*i+2];}cx/=N;cy/=N;cz/=N;
+ const ds=[];for(let i=0;i<N;i+=10)ds.push(Math.hypot(baseCenter[3*i]-cx,baseCenter[3*i+1]-cy,baseCenter[3*i+2]-cz));ds.sort((a,b)=>a-b);
+ radius=ds[Math.floor(ds.length*0.9)]||10;speed=radius*0.3;
+ if(camMeta&&pcaAlign){
+   // Define the world frame from the first-frame point cloud PCA so navigation (up-axis,
+   // orbit center) tracks the avatar instead of the dataloader's arbitrary world frame.
+   const pca=pcaWorld(),cen=pca.centroid;
+   const u0=vrot(camMeta.camquat,[0,1,0]);        // dataloader camera's up, in world
+   let up=pca.axes[0],bd=-1;                       // pick principal axis nearest camera-up...
+   for(const ax of pca.axes){const d=Math.abs(vdot(ax,u0));if(d>bd){bd=d;up=ax;}}
+   if(vdot(up,u0)<0)up=[-up[0],-up[1],-up[2]];     // ...signed to point head-up (no flips)
+   worldUp[0]=up[0];worldUp[1]=up[1];worldUp[2]=up[2];
+   camPos=camMeta.campos.slice();camQ=lookAtQuat(camPos,cen,up);   // keep camera, level + re-aim at centroid
+ }else if(camMeta){worldUp[0]=0;worldUp[1]=-1;worldUp[2]=0;   // real test camera: use its pose verbatim, in the renderer's [0,-1,0]-up world
+   camPos=camMeta.campos.slice();camQ=camMeta.camquat.slice();}
+ else{worldUp[0]=0;worldUp[1]=-1;worldUp[2]=0;camPos=[cx,cy,cz-1.6*radius];camQ=[1,0,0,0];}
+ syncSpeed();}
+
+// ===== UI + loading =====
+const sceneSel=document.getElementById('sceneSel'),methodSel=document.getElementById('methodSel'),bwSel=document.getElementById('bwSel'),loadBtn=document.getElementById('loadBtn'),clearBtn=document.getElementById('clearBtn'),statsEl=document.getElementById('stats');
+const idle=document.getElementById('idle'),load=document.getElementById('load'),fsBtn=document.getElementById('fs'),stageEl=document.getElementById('stage'),subEl=document.getElementById('sub'),pctEl=document.getElementById('pct'),timerEl=document.getElementById('timer');
+const bar=document.getElementById('bar'),playBtn=document.getElementById('play'),scrub=document.getElementById('scrub'),frameLbl=document.getElementById('frameLbl'),buf=document.getElementById('buf'),bufMsg=document.getElementById('bufMsg');
+let sceneList=[],scenesByMethod=new Map(),decodeTime='—',totalSplats=0,t0=0,raf=0,wasmLoaded=false;
+const fmt=()=>((performance.now()-t0)/1000).toFixed(1);
+function tick(){timerEl.innerHTML=fmt()+'<small>s</small>';raf=requestAnimationFrame(tick);}
+function stage(label,pct,sub){stageEl.textContent=label;if(sub!==undefined)subEl.textContent=sub;if(pct!=null)pctEl.textContent=Math.round(pct)+'%';}
+function updateStats(){if(!gops.length){statsEl.textContent='';return;}
+ const dec=gops.reduce((n,x)=>n+(x.motion?1:0),0);
+ statsEl.innerHTML=`<span class="ok">✓ decoded ${decodeTime}s</span> · ${dec}/${gops.length} GOPs buffered · ${totalSplats.toLocaleString()} splats · ${fps} fps`;}
+
+// fetch with progress + optional simulated link speed (transmission demo)
+async function fetchBuf(url,mbps){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status+' '+url);
+ const total=+r.headers.get('content-length')||0;const rd=r.body.getReader();const chunks=[];let recv=0;const start=performance.now();
+ for(;;){const{done,value}=await rd.read();if(done)break;chunks.push(value);recv+=value.length;
+  if(mbps>0){const target=recv*8/(mbps*1e6)*1000;const el=performance.now()-start;if(el<target)await new Promise(res=>setTimeout(res,target-el));}
+  stage('⬇ Downloading…',total?recv/total*100:null,`${(recv/1e6).toFixed(2)}${total?' / '+(total/1e6).toFixed(2):''} MB${mbps>0?' · '+mbps+' Mb/s':''}`);}
+ const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}return out;}
+
+let loadGen=0;
+async function loadScene(url,cam){
+  const myGen=++loadGen;const stale=()=>myGen!==loadGen;const mbps=parseFloat(bwSel.value)||0;
+  gops=[];activeGop=-1;N=0;builtFrame=-1;motion=null;_decodingGop=-1;_mvKey=null;_gopMapSig=null;
+  playing=false;playBtn.textContent='▶ play';camMeta=cam||null;
+  pcaAlign=/(^|\/)dnerf\//.test(url);   // PCA nav-align only for synthetic D-NeRF; others use their test camera
+  loadBtn.disabled=true;idle.style.display='none';canvas.style.display='none';bar.style.display='none';fsBtn.style.display='none';load.style.display='flex';stageEl.style.color='';pctEl.textContent='0%';
+  t0=performance.now();cancelAnimationFrame(raf);tick();
+  try{
+    stage('Loading scene manifest…',null,'');
+    const base=url.replace(/[^/]*$/,'');
+    const scene=await (await fetch(url)).json();if(stale())return;
+    overlap=scene.overlap_frames||0;totalFrames=scene.num_frames;
+    let shared=null;
+    if(scene.has_shared_statics&&scene.shared_statics_path){
+      stage('Reconstructing shared statics…',null,'');
+      const sb=await fetchBuf(base+scene.shared_statics_path,mbps);if(stale())return;
+      shared=decodeShared(parseNpz(sb));
+    }
+    stage('Reconstructing keyframes…',null,'');
+    for(const g of scene.gops){
+      const rb=await fetchBuf(base+g.reference_path,mbps);if(stale())return;
+      const kf=buildKeyframe(parseNpz(rb),shared,g.num_shared_statics||0);
+      gops.push({kf,motion:null,F:0,decodeMs:null,start:g.start_frame,end:g.end_frame,gop_id:g.gop_id,_streams:g.streams});
+      paintGopMap(0);
+    }
+    totalSplats=gops.reduce((m,x)=>Math.max(m,x.kf.numTotal),0);
+    scrub.max=totalFrames-1;
+    // after activateGop(0): shHas/numDyn are known, so the options can be gated to this scene
+    activateGop(0);syncViewOptions();frameScene();gotoGlobal(0);
+    // show the static keyframe right away — user can orbit while motion streams + decodes
+    clearBtn.disabled=false;loadBtn.disabled=false;
+    canvas.style.display='block';bar.style.display='flex';fsBtn.style.display='block';
+    resize();if(!started){started=true;requestAnimationFrame(frame);}
+    // ffmpeg.wasm: show the big overlay only for the one-time ~31 MB download
+    if(!wasmLoaded){load.classList.add('setup');stage('⚙ Loading decoder (ffmpeg.wasm, ~31 MB)…',null,'one-time only; cached in your browser after this');}
+    else load.style.display='none';
+    let ff=await ffmpegReady(()=>{});if(stale())return;wasmLoaded=true;load.classList.remove('setup');load.style.display='none';cancelAnimationFrame(raf);
+    // decode each GOP's motion in the background; the canvas stays live (keyframe) the whole time
+    buf.style.display='flex';
+    for(let gi=0;gi<gops.length;gi++){
+      _decodingGop=gi;paintGopMap(activeGop);bufMsg.textContent=`decoding motion — GOP ${gi+1}/${gops.length}…`;
+      const g=gops[gi];
+      const streams={xyz:{bytes:await fetchBuf(base+g._streams.xyz.path,mbps),meta:g._streams.xyz.meta},
+                     rot:{bytes:await fetchBuf(base+g._streams.rot.path,mbps),meta:g._streams.rot.meta}};
+      if(stale())return;
+      const r=await decodeMotionGopBundle(ff,streams,g.kf);if(stale())return;
+      g.motion=r.motion;g.F=r.F;g.decodeMs=r.decodeMs;if(activeGop===gi){motion=g.motion;numFrames=g.F;builtFrame=-1;}
+      decodeTime=fmt();_decodingGop=-1;updateStats();paintGopMap(activeGop);
+      if(gi===0){playBtn.disabled=false;}                 // playable as soon as GOP 0 lands
+      if((gi+1)%4===0&&gi+1<gops.length){ff=await recreateFFmpeg(()=>{});if(stale())return;}
+      await new Promise(res=>requestAnimationFrame(res));
+    }
+    buf.style.display='none';gotoGlobal(0);updateStats();
+  }catch(e){if(stale())return;console.error(e);cancelAnimationFrame(raf);stage('✗ '+(e.message||e),100,'');stageEl.style.color='var(--err)';load.style.display='flex';loadBtn.disabled=false;}
+}
+function clearScene(){loadGen++;playing=false;playBtn.textContent='▶ play';gops=[];activeGop=-1;motion=null;N=0;numDyn=0;staticIdx=0;totalFrames=1;gFrame=0;builtFrame=-1;_decodingGop=-1;
+ cancelAnimationFrame(raf);if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+ canvas.style.display='none';bar.style.display='none';fsBtn.style.display='none';load.style.display='none';buf.style.display='none';idle.style.display='flex';statsEl.textContent='';stageEl.style.color='';
+ playBtn.disabled=true;clearBtn.disabled=true;scrub.value=0;scrub.max=0;frameLbl.textContent='—';
+ _mvKey=null;_gopMapSig=null;mvGops.innerHTML='';if(_mvCtx)_mvCtx.clearRect(0,0,mvCanvas.width,mvCanvas.height);mvStats.textContent='Load a scene to view stream telemetry.';
+ syncViewOptions();}   // no scene → clear every n/a mark and drop the stale caches
+
+// ===== view options =====
+// The panel is the single source of truth for these. Scene state (gops, textures, cache keys) is
+// torn down and rebuilt on every load, but the view options live in vars that outlive it — so after
+// a load we RE-READ the controls rather than reset them. That keeps a setting you picked while
+// A/B-ing two scenes, guarantees the renderer agrees with what the panel shows, and drops the caches
+// that were keyed on the previous scene. Add a control here and it can't fall out of sync.
+const _ctl=id=>document.getElementById(id);
+// Mark a control the current scene can't express. Leaves its value alone (that's the user's standing
+// preference); the effective var below is what gets forced off.
+function _gate(id,ok,why){
+  const el=_ctl(id),lab=el.closest('label');if(!lab)return ok;
+  if(lab.dataset.t===undefined)lab.dataset.t=lab.getAttribute('title')||'';
+  lab.classList.toggle('na',!ok);el.disabled=!ok;lab.title=ok?lab.dataset.t:why;
+  const tag=lab.querySelector('.naTag');
+  if(!ok&&!tag){const s=document.createElement('span');s.className='naTag';s.textContent='n/a';lab.appendChild(s);}
+  else if(ok&&tag)tag.remove();
+  return ok;
+}
+function syncViewOptions(){
+  const live=gops.length>0;                              // nothing loaded → nothing to gate
+  const canBlend=!live||(gops.length>1&&overlap>0);      // needs two GOPs that actually overlap
+  const canNative=!live||!!camMeta;                      // needs the dataset test camera
+  const canSH=!live||shHas;                              // needs an SH codebook in the keyframe
+  const canMotion=!live||numDyn>0;                       // trails/offset tint need dynamic gaussians
+  _gate('blendChk',canBlend,'This scene is a single GOP (or has no overlap frames) — there is no boundary to cross-fade.');
+  _gate('nativeResChk',canNative,'This scene ships no dataset test camera, so there is no native resolution to match.');
+  _gate('specSel',canSH,'This scene carries no SH codebook — its colour is already view-independent.');
+  _gate('trajChk',canMotion,'This scene has no dynamic gaussians to trail.');
+  _gate('offColChk',canMotion,'This scene has no dynamic gaussians to tint.');
+  blendOn=_ctl('blendChk').checked&&canBlend;
+  shBands=parseInt(_ctl('specSel').value);
+  trajOn=_ctl('trajChk').checked&&canMotion;
+  trajCount=parseInt(_ctl('trajCount').value);trajTrail=parseInt(_ctl('trajTrail').value);
+  offsetColorOn=_ctl('offColChk').checked&&canMotion;offsetColorMix=parseInt(_ctl('offColMix').value)/100;
+  ellipOn=_ctl('ellipChk').checked;ellipR=parseInt(_ctl('ellipRad').value)/100;
+  nativeRes=_ctl('nativeResChk').checked&&canNative;
+  // Caches keyed on the OLD scene. trajKey collides whenever two scenes are loaded back-to-back at
+  // frame 0 (same activeGop|gFrame|count|trail), which would leave the previous scene's trail buffer
+  // on screen; trajVerts is what drawTraj() actually draws, so both must go.
+  trajKey='';trajVerts=0;builtFrame=-1;needSort=true;
+}
+
+playBtn.onclick=()=>{playing=!playing;playBtn.textContent=playing?'⏸ pause':'▶ play';lastFrameT=0;};
+scrub.oninput=()=>{playing=false;playBtn.textContent='▶ play';gotoGlobal(parseInt(scrub.value));};
+document.getElementById('blendChk').onchange=e=>{blendOn=e.target.checked;gotoGlobal(gFrame);};
+document.getElementById('specSel').onchange=e=>{shBands=parseInt(e.target.value);};
+document.getElementById('trajChk').onchange=e=>{trajOn=e.target.checked;trajKey='';};
+document.getElementById('trajCount').oninput=e=>{trajCount=parseInt(e.target.value);trajKey='';};
+document.getElementById('trajTrail').oninput=e=>{trajTrail=parseInt(e.target.value);trajKey='';};
+document.getElementById('offColChk').onchange=e=>{offsetColorOn=e.target.checked;builtFrame=-1;};
+document.getElementById('offColMix').oninput=e=>{offsetColorMix=parseInt(e.target.value)/100;if(offsetColorOn)builtFrame=-1;};
+document.getElementById('ellipChk').onchange=e=>{ellipOn=e.target.checked;};
+document.getElementById('ellipRad').oninput=e=>{ellipR=parseInt(e.target.value)/100;};
+document.getElementById('nativeResChk').onchange=e=>{nativeRes=e.target.checked;};
+clearBtn.onclick=clearScene;
+fsBtn.onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else wrap.requestFullscreen&&wrap.requestFullscreen();};
+document.addEventListener('fullscreenchange',()=>{fsBtn.textContent=document.fullscreenElement?'⛶ exit':'⛶';setTimeout(resize,60);});
+loadBtn.onclick=()=>{const s=_selected();if(s)loadScene(s.url,s.cam);};   // by value: sceneSel is a per-dataset subset, so selectedIndex no longer indexes sceneList
+
+// control panel + speed + touch
+const panel=document.getElementById('panel'),panelHdr=document.getElementById('panelHdr');
+panelHdr.onclick=()=>{const o=panel.classList.toggle('open');panelHdr.setAttribute('aria-expanded',o);};
+document.getElementById('resetView').onclick=()=>{if(N){frameScene();needSort=true;}};
+const speedSlider=document.getElementById('speedSlider');
+speedSlider.oninput=()=>{if(radius)speed=radius*(+speedSlider.value/100);};
+function syncSpeed(){if(radius)speedSlider.value=Math.round(Math.min(50,Math.max(1,speed/radius*100)));}
+
+// ===== Stream Monitor: colorized motion-vector preview + GOP buffer map =====
+// Re-derive the colorized MV image from `motion` + the keyframe base positions (no decoded
+// frames retained): per dynamic gaussian, per-frame normalized (pos - keyframe) -> RGB,
+// packed row-major into a √D × √D image (the same packing the .mkv carries).
+let _mvKey=null,_mvCtx=null,_mvImg=null,_gopMapSig=null;
+const mvCanvas=document.getElementById('mvCanvas'),mvStats=document.getElementById('mvStats'),mvGops=document.getElementById('mvGops');
+const _fmtB=b=>b>=1048576?(b/1048576).toFixed(1)+' MB':(b/1024).toFixed(0)+' kB';
+function gopState(g,owner){const x=gops[g];if(!x)return 'pending';
+  if(g===_decodingGop)return 'decoding';
+  if(x.motion)return g===owner?'active':'resident';
+  return 'pending';}
+function paintGopMap(owner){
+  if(!gops.length){if(_gopMapSig!==''){_gopMapSig='';mvGops.innerHTML='';}return;}
+  let sig='',html='';
+  for(let g=0;g<gops.length;g++){const s=gopState(g,owner);sig+=s+'|';html+=`<span class="gd gd-${s}" title="GOP ${g}: ${s}"></span>`;}
+  if(sig===_gopMapSig)return;_gopMapSig=sig;mvGops.innerHTML=html;}
+function paintMV(owner,localO){
+  paintGopMap(owner);
+  const g=gops[owner];
+  const key=owner+'|'+localO+'|'+(g&&g.motion?1:0);
+  if(key===_mvKey)return;_mvKey=key;
+  if(!_mvCtx)_mvCtx=mvCanvas.getContext('2d');
+  if(!g||!g.kf){_mvCtx.clearRect(0,0,mvCanvas.width,mvCanvas.height);mvStats.innerHTML=`<b>GOP ${owner}</b> · loading…`;return;}
+  const D=g.kf.numDyn,si=g.kf.staticIdx,ctr=g.kf.center;
+  const side=Math.max(1,Math.round(Math.sqrt(D)));
+  if(mvCanvas.width!==side){mvCanvas.width=side;mvCanvas.height=side;}
+  let memAll=0,res=0;for(const x of gops)if(x.motion){memAll+=x.motion.length*4;res++;}
+  const memLine=`<br>decode <b>${g.decodeMs!=null?Math.round(g.decodeMs)+' ms':'—'}</b> · buffered <b>${_fmtB(memAll)}</b> (${res} GOP${res===1?'':'s'})`;
+  if(!g.motion||localO<=0){_mvCtx.clearRect(0,0,side,side);
+    mvStats.innerHTML=`<b>GOP ${owner}</b> · ${g.motion?'keyframe':'decoding…'} · ${side}×${side} · ${D.toLocaleString()} dynamic gaussians`+memLine;return;}
+  const mi=Math.min(localO-1,g.F-1),mot=g.motion,fb=mi*D*7;
+  let n0=1e30,n1=1e30,n2=1e30,x0=-1e30,x1=-1e30,x2=-1e30;
+  for(let j=0;j<D;j++){const b=fb+j*7,c=(si+j)*3;
+    const dx=mot[b]-ctr[c],dy=mot[b+1]-ctr[c+1],dz=mot[b+2]-ctr[c+2];
+    if(dx<n0)n0=dx;if(dx>x0)x0=dx;if(dy<n1)n1=dy;if(dy>x1)x1=dy;if(dz<n2)n2=dz;if(dz>x2)x2=dz;}
+  const r0=(x0-n0)||1,r1=(x1-n1)||1,r2=(x2-n2)||1;
+  if(!_mvImg||_mvImg.width!==side)_mvImg=_mvCtx.createImageData(side,side);
+  const data=_mvImg.data,nn=Math.min(D,side*side);
+  for(let j=0;j<nn;j++){const b=fb+j*7,c=(si+j)*3,o=j*4;
+    data[o]=(mot[b]-ctr[c]-n0)/r0*255|0;data[o+1]=(mot[b+1]-ctr[c+1]-n1)/r1*255|0;data[o+2]=(mot[b+2]-ctr[c+2]-n2)/r2*255|0;data[o+3]=255;}
+  _mvCtx.putImageData(_mvImg,0,0);
+  mvStats.innerHTML=`<b>GOP ${owner}</b> · frame ${mi+1}/${g.F} · ${side}×${side} · ${D.toLocaleString()} dynamic gaussians`+memLine;
+}
+
+// virtual joystick (touch / phone)
+const vctrl=document.getElementById('vctrl'),joy=document.getElementById('joy'),joyknob=document.getElementById('joyknob');
+let joyId=null;
+function joyMove(e){const r=joy.getBoundingClientRect(),R=r.width/2-10;let dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);const d=Math.hypot(dx,dy)||1;if(d>R){dx*=R/d;dy*=R/d;}joyX=dx/R;joyY=dy/R;joyknob.style.transform=`translate(${dx}px,${dy}px)`;}
+function joyEnd(){joyId=null;joyX=joyY=0;joyknob.style.transform='';}
+joy.addEventListener('pointerdown',e=>{e.preventDefault();joyId=e.pointerId;joy.setPointerCapture(joyId);joyMove(e);});
+joy.addEventListener('pointermove',e=>{if(e.pointerId===joyId)joyMove(e);});
+joy.addEventListener('pointerup',e=>{if(e.pointerId===joyId)joyEnd();});
+joy.addEventListener('pointercancel',e=>{if(e.pointerId===joyId)joyEnd();});
+const holdBtn=(el,v)=>{const up=()=>{joyUp=0;};el.addEventListener('pointerdown',e=>{e.preventDefault();joyUp=v;});el.addEventListener('pointerup',up);el.addEventListener('pointerleave',up);el.addEventListener('pointercancel',up);};
+holdBtn(document.getElementById('vup'),1);holdBtn(document.getElementById('vdn'),-1);
+const touchToggle=document.getElementById('touchToggle');
+const isTouch=matchMedia('(pointer:coarse)').matches||'ontouchstart' in window;
+touchToggle.checked=isTouch;vctrl.classList.toggle('on',isTouch);
+touchToggle.onchange=()=>vctrl.classList.toggle('on',touchToggle.checked);
+// copy-to-clipboard for citations
+document.querySelectorAll('.copybtn').forEach(b=>b.onclick=()=>{const el=document.getElementById(b.dataset.target);navigator.clipboard.writeText(el.textContent).then(()=>{const o=b.textContent;b.textContent='✓ Copied';setTimeout(()=>{b.textContent=o;},1500);}).catch(()=>{b.textContent='⚠ select & copy';});});
+
+// scene dropdowns: dataset x scene. One flat list of every scene gets long fast, and the labels
+// share long prefixes ('dnerf/…' ten times over) — so split it. scenes.json `name` is
+// '<dataset>/<scene>  (<mb> MB)', so the split is driven off the name.
+function splitSceneName(name){
+  const i=name.lastIndexOf('  (');
+  const path=(i<0?name:name.slice(0,i)).trim(), size=i<0?'':name.slice(i).trim();
+  const k=path.lastIndexOf('/');
+  return {method:k<0?'':path.slice(0,k), scene:path.slice(k+1), size};
+}
+const _selected=()=>sceneList.find(s=>s.url===sceneSel.value);      // by value, NOT selectedIndex: the
+                                                                    // scene list is now a per-dataset subset
+function fillScenes(keepScene){
+  const rows=scenesByMethod.get(methodSel.value)||[];
+  sceneSel.innerHTML='';
+  for(const s of rows){const o=document.createElement('option');o.value=s.url;o.textContent=`${s.scene}  ${s.size}`;sceneSel.appendChild(o);}
+  const same=keepScene&&rows.find(s=>s.scene===keepScene);          // stay on the same scene across a
+  sceneSel.value=same?same.url:(rows[0]?rows[0].url:'');            // dataset switch, to A/B it directly
+}
+fetch('scenes.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(list=>{
+  sceneList=list.map(s=>({...s,...splitSceneName(s.name)}));
+  scenesByMethod=new Map();
+  for(const s of sceneList){
+    if(!scenesByMethod.has(s.method))scenesByMethod.set(s.method,[]);
+    scenesByMethod.get(s.method).push(s);
+  }
+  methodSel.innerHTML='';
+  for(const m of scenesByMethod.keys()){
+    const o=document.createElement('option');o.value=m;o.textContent=`${m}  (${scenesByMethod.get(m).length})`;methodSel.appendChild(o);
+  }
+  fillScenes();
+  if(!sceneList.length){loadBtn.disabled=true;sceneSel.innerHTML='<option>scenes.json empty — run make_scenes_index.py</option>';}
+}).catch(e=>{loadBtn.disabled=true;sceneSel.innerHTML='<option>scenes.json failed</option>';_showErr('scenes.json: '+e.message);});
+methodSel.onchange=()=>{const cur=_selected();fillScenes(cur&&cur.scene);};
+
+// preload the decoder as soon as the page opens, so the first scene loads without a first-time wait
+const _idleDec=document.getElementById('idleDec');
+ffmpegReady(()=>{}).then(()=>{wasmLoaded=true;if(_idleDec){_idleDec.textContent='✓ decoder ready';_idleDec.classList.add('ready');}})
+  .catch(e=>{_showErr('decoder load failed: '+((e&&e.message)||e));if(_idleDec)_idleDec.textContent='⚠ decoder failed to load (see console)';});
+</script>
+
+<!-- ============ Live-viewers globe (self-contained, GPU-optional footer widget) ============ -->
+<script>
+(function(){
+  const wrap=document.getElementById('globeWrap'), cv=document.getElementById('globeCanvas'), cap=document.getElementById('globeCap');
+  if(!wrap||!cv) return;
+  const gl=cv.getContext('webgl2',{antialias:true,alpha:false,premultipliedAlpha:false});
+  if(!gl){ wrap.style.display='none'; return; }   // no WebGL2 → silently drop the card
+
+  // ---- tiny mat4 (column-major) ----
+  const mul=(a,b)=>{const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++){let s=0;for(let k=0;k<4;k++)s+=a[k*4+r]*b[c*4+k];o[c*4+r]=s;}return o;};
+  const persp=(fy,asp,n,f)=>{const t=1/Math.tan(fy/2),nf=1/(n-f);return new Float32Array([t/asp,0,0,0, 0,t,0,0, 0,0,(f+n)*nf,-1, 0,0,2*f*n*nf,0]);};
+  const rotY=a=>{const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1]);};
+  const rotX=a=>{const c=Math.cos(a),s=Math.sin(a);return new Float32Array([1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1]);};
+  const trans=(x,y,z)=>new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1]);
+  const ll2v=(lat,lon)=>{const la=lat*Math.PI/180,lo=lon*Math.PI/180,cl=Math.cos(la);return [cl*Math.cos(lo),Math.sin(la),cl*Math.sin(lo)];};
+
+  // ---- shaders ----
+  const compile=(t,src)=>{const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) console.error('[globe] shader compile failed:\n'+gl.getShaderInfoLog(s)+'\n---\n'+src); return s;};
+  const prog=(vs,fs)=>{const p=gl.createProgram();gl.attachShader(p,compile(gl.VERTEX_SHADER,vs));gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS)) console.error('[globe] program link failed: '+gl.getProgramInfoLog(p)); return p;};
+  const facingVS=`vec3 eN=normalize((uMV*vec4(aPos,0.0)).xyz);`;
+  const ptProg=prog(
+    `#version 300 es
+     in vec3 aPos; in float aA; uniform mat4 uMVP,uMV; uniform float uSize;
+     out float vFace; out float vA;
+     void main(){ gl_Position=uMVP*vec4(aPos,1.0); ${facingVS} vFace=eN.z; vA=aA;
+       gl_PointSize=uSize*(0.6+0.4*clamp(eN.z,0.0,1.0)); }`,
+    `#version 300 es
+     precision mediump float; in float vFace; in float vA; uniform vec3 uColor; uniform float uAlpha;
+     out vec4 o;
+     void main(){ vec2 c=gl_PointCoord-0.5; float d=length(c); if(d>0.5) discard;
+       float g=smoothstep(0.5,0.0,d); float front=clamp(vFace,0.0,1.0);
+       o=vec4(uColor, uAlpha*vA*g*(0.45+0.55*front)); }`);
+  const loc=(p,n)=>gl.getUniformLocation(p,n);
+  const U={pMVP:loc(ptProg,'uMVP'),pMV:loc(ptProg,'uMV'),pSize:loc(ptProg,'uSize'),pColor:loc(ptProg,'uColor'),pAlpha:loc(ptProg,'uAlpha')};
+
+  // ---- globe dot cloud (fibonacci sphere) ----
+  const NDOT=1100, dots=new Float32Array(NDOT*3), dotA=new Float32Array(NDOT), GA=Math.PI*(3-Math.sqrt(5));
+  for(let i=0;i<NDOT;i++){const y=1-2*(i+0.5)/NDOT,r=Math.sqrt(1-y*y),th=GA*i;
+    dots[i*3]=Math.cos(th)*r; dots[i*3+1]=y; dots[i*3+2]=Math.sin(th)*r; dotA[i]=0.85;}
+  const dotBuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,dotBuf); gl.bufferData(gl.ARRAY_BUFFER,dots,gl.STATIC_DRAW);
+  const dotABuf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,dotABuf); gl.bufferData(gl.ARRAY_BUFFER,dotA,gl.STATIC_DRAW);
+
+  // ---- reusable dynamic buffers ----
+  const arcBuf=gl.createBuffer(), arcABuf=gl.createBuffer(), mkBuf=gl.createBuffer(), mkABuf=gl.createBuffer();
+  const SEG=88, arcA=new Float32Array(SEG);   // arcs render as dense round point-sprites (a glowing tube)
+  const ARCSIZE=9.5;                           // arc thickness in px (before dpr) — tune here
+
+  // ---- arcs ----
+  const SERVER=ll2v(47.37,8.55);                       // Zürich (ETH)
+  // `places` holds countries these scenes have actually been streamed to, newest counts
+  // from the visitor Worker. Empty until it answers — we never invent traffic.
+  const arcs=[], splats=[]; let places=[], visitor=null, seedIdx=0, ambientAt=0;
+  const TRAVEL=1.25, HOLD=1.4, FADE=2.6, LIFE=TRAVEL+HOLD+FADE, SPLATLIFE=0.7;
+  function spawn(a,b,color,kind){
+    const om=Math.acos(Math.max(-1,Math.min(1,a[0]*b[0]+a[1]*b[1]+a[2]*b[2]))), so=Math.sin(om)||1e-6;
+    const P=new Float32Array(SEG*3);
+    for(let i=0;i<SEG;i++){const t=i/(SEG-1), s1=Math.sin((1-t)*om)/so, s2=Math.sin(t*om)/so;
+      let x=s1*a[0]+s2*b[0], y=s1*a[1]+s2*b[1], z=s1*a[2]+s2*b[2];
+      const L=Math.hypot(x,y,z)||1, lift=1+0.28*Math.sin(Math.PI*t);
+      P[i*3]=x/L*lift; P[i*3+1]=y/L*lift; P[i*3+2]=z/L*lift;}
+    arcs.push({P,a,b,om,so,born:performance.now()/1000,color,kind});
+  }
+  const arcPoint=(arc,t)=>{const om=arc.om,so=arc.so,s1=Math.sin((1-t)*om)/so,s2=Math.sin(t*om)/so;
+    let x=s1*arc.a[0]+s2*arc.b[0],y=s1*arc.a[1]+s2*arc.b[1],z=s1*arc.a[2]+s2*arc.b[2];
+    const L=Math.hypot(x,y,z)||1,lift=1+0.28*Math.sin(Math.PI*t); return [x/L*lift,y/L*lift,z/L*lift];};
+
+  // ---- render loop ----
+  let dpr=1, angle=0, tiltTarget=-0.32, spinTo=0, running=false, raf=0, lastT=0, dragging=false, userTouched=false;
+  function resize(){ dpr=Math.min(2,window.devicePixelRatio||1);
+    const w=cv.clientWidth||wrap.clientWidth, h=cv.clientHeight||340;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); }
+  function bindAttr(p,buf,name,size){const l=gl.getAttribLocation(p,name);gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.enableVertexAttribArray(l);gl.vertexAttribPointer(l,size,gl.FLOAT,false,0,0);}
+
+  function frame(now){
+    if(!running) return;
+    const t=now/1000, dt=Math.min(0.05,t-lastT||0); lastT=t;
+    // rotation: user drag takes over; else ease toward the visitor's longitude (once), plus a gentle idle drift
+    if(!dragging){
+      if(visitor && !userTouched) angle += (spinTo-angle)*Math.min(1,dt*1.5);
+      angle += dt*0.11;
+    }
+    // arcs to countries that have really streamed these scenes, cycled one at a time.
+    // No real viewers yet → no arcs but your own; the globe simply idles.
+    if(places.length && t>ambientAt && arcs.length<16){ ambientAt=t+1.3+ (seedIdx%3)*0.4;
+      const p=places[(seedIdx++)%places.length]; spawn(SERVER,p.v,p.color,'ambient'); }
+    // when a stream's head reaches its destination, spawn an impact splat (once)
+    for(const arc of arcs){ if(!arc.splatted && t-arc.born>=TRAVEL){ arc.splatted=true; splats.push({pos:arc.b,born:t,color:arc.color}); } }
+    // cull dead arcs & splats
+    for(let i=arcs.length-1;i>=0;i--) if(t-arcs[i].born>LIFE && arcs[i].kind!=='visitor') arcs.splice(i,1);
+    for(let i=splats.length-1;i>=0;i--) if(t-splats[i].born>SPLATLIFE) splats.splice(i,1);
+
+    gl.viewport(0,0,cv.width,cv.height);
+    gl.clearColor(0.035,0.03,0.055,1); gl.clear(gl.COLOR_BUFFER_BIT);   // subtle dark backdrop (opaque canvas)
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA,gl.ONE);   // additive glow
+    gl.disable(gl.DEPTH_TEST);
+
+    const P=persp(0.62, cv.width/cv.height, 0.1, 20);
+    const V=mul(trans(0,0,-3.9), rotX(tiltTarget));
+    const M=rotY(angle);
+    const MV=mul(V,M), MVP=mul(P,MV);
+
+    // globe dots
+    gl.useProgram(ptProg);
+    gl.uniformMatrix4fv(U.pMVP,false,MVP); gl.uniformMatrix4fv(U.pMV,false,MV);
+    gl.uniform1f(U.pSize,4.6*dpr); gl.uniform3f(U.pColor,0.38,0.54,0.76); gl.uniform1f(U.pAlpha,1.0);
+    bindAttr(ptProg,dotBuf,'aPos',3); bindAttr(ptProg,dotABuf,'aA',1);
+    gl.drawArrays(gl.POINTS,0,NDOT);
+
+    // arcs — dense round point-sprites form a glowing tube (gl.lineWidth is clamped to 1px, so lines can't thicken)
+    gl.useProgram(ptProg);
+    gl.uniformMatrix4fv(U.pMVP,false,MVP); gl.uniformMatrix4fv(U.pMV,false,MV);
+    gl.uniform1f(U.pSize,ARCSIZE*dpr); gl.uniform1f(U.pAlpha,1.0);
+    for(const arc of arcs){
+      const age=t-arc.born, head=Math.min(1,age/TRAVEL), settled=arc.kind==='visitor'&&age>TRAVEL;
+      let al = arc.kind==='visitor' ? 0.8+0.15*Math.sin(t*2.2) : 0.5;   // "you" arc persists, gently breathing
+      if(arc.kind!=='visitor' && age>TRAVEL+HOLD) al*= Math.max(0, 1-(age-TRAVEL-HOLD)/FADE);
+      if(al<=0.001) continue;
+      for(let i=0;i<SEG;i++){ const tt=i/(SEG-1);                        // per-point alpha: reveal up to the moving head, brighter in its trail
+        const reveal = settled?1:(tt<=head?1:Math.max(0,1-(tt-head)/0.04));
+        const trail  = settled?1:0.4+0.6*Math.max(0,Math.min(1,(tt-(head-0.5))/0.5));
+        arcA[i]=al*reveal*trail; }
+      gl.bindBuffer(gl.ARRAY_BUFFER,arcBuf); gl.bufferData(gl.ARRAY_BUFFER,arc.P,gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER,arcABuf); gl.bufferData(gl.ARRAY_BUFFER,arcA,gl.DYNAMIC_DRAW);
+      bindAttr(ptProg,arcBuf,'aPos',3); bindAttr(ptProg,arcABuf,'aA',1);
+      gl.uniform3f(U.pColor,arc.color[0],arc.color[1],arc.color[2]);
+      gl.drawArrays(gl.POINTS,0,SEG);
+    }
+
+    // markers + travelling "packets"
+    const mk=[], mka=[];
+    const push=(v,a)=>{mk.push(v[0],v[1],v[2]); mka.push(a);};
+    push(SERVER, 1.0);                                   // server
+    if(visitor) push(visitor.v, 0.9+0.1*Math.sin(t*3));  // you (pulsing)
+    for(const arc of arcs){ const age=t-arc.born; if(age<TRAVEL){ push(arcPoint(arc,age/TRAVEL), arc.kind==='visitor'?1.0:0.7); } }
+    if(mk.length){
+      const mp=new Float32Array(mk), ma=new Float32Array(mka);
+      gl.useProgram(ptProg);
+      gl.uniformMatrix4fv(U.pMVP,false,MVP); gl.uniformMatrix4fv(U.pMV,false,MV);
+      gl.uniform1f(U.pSize,7.5*dpr); gl.uniform1f(U.pAlpha,1.0);
+      // server marker gold, visitor+packets violet — draw in two passes for distinct colors
+      gl.bindBuffer(gl.ARRAY_BUFFER,mkBuf); gl.bufferData(gl.ARRAY_BUFFER,mp,gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER,mkABuf); gl.bufferData(gl.ARRAY_BUFFER,ma,gl.DYNAMIC_DRAW);
+      bindAttr(ptProg,mkBuf,'aPos',3); bindAttr(ptProg,mkABuf,'aA',1);
+      gl.uniform3f(U.pColor,0.94,0.78,0.35); gl.drawArrays(gl.POINTS,0,1);            // server (idx 0)
+      if(mk.length>3){ gl.uniform3f(U.pColor,0.82,0.48,1.0); gl.drawArrays(gl.POINTS,1,mk.length/3-1); }
+    }
+
+    // impact splats — a bright dot that expands outward and fades as the stream lands
+    if(splats.length){
+      gl.useProgram(ptProg);
+      gl.uniformMatrix4fv(U.pMVP,false,MVP); gl.uniformMatrix4fv(U.pMV,false,MV);
+      const one=new Float32Array([1]);
+      for(const s of splats){ const p=(t-s.born)/SPLATLIFE, ease=1-(1-p)*(1-p);   // 0→1
+        gl.bindBuffer(gl.ARRAY_BUFFER,mkBuf); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(s.pos),gl.DYNAMIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER,mkABuf); gl.bufferData(gl.ARRAY_BUFFER,one,gl.DYNAMIC_DRAW);
+        bindAttr(ptProg,mkBuf,'aPos',3); bindAttr(ptProg,mkABuf,'aA',1);
+        gl.uniform1f(U.pSize,(ARCSIZE*1.7 + 30*ease)*dpr);   // grows outward from the landing point
+        gl.uniform1f(U.pAlpha,(1-p)*(1-p));                  // punchy start, ease-out fade
+        gl.uniform3f(U.pColor,s.color[0]+0.15,s.color[1]+0.12,s.color[2]);   // slightly hotter than the arc
+        gl.drawArrays(gl.POINTS,0,1);
+      }
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  let logged=false;
+  function start(){ if(running) return; running=true; lastT=performance.now()/1000;
+    if(!logged){logged=true; console.log('[globe] render loop started — canvas',cv.width+'x'+cv.height,'arcs',arcs.length);}
+    raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  resize();
+  new ResizeObserver(resize).observe(wrap);
+  // only animate while the card is actually on screen
+  new IntersectionObserver(es=>{ es[0].isIntersecting && document.visibilityState==='visible' ? start() : stop(); },{threshold:0.05}).observe(wrap);
+  document.addEventListener('visibilitychange',()=>{ document.visibilityState==='hidden' ? stop()
+    : (wrap.getBoundingClientRect().top<innerHeight && wrap.getBoundingClientRect().bottom>0 && start()); });
+
+  // ---- drag / touch to rotate ----
+  let px=0, py=0;
+  cv.style.cursor='grab';
+  cv.addEventListener('pointerdown',e=>{ dragging=true; userTouched=true; px=e.clientX; py=e.clientY;
+    cv.style.cursor='grabbing'; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove',e=>{ if(!dragging) return;
+    angle -= (e.clientX-px)*0.006;
+    tiltTarget = Math.max(-1.35, Math.min(1.35, tiltTarget - (e.clientY-py)*0.006));
+    px=e.clientX; py=e.clientY; });
+  const endDrag=e=>{ if(!dragging) return; dragging=false; cv.style.cursor='grab';
+    try{ cv.releasePointerCapture(e.pointerId); }catch(_){} };
+  cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',endDrag);
+
+  // ---- caption ----
+  // No viewer number: the arcs already say it, and any ordinal we showed would be a
+  // vanity figure we'd then have to defend against refreshes and curl loops.
+  let vLoc=null;
+  function paint(){
+    cap.innerHTML = vLoc
+      ? `Streaming from <span class="loc">${vLoc}</span> — home base: ETH Zürich.`
+      : '<span class="dim">Streaming these scenes worldwide — home base: ETH Zürich.</span>';
+  }
+  paint();
+
+  const setYou=(lat,lon,label)=>{
+    if(!isFinite(lat)||!isFinite(lon)) return;
+    visitor={v:ll2v(lat,lon)};
+    spinTo = -(lon*Math.PI/180) - 0.35;                  // rotate the visitor into view
+    spawn(SERVER, visitor.v, [0.82,0.48,1.0], 'visitor');
+    if(label) vLoc=label;
+    paint();
+  };
+  // Countries that have actually streamed a scene. Brightness tracks visitor count
+  // (log-scaled), so a busy country reads as a stronger arc than a one-off visit.
+  const setPlaces=list=>{
+    const rows=list.filter(p=>isFinite(p.lat)&&isFinite(p.lon)&&p.n>0);
+    const mx=Math.max(1,...rows.map(p=>p.n));
+    places=rows.map(p=>{ const s=0.55+0.45*Math.log(p.n+1)/Math.log(mx+1);
+      return {v:ll2v(p.lat,p.lon), color:[0.46*s,0.56*s,0.74*s]}; });
+  };
+
+  // ---- where viewers have connected from ----
+  // The Worker dedupes by IP+day server-side, so a refresh can't brighten your own
+  // country's arc. Nothing is stored in the browser and no count is ever displayed.
+  // Set this to your deployed Worker URL — see tools/visitor_worker/README.md.
+  const VISITOR_API='';
+
+  if(VISITOR_API){
+    fetch(`${VISITOR_API}/visit`).then(r=>r.ok?r.json():Promise.reject(r.status)).then(d=>{
+      if(d.you) setYou(d.you.lat, d.you.lon, [d.you.city,d.you.country].filter(Boolean).join(', '));
+      if(Array.isArray(d.places)) setPlaces(d.places);
+    }).catch(()=>{});
+  } else {
+    // Without the Worker there is nowhere to record past viewers, so the globe shows
+    // your arc alone rather than inventing company for it.
+    fetch('https://ipapi.co/json/').then(r=>r.ok?r.json():Promise.reject()).then(d=>{
+      if(d) setYou(d.latitude, d.longitude, [d.city,d.country_name].filter(Boolean).join(', ')||'your location');
+    }).catch(()=>{});
+  }
+})();
+</script>
+<div id="err"></div>
+</body>
+</html>

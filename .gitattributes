@@ -1,0 +1,5 @@
+# Scene motion/keyframe binaries are stored via Git LFS.
+*.mkv filter=lfs diff=lfs merge=lfs -text
+*.npz filter=lfs diff=lfs merge=lfs -text
+# ffmpeg.wasm decoder stays a plain git object; just mark it binary (no text/EOL filters).
+*.wasm binary

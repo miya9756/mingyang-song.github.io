@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mingyang Song</title>
+<meta name="description" content="Mingyang Song — researcher, Disney Research Studios &amp; ETH Zürich. Dynamic scene compression, neural rendering.">
+<style>
+  :root{--bg:#0e1014;--fg:#e8e6e3;--dim:#9aa0a6;--accent:#7cc4ff;--line:#22262e;
+        --accent-ring:rgba(124,196,255,.5);--shadow:rgba(0,0,0,.55);
+        --grad-wash:linear-gradient(90deg,rgba(110,137,224,.16) 0%,rgba(224,163,76,.16) 100%)}
+  @media(prefers-color-scheme:light){:root{--bg:#fbfaf8;--fg:#16181d;--dim:#5f6672;--accent:#0b6bcb;--line:#e3e1dd;
+        --accent-ring:rgba(11,107,203,.35);--shadow:rgba(16,24,40,.16);
+        --grad-wash:linear-gradient(90deg,rgba(110,137,224,.11) 0%,rgba(224,163,76,.11) 100%)}}
+  /* the active-card accent: periwinkle → amber, same in both themes */
+  :root{--grad:linear-gradient(90deg,rgba(110,137,224,1) 0%,rgba(224,163,76,1) 100%)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:12vh 24px 12vh}
+  h1{font-size:clamp(2rem,6vw,3rem);line-height:1.1;margin:0 0 .3em;letter-spacing:-.02em}
+  .role{color:var(--dim);margin:0 0 2.5em;font-size:1.05rem}
+  h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);font-weight:600;margin:3em 0 1em;padding-bottom:.6em;border-bottom:1px solid var(--line)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  /* The card is the whole click target, so it has to look like one: it lifts off the page on
+     hover and carries a named action rather than relying on the border alone. */
+  .card{display:block;position:relative;border:1px solid var(--line);border-radius:12px;padding:20px 22px;color:inherit;
+        background:transparent;cursor:pointer;transition:border-color .18s,transform .18s,box-shadow .18s,background-color .18s}
+  /* Active card. border-color can't take a gradient, so the border IS the gradient: paint --grad
+     clipped to border-box, then cover the interior with an opaque --bg layer clipped to padding-box,
+     with a faint gradient wash on top. Unlike border-image this respects border-radius. */
+  .card:hover,.card:focus-visible{border-color:transparent;transform:translateY(-3px);
+              box-shadow:0 12px 30px -14px var(--shadow);text-decoration:none;
+              background:var(--grad-wash) padding-box,
+                         linear-gradient(var(--bg),var(--bg)) padding-box,
+                         var(--grad) border-box}
+  /* the title takes the same gradient, clipped to the glyphs */
+  .card:hover h3,.card:focus-visible h3{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+  .card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}   /* keyboard users got nothing before */
+  .card h3{margin:0 0 .35em;font-size:1.1rem;transition:color .18s}
+  .card p{margin:0;color:var(--dim);font-size:.94rem}
+  .cardfoot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5em 1.2em;margin-top:1.1em}
+  .tag{display:inline-flex;align-items:center;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+  /* a slow pulse says "this one actually runs" — it is the demo, not a paper link */
+  .live{width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:.6em;flex:none;
+        box-shadow:0 0 0 0 var(--accent-ring);animation:pulse 2.4s ease-out infinite}
+  @keyframes pulse{70%{box-shadow:0 0 0 7px rgba(0,0,0,0)}100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}}
+  .cta{font-size:.85rem;font-weight:600;color:var(--accent);white-space:nowrap}
+  /* the arrow keeps a solid colour — gradient-clipped glyphs lose the crispness of a 1-char mark */
+  .card:hover .cta,.card:focus-visible .cta{color:#e0a34c}
+  .cta .arrow{display:inline-block;transition:transform .18s}
+  .card:hover .cta .arrow{transform:translateX(4px)}
+  /* contact cards: same click-target treatment as the project card, dialled down so the project
+     stays the hero. auto-fit means they sit side by side and stack on a phone with no breakpoint. */
+  .cards2{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+  .card.mini{padding:14px 16px}
+  .card.mini:hover,.card.mini:focus-visible{transform:translateY(-2px)}
+  .minilbl{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:.3em}
+  .minival{display:block;font-size:.95rem;color:var(--fg);overflow-wrap:anywhere;transition:color .18s}
+  .card.mini:hover .minival,.card.mini:focus-visible .minival{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+  @media(prefers-reduced-motion:reduce){
+    .card,.card h3,.cta .arrow,.minival{transition:none}
+    .card:hover,.card:focus-visible,.card.mini:hover,.card.mini:focus-visible{transform:none}
+    .live{animation:none}
+  }
+  footer{margin-top:5em;color:var(--dim);font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Mingyang Song</h1>
+  <p class="role">Ph.D. Student between DisneyResearch|Studios &amp; ETH Zürich.<br>Dynamic scene reconstruction and compression; Video denoising; Digital camera noise modeling.</p>
+
+  <h2>Projects</h2>
+  <a class="card" href="projects/smv/">
+    <h3>SmoothMotionVectors</h3>
+    <p>Optimizing your content for video codecs in free-view video compression. A compressed 4D Gaussian scene, decoded and rasterized entirely in your browser — no GPU, no install.</p>
+    <span class="cardfoot">
+      <span class="tag"><span class="live" aria-hidden="true"></span>SIGGRAPH ’26 · live web player</span>
+      <span class="cta">Open the live viewer <span class="arrow" aria-hidden="true">→</span></span>
+    </span>
+  </a>
+
+  <h2>Contact</h2>
+  <div class="cards2">
+    <a class="card mini" href="mailto:misong9756@gmail.com">
+      <span class="minilbl">Personal</span>
+      <span class="minival">misong9756@gmail.com</span>
+    </a>
+    <a class="card mini" href="mailto:mingyang.song@inf.ethz.ch">
+      <span class="minilbl">ETH Zürich</span>
+      <span class="minival">mingyang.song@inf.ethz.ch</span>
+    </a>
+  </div>
+
+  <h2>Elsewhere</h2>
+  <p><a href="https://github.com/mingyang-song">GitHub</a></p>
+
+  <footer>© 2026 Mingyang Song</footer>
+</div>
+</body>
+</html>
