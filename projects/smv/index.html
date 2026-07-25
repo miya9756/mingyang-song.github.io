@@ -25,6 +25,15 @@
   h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
      font-weight:600;font-size:clamp(34px,5vw,52px);line-height:1.0;letter-spacing:-.018em;color:var(--ink)}
   h1 .accent{color:var(--accent)}
+  /* back to the personal site. '../../' not an absolute path, so it resolves correctly whether
+     the site is served from a user-site root or a project-site subpath. */
+  .back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:rgba(255,255,255,.55);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:#fff;text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+  @media(prefers-reduced-motion:reduce){.back,.back .barrow{transition:none}.back:hover .barrow{transform:none}}
   .tagline{margin:12px 0 0;font-family:'Fraunces',Georgia,serif;font-style:italic;
      font-size:clamp(15px,1.7vw,19px);color:var(--muted)}
   .tagline em{color:var(--accent);font-style:italic}
@@ -177,6 +186,7 @@
 </script>
 <header>
   <div class="inner">
+    <a class="back" href="../../"><span class="barrow" aria-hidden="true">←</span> Mingyang Song</a>
     <h1><span class="accent">Smooth</span>MotionVectors</h1>
     <p class="subtitle">Optimizing Your Content for Video Codecs in Free View Video Compression</p>
     <div class="byline">

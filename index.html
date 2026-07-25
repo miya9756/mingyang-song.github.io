@@ -58,9 +58,28 @@
   .minilbl{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:.3em}
   .minival{display:block;font-size:.95rem;color:var(--fg);overflow-wrap:anywhere;transition:color .18s}
   .card.mini:hover .minival,.card.mini:focus-visible .minival{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+  /* Pixiv card, decorated with "last_moment". The artwork is dark on the left and blows out to a
+     warm pool on the right, so the scrim is a left-to-right ramp: heavy where the text sits, almost
+     absent over the lit desks. Image lives on ::before rather than as the card's own background, so
+     the gradient-border trick on .card:hover still works instead of overwriting it. */
+  .card.art{position:relative;overflow:hidden;min-height:170px;padding:18px 20px;
+            display:flex;flex-direction:column;justify-content:flex-end;
+            border-color:rgba(255,255,255,.14);color:#fff}
+  .card.art::before{content:"";position:absolute;inset:0;z-index:0;
+            background:url(assets/last_moment.jpg) center 58%/cover no-repeat;
+            transition:transform .55s cubic-bezier(.2,.7,.2,1)}
+  .card.art::after{content:"";position:absolute;inset:0;z-index:1;
+            background:linear-gradient(90deg,rgba(6,5,4,.9) 0%,rgba(6,5,4,.66) 46%,rgba(6,5,4,.12) 100%)}
+  .card.art>*{position:relative;z-index:2}
+  .card.art:hover::before,.card.art:focus-visible::before{transform:scale(1.045)}   /* slow drift, not a zoom */
+  .artlbl{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.7)}
+  .artval{display:block;font-size:1.05rem;font-weight:600;color:#fff;margin-top:.15em}
+  .artcta{display:block;font-size:.85rem;font-weight:600;color:#f0c68a;margin-top:.75em}
+  .card.art:hover .artcta,.card.art:focus-visible .artcta{color:#ffd9a3}
   @media(prefers-reduced-motion:reduce){
-    .card,.card h3,.cta .arrow,.minival{transition:none}
+    .card,.card h3,.cta .arrow,.minival,.card.art::before{transition:none}
     .card:hover,.card:focus-visible,.card.mini:hover,.card.mini:focus-visible{transform:none}
+    .card.art:hover::before,.card.art:focus-visible::before{transform:none}
     .live{animation:none}
   }
   footer{margin-top:5em;color:var(--dim);font-size:.9rem}
@@ -71,7 +90,7 @@
   <h1>Mingyang Song</h1>
   <p class="role">Ph.D. Student between DisneyResearch|Studios &amp; ETH Zürich.<br>Dynamic scene reconstruction and compression; Video denoising; Digital camera noise modeling.</p>
 
-  <h2>Projects</h2>
+  <h2>Selected Projects</h2>
   <a class="card" href="projects/smv/">
     <h3>SmoothMotionVectors</h3>
     <p>Optimizing your content for video codecs in free-view video compression. A compressed 4D Gaussian scene, decoded and rasterized entirely in your browser — no GPU, no install.</p>
@@ -94,9 +113,12 @@
   </div>
 
   <h2>Elsewhere</h2>
-  <p><a href="https://github.com/mingyang-song">GitHub</a></p>
+  <a class="card art" href="https://www.pixiv.net/users/40188711" target="_blank" rel="noopener">
+    <span class="artlbl">Pixiv</span>
+    <span class="artval">Digital illustration</span>
+    <span class="artcta">View gallery <span class="arrow" aria-hidden="true">→</span></span>
+  </a>
 
-  <footer>© 2026 Mingyang Song</footer>
 </div>
 </body>
 </html>
