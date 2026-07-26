@@ -91,8 +91,8 @@ editing `4d-relight/web/player_browser/` and syncing here.
 ## View options: the panel is the source of truth
 
 Scene state (`gops`, textures, `builtFrame`, `trajKey`) is torn down and rebuilt on every
-load, but the view options (`blendOn`, `shBands`, `trajOn`, `offsetColorOn`, `ellipOn`,
-`nativeRes`, …) live in vars that outlive it. `syncViewOptions()` re-reads every control
+load, but the view options (`blendOn`, `shBands`, `trajOn`, `offsetColorOn`, `ellipOn`, …)
+live in vars that outlive it. `syncViewOptions()` re-reads every control
 after a load and is the only place that reconciles the two.
 
 **Deliberately re-read, not reset.** Resetting to defaults on load would destroy the A/B
@@ -111,9 +111,15 @@ Two rules for anyone adding a control:
    gated control is dimmed, disabled, and tagged `n/a`, with the reason in its tooltip —
    its checked state is left alone, so the preference returns on a scene that supports it.
 
-Capabilities currently gated: blend (needs ≥2 GOPs *and* `overlap_frames > 0`), native-res
-(needs `camera`), specular (needs an SH codebook), trajectories / colorized offsets (need
-dynamic gaussians).
+Capabilities currently gated: blend (needs ≥2 GOPs *and* `overlap_frames > 0`), specular
+(needs an SH codebook), trajectories / colorized offsets (need dynamic gaussians).
+
+**`nativeRes` has no control any more.** Its "Native camera res" checkbox was removed from the
+Stream Monitor, so nothing sets the var and the `if(nativeRes&&camMeta)` branch in `frame()` —
+plus `fboN` / `ensureFBON()` — is unreachable. The render path is kept deliberately: it is the
+only way to compare splat footprint against the GPU reference at the training resolution. Flip
+it from the console, or re-add a control and wire it through `syncViewOptions()` (its old gate
+was `!!camMeta`).
 
 **Note:** all 19 shipped scenes have `overlap_frames = 0` (and 14 are single-GOP), so the
 blend checkbox is inert on every one of them and now always shows `n/a`. The image-space

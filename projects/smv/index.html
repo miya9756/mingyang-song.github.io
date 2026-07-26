@@ -261,9 +261,6 @@
         <label class="lbl" title="Render each gaussian as a hard-edged ellipsoid (no soft 3DGS falloff) so the underlying 3D point-based representation is visible"><input type="checkbox" id="ellipChk"/> Hard ellipsoids</label>
         <label title="Ellipsoid radius in std-devs — shrink to separate individual points">Ellipsoid radius <input type="range" id="ellipRad" min="20" max="200" value="100"/></label>
       </div>
-      <div class="mvRow">
-        <label class="lbl" title="Parity A/B: render at the dataset camera's native resolution then upscale, so splat size / low-pass match the GPU reference (rendered at that resolution) instead of the sharper display-res render"><input type="checkbox" id="nativeResChk"/> Native camera res</label>
-      </div>
     </div>
     <div class="mvMapWrap">
       <div class="mvMapLbl">GOP buffer map</div>
@@ -587,7 +584,12 @@ let gops=[],activeGop=-1,totalFrames=1,gFrame=0,playing=false,FPS=30,started=fal
 let builtFrame=-1,curView=null,curVw=1,curVh=1,curVx=0,curVy=0,curFx=1,curFy=1,lastView=null,frameAcc=0,lastFrameT=0,fps=0,fpsN=0,fpsT=0,blendOn=true,_decodingGop=-1;
 let trajOn=false,trajCount=1500,trajTrail=24,trajAlpha=0.75,trajArr=null,trajVerts=0,trajKey='';
 let offsetColorOn=false,offsetColorMix=0.6;   // blend dynamic gaussians' real color with their colorized motion offset
-let nativeRes=false;   // A/B parity: rasterize at the dataset camera's native resolution, then upscale (matches GPU reference)
+// A/B parity: rasterize at the dataset camera's native resolution, then upscale (matches the GPU
+// reference). Its checkbox was removed from the Stream Monitor, so nothing flips this any more and
+// the branch in frame() is currently unreachable — the render path is left intact because it is the
+// only way to compare splat footprint against the reference renderer. Set it here (or from the
+// console) to re-enable, or re-add a control and wire it through syncViewOptions().
+let nativeRes=false;
 let ellipOn=false,ellipR=1.0;   // hard-boundary ellipsoids: render each gaussian as a solid disc of radius ellipR std-devs (default off)
 function activateGop(gi){const g=gops[gi],k=g.kf;baseCenter=k.center;baseScale=k.scale;baseQuat=k.quat;baseColor=k.color;
  N=k.numTotal;staticIdx=k.staticIdx;numDyn=k.numDyn;numFrames=g.F;motion=g.motion;activeGop=gi;
@@ -828,11 +830,9 @@ function _gate(id,ok,why){
 function syncViewOptions(){
   const live=gops.length>0;                              // nothing loaded → nothing to gate
   const canBlend=!live||(gops.length>1&&overlap>0);      // needs two GOPs that actually overlap
-  const canNative=!live||!!camMeta;                      // needs the dataset test camera
   const canSH=!live||shHas;                              // needs an SH codebook in the keyframe
   const canMotion=!live||numDyn>0;                       // trails/offset tint need dynamic gaussians
   _gate('blendChk',canBlend,'This scene is a single GOP (or has no overlap frames) — there is no boundary to cross-fade.');
-  _gate('nativeResChk',canNative,'This scene ships no dataset test camera, so there is no native resolution to match.');
   _gate('specSel',canSH,'This scene carries no SH codebook — its colour is already view-independent.');
   _gate('trajChk',canMotion,'This scene has no dynamic gaussians to trail.');
   _gate('offColChk',canMotion,'This scene has no dynamic gaussians to tint.');
@@ -842,7 +842,6 @@ function syncViewOptions(){
   trajCount=parseInt(_ctl('trajCount').value);trajTrail=parseInt(_ctl('trajTrail').value);
   offsetColorOn=_ctl('offColChk').checked&&canMotion;offsetColorMix=parseInt(_ctl('offColMix').value)/100;
   ellipOn=_ctl('ellipChk').checked;ellipR=parseInt(_ctl('ellipRad').value)/100;
-  nativeRes=_ctl('nativeResChk').checked&&canNative;
   // Caches keyed on the OLD scene. trajKey collides whenever two scenes are loaded back-to-back at
   // frame 0 (same activeGop|gFrame|count|trail), which would leave the previous scene's trail buffer
   // on screen; trajVerts is what drawTraj() actually draws, so both must go.
@@ -860,7 +859,6 @@ document.getElementById('offColChk').onchange=e=>{offsetColorOn=e.target.checked
 document.getElementById('offColMix').oninput=e=>{offsetColorMix=parseInt(e.target.value)/100;if(offsetColorOn)builtFrame=-1;};
 document.getElementById('ellipChk').onchange=e=>{ellipOn=e.target.checked;};
 document.getElementById('ellipRad').oninput=e=>{ellipR=parseInt(e.target.value)/100;};
-document.getElementById('nativeResChk').onchange=e=>{nativeRes=e.target.checked;};
 clearBtn.onclick=clearScene;
 fsBtn.onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else wrap.requestFullscreen&&wrap.requestFullscreen();};
 document.addEventListener('fullscreenchange',()=>{fsBtn.textContent=document.fullscreenElement?'⛶ exit':'⛶';setTimeout(resize,60);});

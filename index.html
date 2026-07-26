@@ -50,6 +50,14 @@
   .card:hover .cta,.card:focus-visible .cta{color:#e0a34c}
   .cta .arrow{display:inline-block;transition:transform .18s}
   .card:hover .cta .arrow{transform:translateX(4px)}
+  /* Featured card: the teaser is 3.5:1, which is banner-shaped, so it leads the card and the text
+     sits under it. Padding moves off the card (onto .teaser and .featbody) so the figure controls
+     its own inset. The PNG is RGBA with a genuinely transparent surround, so no plate and no
+     separator rule — the card's own colour shows through the figure's margins and it sits correctly
+     in both themes. box-sizing:border-box means the padding insets the drawn image. */
+  .card.feat{padding:0;overflow:hidden}
+  .teaser{display:block;width:100%;height:auto;padding:18px 20px 0}
+  .featbody{display:block;padding:16px 22px 20px}
   /* contact cards: same click-target treatment as the project card, dialled down so the project
      stays the hero. auto-fit means they sit side by side and stack on a phone with no breakpoint. */
   .cards2{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
@@ -88,16 +96,20 @@
 <body>
 <div class="wrap">
   <h1>Mingyang Song</h1>
-  <p class="role">Ph.D. Student between DisneyResearch|Studios &amp; ETH Zürich.<br>Dynamic scene reconstruction and compression; Video denoising; Digital camera noise modeling.</p>
+  <p class="role">Ph.D. Student between DisneyResearch|Studios &amp; ETH Zürich.<br>Dynamic scene reconstruction and compression; <br>Video denoising; <br>Digital camera noise modeling.</p>
 
   <h2>Selected Projects</h2>
-  <a class="card" href="projects/smv/">
-    <h3>SmoothMotionVectors</h3>
-    <p>Optimizing your content for video codecs in free-view video compression. A compressed 4D Gaussian scene, decoded and rasterized entirely in your browser — no GPU, no install.</p>
-    <span class="cardfoot">
-      <span class="tag"><span class="live" aria-hidden="true"></span>SIGGRAPH ’26 · live web player</span>
-      <span class="cta">Open the live viewer <span class="arrow" aria-hidden="true">→</span></span>
-    </span>
+  <a class="card feat" href="projects/smv/">
+    <img class="teaser" src="assets/smv_teaser_alpha.png" width="1156" height="330" decoding="async"
+         alt="Motion-vector visualisation of a dynamic 3D-Gaussian scene: overlapping colourised poses of an animated character, shown for two compression settings side by side.">
+    <div class="featbody">
+      <h3>SmoothMotionVectors</h3>
+      <p>Optimizing your content for video codecs in free-view video compression. A compressed 4D Gaussian scene, decoded and rasterized entirely in your browser — no GPU, no install.</p>
+      <span class="cardfoot">
+        <span class="tag"><span class="live" aria-hidden="true"></span>SIGGRAPH ’26 · live web player</span>
+        <span class="cta">Open the live viewer <span class="arrow" aria-hidden="true">→</span></span>
+      </span>
+    </div>
   </a>
 
   <h2>Contact</h2>
