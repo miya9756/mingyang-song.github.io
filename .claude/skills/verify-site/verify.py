@@ -20,11 +20,12 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
-PAGES = ["index.html", "projects/smv/index.html"]
+PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
@@ -115,7 +116,12 @@ def check_dom_ids(page, src):
 
 
 def local_refs(src):
-    """Relative asset/module paths referenced by this page."""
+    """Relative asset/module paths referenced by this page.
+
+    HTML comments are stripped first: commented-out markup is not live, and a template
+    comment showing `href="…"` would otherwise be reported as a missing file.
+    """
+    src = re.sub(r"<!--.*?-->", "", src, flags=re.S)
     out = set()
     for pat in (r'(?:src|href)="([^"]+)"',
                 r"url\(\s*['\"]?([^'\")]+)",
@@ -197,7 +203,9 @@ def check_served():
         ok = 0
         for u in sorted(urls):
             try:
-                code = urllib.request.urlopen(base + u, timeout=10).status
+                # quote non-ascii so a stray unicode path reports as a FAIL, not a traceback
+                code = urllib.request.urlopen(
+                    base + urllib.parse.quote(u), timeout=10).status
             except urllib.error.HTTPError as e:
                 code = e.code
             except Exception as e:

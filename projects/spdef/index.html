@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spline Deformation Field</title>
+<meta name="description" content="Spline Deformation Field — SIGGRAPH Conference Papers '25. A spline-based trajectory representation for reconstructing dynamic scenes, where the number of knots explicitly sets the degrees of freedom.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  /* Cool counterpart to the SMV viewer's warm paper. Same bones on purpose — Fraunces display
+     serif, the same back pill, card chrome, spacing rhythm and section order — so the two project
+     pages read as one site; only the palette temperature and the accent change. The accent pair is
+     lifted from this paper's own teaser (its blue and green), so the figure sits native on the page
+     rather than imported onto it. */
+  :root{
+    --bg:#eef1f5; --surface:#ffffff; --ink:#14181d; --muted:#5f6a78; --line:#dde3ea;
+    --accent:#1f5fbf; --accent-2:#2e8b57; --shadow:rgba(20,30,45,.13);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .inner{max-width:1180px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{background:linear-gradient(180deg,#f7f9fc,#f1f4f8);border-bottom:1px solid var(--line);padding:32px 0 26px}
+  /* back to the personal site. '../../' not an absolute path, so it resolves correctly whether
+     the site is served from a user-site root or a project-site subpath. */
+  .back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:rgba(255,255,255,.6);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:#fff;text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+
+  h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(32px,4.6vw,48px);line-height:1.05;letter-spacing:-.018em;color:var(--ink)}
+  .subtitle{margin:10px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
+            font-size:clamp(15px,2vw,21px);color:var(--ink);opacity:.9;line-height:1.25}
+  .byline{margin:16px 0 0;font-size:13.5px;line-height:1.8;color:var(--muted)}
+  .byline .authors{color:var(--ink);font-weight:500}
+  .byline .affil{display:block;font-size:12px}
+  .byline sup{color:var(--accent);font-size:.7em;padding:0 1px}
+  /* author links stay in the byline's ink so six names still read as one line; the rule is the
+     only affordance, and it warms to the accent on hover */
+  .byline .authors a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);
+                     transition:color .15s,border-color .15s}
+  .byline .authors a:hover{color:var(--accent);border-bottom-color:var(--accent)}
+
+  main{padding:30px 0 20px}
+  h2{font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;margin:0 0 14px;color:var(--ink)}
+  section{margin:0 0 40px}
+  /* Placeholder for the interactive demo. Same dashed "empty slot" idiom the landing page uses for
+     a project with no page yet, so an unfinished thing looks unfinished on purpose. */
+  .slot{border:1px dashed var(--line);border-radius:12px;padding:30px 24px;text-align:center;
+        background:rgba(255,255,255,.45)}
+  .slot .slothd{font-family:'Fraunces',Georgia,serif;font-size:18px;font-weight:600;color:var(--ink);opacity:.75}
+  .slot p{margin:8px auto 0;max-width:560px;font-size:13.5px;color:var(--muted)}
+  .citebox{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+  .citehd{display:flex;align-items:center;justify-content:space-between;gap:12px;
+          padding:10px 14px;border-bottom:1px solid var(--line);font-size:11.5px;font-weight:600;
+          letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .copybtn{font:inherit;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+           padding:4px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);
+           color:var(--muted);cursor:pointer;transition:color .16s,border-color .16s}
+  .copybtn:hover{color:var(--accent);border-color:var(--accent)}
+  pre{margin:0;padding:14px;overflow-x:auto;font:12.5px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+      color:var(--ink);white-space:pre-wrap;word-break:break-word}
+  .paper{font-size:14px;color:var(--muted);margin:0 0 18px;line-height:1.7}
+  footer{border-top:1px solid var(--line);margin-top:20px;padding:26px 0 48px;color:var(--muted);font-size:13px}
+
+  @media(prefers-reduced-motion:reduce){
+    .back,.back .barrow,.byline .authors a{transition:none}
+    .back:hover .barrow{transform:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <a class="back" href="../../"><span class="barrow" aria-hidden="true">←</span> Mingyang Song</a>
+    <h1>Spline Deformation Field</h1>
+    <p class="subtitle">Revisiting classic splines, blended with modern coordinate neural networks.</p>
+    <div class="byline">
+      <span class="authors">Mingyang Song<sup>1,2</sup>, <a href="https://scholar.google.com/citations?user=gwP_ARgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Yang Zhang</a><sup>1</sup>, <a href="https://scholar.google.com/citations?user=RYicr-QAAAAJ&amp;hl=en" target="_blank" rel="noopener">Marko Mihajlovi&#263;</a><sup>2</sup>, <a href="https://vlg.inf.ethz.ch/team/Prof-Dr-Siyu-Tang.html" target="_blank" rel="noopener">Siyu Tang</a><sup>2</sup>, <a href="https://scholar.google.com/citations?user=uxk0GmUAAAAJ&amp;hl=en" target="_blank" rel="noopener">Markus Gross</a><sup>1,2</sup>, <a href="https://scholar.google.com/citations?user=E0fxZeUAAAAJ&amp;hl=en" target="_blank" rel="noopener">Tun&ccedil; Ozan Ayd&#305;n</a><sup>1</sup></span>
+      <span class="affil"><sup>1</sup>DisneyResearch|Studios, Switzerland &nbsp;&nbsp; <sup>2</sup>ETH Zürich, Switzerland</span>
+    </div>
+  </div>
+</header>
+
+<main class="inner">
+  <section>
+    <h2>Playground</h2>
+    <div class="slot">
+      <div class="slothd">In preparation</div>
+      <p>An interactive playground for exploring the spline trajectories in the browser is on the way. In the meantime, the paper linked below covers the method in full.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Citation</h2>
+    <p class="paper">📄 <a href="https://doi.org/10.1145/3721238.3730676" target="_blank" rel="noopener">Spline Deformation Field</a><br>SIGGRAPH Conference Papers ’25, Vancouver, BC, Canada · DOI <a href="https://doi.org/10.1145/3721238.3730676" target="_blank" rel="noopener">10.1145/3721238.3730676</a></p>
+    <div class="citebox">
+      <div class="citehd"><span>ACM Reference Format</span><button class="copybtn" data-target="citeAcm">Copy</button></div>
+      <pre id="citeAcm">Mingyang Song, Yang Zhang, Marko Mihajlovic, Siyu Tang, Markus Gross, and Tunç Ozan Aydın. 2025. Spline Deformation Field. In Special Interest Group on Computer Graphics and Interactive Techniques Conference Conference Papers (SIGGRAPH Conference Papers ’25), August 10–14, 2025, Vancouver, BC, Canada. ACM, New York, NY, USA, 10 pages. https://doi.org/10.1145/3721238.3730676</pre>
+    </div>
+    <div class="citebox">
+      <div class="citehd"><span>BibTeX</span><button class="copybtn" data-target="citeBib">Copy</button></div>
+      <pre id="citeBib">@inproceedings{song2025splinedeformationfield,
+  author    = {Song, Mingyang and Zhang, Yang and Mihajlovic, Marko and Tang, Siyu and Gross, Markus and Ayd{\i}n, Tun\c{c} Ozan},
+  title     = {Spline Deformation Field},
+  year      = {2025},
+  isbn      = {979-8-4007-1540-2/25/08},
+  publisher = {Association for Computing Machinery},
+  address   = {New York, NY, USA},
+  url       = {https://doi.org/10.1145/3721238.3730676},
+  doi       = {10.1145/3721238.3730676},
+  booktitle = {Special Interest Group on Computer Graphics and Interactive Techniques Conference Conference Papers (SIGGRAPH Conference Papers '25)},
+  numpages  = {10},
+  location  = {Vancouver, BC, Canada},
+  series    = {SIGGRAPH Conference Papers '25}
+}</pre>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="inner">&copy; 2026 Mingyang Song</div>
+</footer>
+
+<script>
+  document.querySelectorAll('.copybtn').forEach(b=>b.onclick=()=>{
+    const el=document.getElementById(b.dataset.target);
+    navigator.clipboard.writeText(el.textContent).then(()=>{
+      const o=b.textContent;b.textContent='✓ Copied';setTimeout(()=>{b.textContent=o;},1500);
+    }).catch(()=>{b.textContent='⚠ select & copy';});
+  });
+</script>
+</body>
+</html>

@@ -59,7 +59,18 @@ When the tag and the CTA were both accent-coloured, neither read as the action. 
 ### Variants
 `.card` base · `.card.feat` full-bleed teaser on top, padding moves to `.featbody` ·
 `.card.mini` contact tiles in a `.cards2` auto-fit grid · `.card.art` image-backed, its own
-light-on-dark text since it sits on a photo in both themes.
+light-on-dark text since it sits on a photo in both themes · `.card.slot` placeholder.
+
+**`.card.slot` is the one card that is a `<div>`, not an `<a>` — do not "fix" it.** A
+placeholder has no destination, so making it an anchor would put it in the tab order and
+promise a click that goes nowhere. It therefore also has to *neutralise* the base
+`.card:hover` rules (transform, shadow, gradient border, gradient `h3`), because a `<div>`
+is still hoverable. Dashed border marks it as an empty slot.
+
+To promote a slot to a real project: swap `<div class="card slot">` for
+`<a class="card feat" href="…">`, wrap the text in `<div class="featbody">`, and add the
+teaser `<img class="teaser">` above it with the file's real pixel `width`/`height` and real
+`alt` text. The inline comment in `index.html` says the same thing at the call site.
 
 ### Motion
 Every transition and animation must be switched off in the existing
@@ -100,5 +111,7 @@ fails the build on root-absolute paths.
 - **GitHub link was removed** — source cannot be published. Don't re-add it.
 - **Blend is `n/a` on all shipped scenes** (`overlap_frames = 0`); an overlapped scene is
   planned, which will light it up on its own.
-- Landing page still carries a `footer{…}` rule with no `<footer>` element. Harmless; a
-  footer may return.
+- **`© 2026 Mingyang Song` footer** is back, using the `footer{…}` rule that was left in
+  place. It covers Mingyang's own text, artwork and code only — the viewer page carries
+  separate *Built with* (third-party libraries) and *Datasets* (D-NeRF / HyperNeRF /
+  NeRF-DS) attribution, and those must stay.

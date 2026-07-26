@@ -37,6 +37,12 @@
   /* the title takes the same gradient, clipped to the glyphs */
   .card:hover h3,.card:focus-visible h3{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
   .card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}   /* keyboard users got nothing before */
+  /* Space between stacked project cards. Scoped to direct children of .wrap and to the adjacent
+     sibling only, so it applies between the two project cards without touching the .cards2 contact
+     grid (which has its own gap) and without adding a trailing margin after the last card.
+     20px clears the hover shadow (0 12px 30px -14px reaches ~16px below) so a lifted card's shadow
+     doesn't bleed onto its neighbour. */
+  .wrap > .card + .card{margin-top:20px}
   .card h3{margin:0 0 .35em;font-size:1.1rem;transition:color .18s}
   .card p{margin:0;color:var(--dim);font-size:.94rem}
   .cardfoot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5em 1.2em;margin-top:1.1em}
@@ -58,6 +64,28 @@
   .card.feat{padding:0;overflow:hidden}
   .teaser{display:block;width:100%;height:auto;padding:18px 20px 0}
   .featbody{display:block;padding:16px 22px 20px}
+  /* Split card: for a teaser that is roughly square (spdef is 1.08:1), a full-bleed banner would
+     waste most of the width, so the figure sits left and the text right, both vertically centred.
+     Collapses to one column on a phone, where a 200px-wide diagram beside text would be unreadable.
+     Same card chrome as .feat — border, radius, gradient hover, tag, CTA — so the two project cards
+     read as one family despite the different internal layout. */
+  .card.split{display:grid;grid-template-columns:minmax(0,200px) 1fr;gap:22px;align-items:center}
+  .splitfig{display:block;width:100%;height:auto}
+  @media(max-width:560px){
+    .card.split{grid-template-columns:1fr;gap:14px}
+    .splitfig{max-width:230px;margin:0 auto}
+  }
+  /* Placeholder slot for a project with no page yet. Deliberately a <div>, NOT an <a>: there is
+     nothing to click, so it must not be focusable, must not claim cursor:pointer, and must not run
+     the hover/active treatment — every one of those would promise a destination that isn't there.
+     A <div> can still be hovered, so the base .card:hover rules are explicitly neutralised below.
+     Dashed border is the "empty slot" signal. Promote to <a class="card feat"> when it has a URL. */
+  .card.slot{border-style:dashed;cursor:default;min-height:132px;
+             display:flex;flex-direction:column;justify-content:center}
+  .card.slot h3{color:var(--dim)}
+  .card.slot:hover{border-color:var(--line);border-style:dashed;transform:none;
+                   box-shadow:none;background:transparent}
+  .card.slot:hover h3{background:none;color:var(--dim);-webkit-text-fill-color:currentColor}
   /* contact cards: same click-target treatment as the project card, dialled down so the project
      stays the hero. auto-fit means they sit side by side and stack on a phone with no breakpoint. */
   .cards2{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
@@ -106,8 +134,21 @@
       <h3>SmoothMotionVectors</h3>
       <p>Optimizing your content for video codecs in free-view video compression. A compressed 4D Gaussian scene, decoded and rasterized entirely in your browser — no GPU, no install.</p>
       <span class="cardfoot">
-        <span class="tag"><span class="live" aria-hidden="true"></span>SIGGRAPH ’26 · live web player</span>
+        <span class="tag"><span class="live" aria-hidden="true"></span>SIGGRAPH ’26 · Conference Track</span>
         <span class="cta">Open the live viewer <span class="arrow" aria-hidden="true">→</span></span>
+      </span>
+    </div>
+  </a>
+
+  <a class="card split" href="projects/spdef/">
+    <img class="splitfig" src="assets/spdef_teaser.png" width="2165" height="2000" decoding="async"
+         alt="A spline trajectory through knots in a canonical 3D frame: canonical points map through per-timestep deformation fields to positions and velocities at time t and t+1.">
+    <div>
+      <h3>Spline Deformation Field</h3>
+      <p>To reconstruct dynamic scenes from images, we revisit classic splines and blend them with modern coordinate neural networks. This fusion combines the best of both, achieving smoother temporal transitions and better spatial coherence.</p>
+      <span class="cardfoot">
+        <span class="tag">SIGGRAPH ’25 · Conference Track</span>
+        <span class="cta">Playground <span class="arrow" aria-hidden="true">→</span></span>
       </span>
     </div>
   </a>
@@ -131,6 +172,7 @@
     <span class="artcta">View gallery <span class="arrow" aria-hidden="true">→</span></span>
   </a>
 
+  <footer>&copy; 2026 Mingyang Song</footer>
 </div>
 </body>
 </html>
