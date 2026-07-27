@@ -219,6 +219,25 @@
   <div class="inner">&copy; 2026 Mingyang Song</div>
 </footer>
 
+<script>
+// Boot watchdog. Deliberately a CLASSIC script: the host below is a module, and module loading is
+// all-or-nothing — one dropped fetch anywhere in its graph (../smv/decode*.js and everything under
+// vendor/) and the module never evaluates, boot() never runs, and BOTH panels sit at "waiting for
+// host…" for ever with nothing retrying and nothing said. That is the "neither canvas loaded"
+// failure, and it cannot be caught from inside the module that failed to load. localhost never
+// drops a request; a CDN occasionally does, which is why it only appears on the deployed site.
+window.__spdefBooted = false;
+setTimeout(function () {
+  if (window.__spdefBooted) return;
+  var el = document.getElementById('abStatus');
+  if (!el) return;
+  el.textContent = '✗ The viewer failed to start — a script did not load. ';
+  var b = document.createElement('button');
+  b.className = 'tbtn'; b.textContent = 'Retry';
+  b.onclick = function () { location.reload(); };
+  el.appendChild(b);
+}, 9000);
+</script>
 <script type="module">
 // ===== side-by-side host =====
 // The panels are pure renderers; ALL loading and decoding happens here, once, for both scenes.
@@ -235,19 +254,28 @@
 import { parseNpz, decodeShared, buildKeyframe } from '../smv/decode.js';
 import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle, disposeFFmpeg } from '../smv/decode_motion.js';
 
+window.__spdefBooted=true;   // clears the classic watchdog above: the module graph did resolve
+
 (function(){
   const PANES=[{id:'reg',  fr:document.getElementById('paneA'),url:'scenes/bouncingballs_reg/scene.json'},
                {id:'noreg',fr:document.getElementById('paneB'),url:'scenes/bouncingballs_noreg/scene.json'}];
   const byId=new Map(PANES.map(p=>[p.id,p]));
-  PANES.forEach(p=>{p.frames=0;p.buffered=0;p.splats=0;p.alive=false;p.built=null;p.scene=null;});
+  // `src` is captured from the markup so the watchdog can reload a frame without duplicating the
+  // query string here; `tries` bounds those reloads.
+  PANES.forEach(p=>{p.frames=0;p.buffered=0;p.splats=0;p.alive=false;p.ready=false;p.sentKf=false;
+                    p.built=null;p.scene=null;p.src=p.fr.getAttribute('src');p.tries=0;});
   const playBtn=document.getElementById('abPlay'),scrub=document.getElementById('abScrub'),
         frameLbl=document.getElementById('abFrame'),
         resetBtn=document.getElementById('abReset'),statusEl=document.getElementById('abStatus');
   const FPS=30;
   let playing=false,gFrame=0,total=0,acc=0,lastT=0,loadMsg='loading…',loaded=false;
 
-  const send=(p,m,tr)=>{try{p.fr.contentWindow.postMessage(Object.assign({ch:'spdef',to:p.id},m),location.origin,tr||[]);}catch(e){}};
+  // Reports whether the message actually went out, so delivery state is only advanced on success
+  // rather than optimistically — a silently swallowed send used to mark the payload as delivered.
+  const send=(p,m,tr)=>{const w=p.fr.contentWindow;if(!w)return false;
+    try{w.postMessage(Object.assign({ch:'spdef',to:p.id},m),location.origin,tr||[]);return true;}catch(e){return false;}};
   const all=m=>PANES.forEach(p=>send(p,m));
+  let lastCam=null;   // replayed to a panel that had to be reloaded, so it rejoins the camera lock
   const minBuffered=()=>PANES.reduce((n,p)=>Math.min(n,p.buffered),Infinity);
 
   function setFrame(f){if(!total)return;gFrame=((f%total)+total)%total;
@@ -276,11 +304,39 @@ import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle, disposeFFmpeg } fro
   [vEllipR,vTrajN,vTrajL,vOffMix].forEach(s=>s.oninput=pushView);
 
   function stage(label,pct){loadMsg=label;all({type:'stage',label,pct});status();}
+  const nameOf=p=>p.id==='reg'?'with reg':'without reg';
   function status(){
-    if(loaded){const s=PANES.reduce((a,p)=>Math.max(a,p.splats),0);
+    if(loaded&&PANES.every(p=>p.ready)){const s=PANES.reduce((a,p)=>Math.max(a,p.splats),0);
       statusEl.textContent=total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.';
-    }else statusEl.textContent=loadMsg;
+      return;}
+    // Name a panel that has not come up. Silence here is what made the CDN failures look like
+    // "the canvas just didn't render" instead of "that frame never loaded".
+    const late=PANES.filter(p=>!p.alive).map(nameOf);
+    statusEl.textContent=loadMsg+(late.length?'  ·  waiting for '+late.join(' and ')+' to start…':'');
   }
+
+  // Watchdog. A panel that never says hello has failed to load — its document 404'd, or its script
+  // threw before it could announce itself. No message can recover that, because the protocol needs
+  // the panel alive to begin, so nothing retried and the frame stayed blank until the user hit
+  // refresh. Reload just that frame instead, cache-busted so a cached failure is not re-served.
+  // Only frames that never announced are reloaded, so by construction they have received nothing
+  // and the host still holds every motion buffer needed to serve them.
+  const T0=Date.now(),MAX_TRIES=2;
+  const watchdog=setInterval(function(){
+    if(PANES.every(p=>p.ready)){clearInterval(watchdog);return;}
+    for(const p of PANES){
+      if(p.alive||p.ready)continue;
+      if(Date.now()-T0<8000*(p.tries+1))continue;      // generous: a cold CDN fetch is not a failure
+      if(p.tries>=MAX_TRIES){
+        loadMsg='✗ the “'+nameOf(p)+'” panel could not be loaded — please refresh the page';status();
+        clearInterval(watchdog);return;}
+      p.tries++;
+      p.sentKf=false;                                   // the reloaded document knows nothing
+      if(p.built)p.built.forEach(g=>{if(!g.acked)g.sent=false;});
+      p.fr.src=p.src+'&r='+p.tries;
+      loadMsg='restarting the “'+nameOf(p)+'” panel (attempt '+p.tries+')…';status();
+    }
+  },2000);
 
   addEventListener('message',function(e){
     if(e.origin!==location.origin)return;const m=e.data;
@@ -289,16 +345,20 @@ import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle, disposeFFmpeg } fro
     if(m.type==='hello'){p.alive=true;flush(p);}         // panels re-announce until we answer
     else if(m.type==='stats'){p.splats=m.splats;}
     else if(m.type==='ready'){
-      p.frames=m.frames;p.splats=m.splats;
+      p.frames=m.frames;p.splats=m.splats;p.ready=true;
       // Both scenes are the same sequence; if they ever aren't, the shorter one bounds the timeline.
       if(PANES.every(q=>q.frames>0)){total=PANES.reduce((n,q)=>Math.min(n,q.frames),Infinity);
         scrub.max=total-1;scrub.disabled=false;setFrame(0);}
       status();
     }
-    else if(m.type==='buffered'){p.buffered=m.end;if(minBuffered()>0)playBtn.disabled=false;status();}
+    else if(m.type==='buffered'){p.buffered=m.end;
+      // ACK: the panel has this GOP, so the host's copy can go.
+      if(m.gop!=null&&p.built&&p.built[m.gop]){p.built[m.gop].acked=true;p.built[m.gop].motion=null;}
+      if(minBuffered()>0)playBtn.disabled=false;status();}
     // Cameras are always linked and not user-togglable: two panels at different poses would not
     // be a comparison, so there is nothing to decide here.
-    else if(m.type==='cam'){PANES.forEach(q=>{if(q!==p)send(q,{type:'cam',pos:m.pos,quat:m.quat,speed:m.speed});});}
+    else if(m.type==='cam'){lastCam={type:'cam',pos:m.pos,quat:m.quat,speed:m.speed};
+      PANES.forEach(q=>{if(q!==p)send(q,lastCam);});}
     else if(m.type==='error'){loaded=false;loadMsg='✗ '+(p.id==='reg'?'with reg':'without reg')+': '+m.msg;status();}
   });
 
@@ -307,13 +367,20 @@ import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle, disposeFFmpeg } fro
   // out once — `sent` guards the second flush.
   function flush(p){
     if(!p.alive||!p.built)return;
-    if(!p.sentKf){p.sentKf=true;
-      send(p,{type:'keyframe',totalFrames:p.scene.num_frames,camera:p.scene.camera,
-              gops:p.built.map(g=>({kf:g.kf,start:g.start,end:g.end,gop_id:g.gop_id}))});
+    if(!p.sentKf){
+      if(!send(p,{type:'keyframe',totalFrames:p.scene.num_frames,camera:p.scene.camera,
+                  gops:p.built.map(g=>({kf:g.kf,start:g.start,end:g.end,gop_id:g.gop_id}))}))return;
+      p.sentKf=true;
       send(p,{type:'stage',label:loadMsg,pct:null});
-      send(p,viewState());}   // a panel installing late must not sit at the option defaults
-    p.built.forEach((g,gi)=>{if(g.motion&&!g.sent){g.sent=true;
-      send(p,{type:'motion',gop:gi,motion:g.motion,F:g.F},[g.motion.buffer]);g.motion=null;}});
+      send(p,viewState());          // a panel installing late must not sit at the option defaults
+      if(lastCam)send(p,lastCam);   // nor at the opening pose if the other panel has moved on
+    }
+    // Motion is CLONED, not transferred, and the host's copy is freed only when the panel ACKs it
+    // (the `gop` field on `buffered`). Transferring destroyed the only copy at send time, which
+    // made a failed or reloaded panel permanently unrecoverable — the host had nothing left to
+    // re-send. The extra copy is transient: it lives from send to ACK, then goes.
+    p.built.forEach((g,gi)=>{if(g.motion&&!g.sent){
+      if(send(p,{type:'motion',gop:gi,motion:g.motion,F:g.F}))g.sent=true;}});
     if(p.built.every(g=>g.sent))send(p,{type:'hide'});
   }
 
@@ -335,7 +402,7 @@ import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle, disposeFFmpeg } fro
       p.built=[];
       for(const g of p.scene.gops)
         p.built.push({kf:buildKeyframe(parseNpz(await grab(base+g.reference_path,'keyframes…')),shared,g.num_shared_statics||0),
-                      start:g.start_frame,end:g.end_frame,gop_id:g.gop_id,motion:null,F:0,sent:false});
+                      start:g.start_frame,end:g.end_frame,gop_id:g.gop_id,motion:null,F:0,sent:false,acked:false});
       flush(p);   // keyframes go out now; they are cloned, not transferred, so decode below still has them
     }
     // Phase 2 — one decoder for every GOP of both scenes, then give the memory back.

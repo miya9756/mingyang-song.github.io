@@ -358,7 +358,9 @@ function installKeyframes(m){
 function installMotion(m){const g=gops[m.gop];if(!g)return;
   g.motion=m.motion;g.F=m.F;
   if(activeGop===m.gop){motion=g.motion;numFrames=g.F;builtFrame=-1;}
-  post({type:'buffered',end:decodedEnd()});}
+  // `gop` doubles as the delivery ACK: the host holds its own copy until this arrives, so a panel
+  // that has to be reloaded can still be served.
+  post({type:'buffered',end:decodedEnd(),gop:m.gop});}
 
 addEventListener('message',e=>{if(e.origin!==location.origin)return;const m=e.data;
  if(!m||m.ch!=='spdef'||m.to!==ID)return;

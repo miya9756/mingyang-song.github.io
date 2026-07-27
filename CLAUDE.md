@@ -158,8 +158,24 @@ point clouds when overlap is 0. The loader stays multi-GOP-capable either way.
   decoding back into `viewer.html`.
 - **Keyframes are pushed before motion**, so both panels are on screen and orbitable before the
   core is even fetched. All of a scene's keyframes are *cloned* (~900 KB per GOP, and the host
-  still needs them to decode); motion arrays (~60 MB per scene, one per GOP) are
-  **transferred**, so they can only be sent once — `flush()`'s `sent` flags exist for that.
+  still needs them to decode).
+- **Motion arrays are cloned too, and freed only when the panel ACKs them** (the `gop` field on
+  `buffered`). They were originally *transferred* — cheaper, but it destroyed the host's only
+  copy at send time, so a panel that failed to load or had to be reloaded was permanently
+  unrecoverable. Do not "optimise" this back to a transfer without replacing the recovery path;
+  the retained copy is what makes the watchdog below able to serve a restarted frame.
+- **Two load failures are recovered explicitly, because a CDN drops requests and localhost does
+  not** — the symptom was one or both canvases blank on the deployed site until a manual refresh:
+  - *A panel that never says `hello`* (its document 404'd, or its script threw before
+    announcing) is reloaded by a watchdog, cache-busted, up to twice. No message can fix this —
+    the protocol needs the panel alive to begin.
+  - *The host module itself failing to load.* Module loading is all-or-nothing, so one dropped
+    fetch under `../smv/` or `vendor/` means `boot()` never runs and both panels wait for ever.
+    A **classic** `<script>` before the module arms a timer that the module clears via
+    `window.__spdefBooted`; it cannot be done from inside the module that failed. Keep it
+    classic, and keep the flag assignment at the very top of the module.
+  - `status()` names a panel that has not come up. Silence is what made these look like a
+    rendering bug rather than a frame that never loaded.
 - **The decode loop is interleaved by GOP index, not scene by scene**, and recycles the ffmpeg
   primary every 4 decodes (`recreateFFmpeg`) as the SMV loader does. Both are inert on the
   single-GOP scenes shipped today — they are there so a multi-GOP packing can be dropped back
