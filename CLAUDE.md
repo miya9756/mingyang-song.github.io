@@ -127,6 +127,90 @@ GOP cross-fade path in `frame()` is effectively dead code against the current sc
 If that's not intended, it's the packaging side (`build_web_bundle.py`) that needs to emit
 overlap, not the viewer.
 
+## `projects/spdef/` — the side-by-side
+
+The SpDef page hosts a 1×2 comparison of the same D-NeRF *bouncingballs* sequence trained
+with and without the temporal regularizers (`xyz/rot_velocity_div_loss`,
+`xyz/rot_acceleration_loss`; the two runs' `deform_config.yaml` differ in nothing else).
+Both scenes are the **single-GOP** packing (`bundle_1_packed`): 150 frames, one keyframe,
+`overlap_frames = 0`. The 4-GOP packing (`bundle_4_packed`) was tried and rolled back — it
+demonstrates worse, since a GOP boundary is a hard cut between two independently-keyframed
+point clouds when overlap is 0. The loader stays multi-GOP-capable either way.
+
+- `viewer.html` is **one panel**, not a copy of the SMV viewer: render core only, no picker,
+  no monitor, no view-option panel. It takes `?scene=&id=` and is driven entirely from the
+  host page over `postMessage`. It has **no static imports** — hosted, it never fetches the
+  decode path at all; the standalone `viewer.html?scene=…` fallback (kept so one panel stays
+  debuggable alone) pulls it in with a dynamic `import()`.
+- **One `<iframe>` per scene, deliberately.** The renderer keeps its scene in module-level
+  vars (`N`, `baseCenter`, `gops`, texture handles); two panels in one document would mean
+  two of every global or a refactor into a class. A document per panel also gives each its
+  own WebGL context, ffmpeg.wasm and worker.
+- **Cameras are always linked**, with no toggle — two panels at different poses would not be a
+  comparison. Dropping the toggle also removed the `reemitCam` message that only existed to
+  re-sync after re-ticking it.
+- **The host does all loading and decoding; the panels are pure renderers.** Motion decode is
+  one-shot preprocessing — once offsets are dequantised into the motion array nothing
+  downstream touches wasm — so no decoder lives per canvas. Decoding *in* the panels meant two
+  module graphs each instantiating a primary + `POOL` helper: **four ffmpeg.wasm instances,
+  four workers, four compiles of the ~32 MB core, none ever freed.** Now one instance set
+  serves both scenes and `disposeFFmpeg()` frees it when the last GOP lands. Do not move
+  decoding back into `viewer.html`.
+- **Keyframes are pushed before motion**, so both panels are on screen and orbitable before the
+  core is even fetched. All of a scene's keyframes are *cloned* (~900 KB per GOP, and the host
+  still needs them to decode); motion arrays (~60 MB per scene, one per GOP) are
+  **transferred**, so they can only be sent once — `flush()`'s `sent` flags exist for that.
+- **The decode loop is interleaved by GOP index, not scene by scene**, and recycles the ffmpeg
+  primary every 4 decodes (`recreateFFmpeg`) as the SMV loader does. Both are inert on the
+  single-GOP scenes shipped today — they are there so a multi-GOP packing can be dropped back
+  in without the timeline pinning at 0 or a long decode chain running on one wasm heap.
+- Protocol is `{ch:'spdef', …}`, `id` panel→host, `to` host→panel; add a message type to both
+  ends or it is silently dropped. Panels re-post `hello` until answered, because a panel's
+  module script can in principle run before the host attaches its listener.
+- **View options (hard ellipsoids / trajectories / colorize motion) live on the host and are
+  always broadcast to BOTH panels** via one `view` message carrying the whole option set —
+  comparing two scenes under different render settings would be meaningless, so there is
+  deliberately no per-panel control. `flush()` re-sends it with the keyframe so a panel that
+  installs late doesn't sit at the defaults. The panel's handler must invalidate *both*
+  `trajKey` (caches the built trail) and `builtFrame` (caches the written splat colours); an
+  option change that doesn't also bump the frame otherwise shows the previous state — the same
+  cache trap `syncViewOptions()` documents on the SMV side.
+- **Trail max is 150** (the whole sequence) versus the SMV viewer's 60. `buildTraj()` rebuilds
+  on every displayed frame, so the cost is real at the top of both sliders: count 1500 / trail
+  24 is 1.2 MB per rebuild, but count 5000 / trail 150 is 34.9 MB — ~2 GB/s of `bufferData`
+  across two panels at 30 fps. Defaults stay at 1500 / 24 for that reason.
+- **No PCA nav-alignment here**, unlike the SMV viewer's D-NeRF path. PCA is computed per
+  point cloud, so the two panels would end up with different world-up axes and the comparison
+  would no longer be the same view of the same thing. The held-out test camera is used
+  verbatim, and `build_web_bundle.py` embeds an identical one in both scenes.
+- **`worldUp` is therefore derived from the test camera** (`-vrot(camquat,[0,1,0])` in
+  `frameScene()`), not left at the renderer's hardcoded `[0,-1,0]`. D-NeRF's world frame is
+  Z-up: that default is ~81° off the camera's up and 0.96 aligned with its *forward*, so Q/E
+  dollied in and out instead of rising and drag-yaw tumbled about a near-forward axis. Dropping
+  PCA without replacing the axis is what caused it. Any future scene here needs a real camera
+  in its `scene.json` for the same reason.
+
+### Shared decode path — do NOT hoist `vendor/` out of `projects/smv/`
+
+`viewer.html` imports `../smv/decode.js` and `../smv/decode_motion.js`. ES module specifiers
+resolve against the *importing module*, so those modules still reach their own `./vendor/` —
+one copy of the ~31 MB ffmpeg core on disk and in cache, serving both pages. Sharing needs no
+move; a "shared lib" folder would only rename the same thing.
+
+The one thing that genuinely does not cross the boundary is **the service worker**: `sw.js`
+registered from `/projects/smv/` has scope `/projects/smv/` and cannot control the SpDef page,
+and GitHub Pages can't send `Service-Worker-Allowed` to widen it. To give SpDef the same
+durable vendor cache, move `sw.js` to `projects/sw.js` (default scope `/projects/`) and
+register `'../sw.js'` from both pages — its fetch handler already keys on `/vendor/` appearing
+anywhere in the path, so it needs no change. Not done yet; SpDef currently relies on the
+plain HTTP cache.
+
+**`coreURLs()` in `decode_motion.js` resolves `./vendor/core/*` against `import.meta.url`, not
+the document.** `toBlobURL` fetches, and `fetch` resolves relative strings against the *page* —
+the old document-relative form worked only for a page in that folder and 404'd from SpDef.
+Keep it module-relative when syncing from `4d-relight/web/player_browser/` (which still has
+the document-relative version).
+
 ## Git LFS (read before touching scenes)
 
 Scene binaries are in **Git LFS** (`.gitattributes`): `*.mkv` and `*.npz`. The
@@ -149,6 +233,23 @@ python3 -m http.server 8137        # repo root; viewer at /projects/smv/
 `projects/smv/scenes/<dataset>/<name>/` (must contain `scene.json` + per-GOP
 `reference.npz` + `.mkv` streams), then `python3 projects/smv/make_scenes_index.py`.
 Never hand-edit `scenes.json`.
+
+**Repackage a SpDef scene** from a training bundle (SpDef has no `scenes.json` — the two
+scenes are named directly in `projects/spdef/index.html`):
+
+```bash
+conda run -n 4dre python ~/4d-relight/web/player_browser/build_web_bundle.py \
+  --bundle /cluster/scratch/misong/4dre/dnerf/bouncingballs/bundle_1_packed \
+  --name spdef1_reg --no-index \
+  --scene_config /cluster/scratch/misong/4dre/dnerf/bouncingballs/scene_config.yaml \
+  --source_path /cluster/scratch/misong/datasets/dnerf/bouncingballs
+# then move web/player_browser/scenes/<name>/ -> projects/spdef/scenes/bouncingballs_reg/
+# and set scene.json's "name" to the destination folder (the --name is only a build handle)
+```
+
+`--scene_config` is what embeds the held-out test camera; without it the viewer opens on a
+default square camera and the scene looks lost. Both SpDef scenes must carry the *same*
+camera or the side-by-side stops being a comparison.
 
 **Deploy:** push to `main`.
 
