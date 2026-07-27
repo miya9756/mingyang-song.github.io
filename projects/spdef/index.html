@@ -190,6 +190,22 @@
       <button id="abReset" class="tbtn">reset view</button>
     </div>
     <p id="abStatus" class="hint">Not loaded.</p>
+    <div class="viewopts" id="abOpts">
+      <p class="vlead">Toggle these to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 150-frame path. Applies to both panels above.</p>
+      <div class="vrow off" data-o="rowEllip">
+        <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the underlying point-based representation is visible"><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
+        <label class="vslide" title="Ellipsoid radius in standard deviations — shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
+      </div>
+      <div class="vrow off" data-o="rowTraj">
+        <label class="tchk" title="Overlay motion trails on a sample of dynamic gaussians (blue = oldest → red = newest)"><input type="checkbox" data-o="traj"> Trajectories</label>
+        <label class="vslide" title="How many gaussians to trail">Count <input type="range" data-o="trajN" min="100" max="5000" step="100" value="1500"><output data-o="trajNN">1500</output></label>
+        <label class="vslide" title="Trail length in frames; 150 is the whole sequence">Trail <input type="range" data-o="trajL" min="2" max="150" value="24"><output data-o="trajLN">24</output></label>
+      </div>
+      <div class="vrow off" data-o="rowOff">
+        <label class="tchk" title="Tint each dynamic gaussian by its per-frame motion offset and blend that with the gaussian's real colour"><input type="checkbox" data-o="off"> Colorize motion</label>
+        <label class="vslide" title="0 = original colour, 100 = pure motion-vector colour">Offset blend <input type="range" data-o="offMix" min="0" max="100" value="60"><output data-o="offMixN">60</output></label>
+      </div>
+    </div>
 
     <h3 class="abhd">Knot count as a regularizer</h3>
     <p class="lede">A casual hand-held capture (HyperNeRF <em>americano</em>) — the unreliable case, where the input barely constrains the motion. Cutting the number of spline knots removes degrees of freedom from the trajectory, which stabilizes the reconstruction much as the loss terms do, at the cost of some high-frequency detail. The third panel shows what the full knot count does with no regularizers at all.</p>
@@ -231,23 +247,23 @@
     </div>
     <p id="amStatus" class="hint">Not loaded.</p>
 
-    <div class="viewopts">
-      <p class="vlead">Toggle the options below to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full path.</p>
-      <div class="vrow off" id="vrowEllip">
-        <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the underlying point-based representation is visible"><input type="checkbox" id="vEllip"> Hard ellipsoids</label>
-        <label class="vslide" title="Ellipsoid radius in standard deviations — shrink to separate individual points">Radius <input type="range" id="vEllipR" min="20" max="200" value="100"><output id="vEllipRN" for="vEllipR">1.00</output></label>
+    <div class="viewopts" id="amOpts">
+      <p class="vlead">Toggle these to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 200-frame path. Applies to the three panels above.</p>
+      <div class="vrow off" data-o="rowEllip">
+        <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the underlying point-based representation is visible"><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
+        <label class="vslide" title="Ellipsoid radius in standard deviations — shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
       </div>
-      <div class="vrow off" id="vrowTraj">
-        <label class="tchk" title="Overlay motion trails on a sample of dynamic gaussians (blue = oldest → red = newest)"><input type="checkbox" id="vTraj"> Trajectories</label>
-        <label class="vslide" title="How many gaussians to trail">Count <input type="range" id="vTrajN" min="100" max="5000" step="100" value="1500"><output id="vTrajNN" for="vTrajN">1500</output></label>
-        <label class="vslide" title="Trail length in frames; 150 is the whole sequence">Trail <input type="range" id="vTrajL" min="2" max="150" value="24"><output id="vTrajLN" for="vTrajL">24</output></label>
+      <div class="vrow off" data-o="rowTraj">
+        <label class="tchk" title="Overlay motion trails on a sample of dynamic gaussians (blue = oldest → red = newest)"><input type="checkbox" data-o="traj"> Trajectories</label>
+        <label class="vslide" title="How many gaussians to trail">Count <input type="range" data-o="trajN" min="100" max="5000" step="100" value="1500"><output data-o="trajNN">1500</output></label>
+        <label class="vslide" title="Trail length in frames; 200 is the whole sequence">Trail <input type="range" data-o="trajL" min="2" max="200" value="24"><output data-o="trajLN">24</output></label>
       </div>
-      <div class="vrow off" id="vrowOff">
-        <label class="tchk" title="Tint each dynamic gaussian by its per-frame motion offset and blend that with the gaussian's real colour"><input type="checkbox" id="vOff"> Colorize motion</label>
-        <label class="vslide" title="0 = original colour, 100 = pure motion-vector colour">Offset blend <input type="range" id="vOffMix" min="0" max="100" value="60"><output id="vOffMixN" for="vOffMix">60</output></label>
+      <div class="vrow off" data-o="rowOff">
+        <label class="tchk" title="Tint each dynamic gaussian by its per-frame motion offset and blend that with the gaussian's real colour"><input type="checkbox" data-o="off"> Colorize motion</label>
+        <label class="vslide" title="0 = original colour, 100 = pure motion-vector colour">Offset blend <input type="range" data-o="offMix" min="0" max="100" value="60"><output data-o="offMixN">60</output></label>
       </div>
     </div>
-    <p class="hint">Nothing is downloaded until you press <em>Load</em> — each comparison fetches and decodes in your browser, and the two share a one-time ~31&nbsp;MB decoder. Once loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. View options apply to every loaded panel.</p>
+    <p class="hint">Nothing is downloaded until you press <em>Load</em> — each comparison fetches and decodes in your browser, and the two share a one-time ~31&nbsp;MB decoder. Once loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. Each comparison carries its own view options.</p>
   </section>
 
   <section>
@@ -332,10 +348,10 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // and the view options — is shared. Linking the two clocks or the two cameras would be
   // meaningless: they are different scenes, different captures and different frame counts.
   const GROUPS=[
-    {key:'balls',ui:{load:'abLoad',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',status:'abStatus'},
+    {key:'balls',ui:{load:'abLoad',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',status:'abStatus',opts:'abOpts'},
      panes:[{id:'reg',    frId:'paneA',url:'scenes/bouncingballs_reg/scene.json',    name:'with reg'},
             {id:'noreg',  frId:'paneB',url:'scenes/bouncingballs_noreg/scene.json',  name:'without reg'}]},
-    {key:'amer',ui:{load:'amLoad',play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',status:'amStatus'},
+    {key:'amer',ui:{load:'amLoad',play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',status:'amStatus',opts:'amOpts'},
      panes:[{id:'k33',    frId:'paneC',url:'scenes/americano_knots33/scene.json',    name:'33 knots'},
             {id:'kfull',  frId:'paneD',url:'scenes/americano_full/scene.json',       name:'full knots'},
             {id:'knoreg', frId:'paneE',url:'scenes/americano_full_noreg/scene.json', name:'full knots, no reg'}]}
@@ -345,6 +361,16 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   for(const g of GROUPS){
     g.el={load:_ctl(g.ui.load),play:_ctl(g.ui.play),scrub:_ctl(g.ui.scrub),lbl:_ctl(g.ui.lbl),
           reset:_ctl(g.ui.reset),status:_ctl(g.ui.status)};
+    // Controls live in this group's own <div class="viewopts">, addressed by data-o because the
+    // block is repeated per group and ids must stay unique. Missing one is a markup typo, and it
+    // would otherwise surface much later as a TypeError inside an event handler.
+    g.opts=_ctl(g.ui.opts);g.o={};
+    for(const k of ['rowEllip','ellip','ellipR','ellipRN','rowTraj','traj','trajN','trajNN',
+                    'trajL','trajLN','rowOff','off','offMix','offMixN']){
+      const el=g.opts&&g.opts.querySelector('[data-o="'+k+'"]');
+      if(!el)throw new Error('view option "'+k+'" missing from #'+g.ui.opts);
+      g.o[k]=el;
+    }
     g.playing=false;g.gFrame=0;g.total=0;g.acc=0;g.lastT=0;g.loadMsg='loading…';
     g.started=false;g.loaded=false;g.lastCam=null;
     for(const p of g.panes){
@@ -370,27 +396,28 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     g.el.scrub.value=g.gFrame;g.el.lbl.textContent='frame '+g.gFrame+' / '+(g.total-1);
     gsend(g,{type:'seek',frame:g.gFrame});}
 
-  // View options are host-owned and broadcast to EVERY panel on the page, across both groups —
-  // comparing scenes under different render settings would be meaningless, so there is
-  // deliberately no per-panel and no per-group control.
-  const vEllip=_ctl('vEllip'),vEllipR=_ctl('vEllipR'),vTraj=_ctl('vTraj'),vTrajN=_ctl('vTrajN'),
-        vTrajL=_ctl('vTrajL'),vOff=_ctl('vOff'),vOffMix=_ctl('vOffMix');
-  const viewState=()=>({type:'view',
-    ellip:vEllip.checked, ellipR:+vEllipR.value/100,
-    traj:vTraj.checked,   trajCount:+vTrajN.value, trajTrail:+vTrajL.value,
-    offCol:vOff.checked,  offMix:+vOffMix.value/100});
-  function pushView(){
-    _ctl('vEllipRN').textContent=(+vEllipR.value/100).toFixed(2);
-    _ctl('vTrajNN').textContent=vTrajN.value;
-    _ctl('vTrajLN').textContent=vTrajL.value;
-    _ctl('vOffMixN').textContent=vOffMix.value;
-    _ctl('vrowEllip').classList.toggle('off',!vEllip.checked);
-    _ctl('vrowTraj').classList.toggle('off',!vTraj.checked);
-    _ctl('vrowOff').classList.toggle('off',!vOff.checked);
-    everyone(viewState());
+  // View options are host-owned and broadcast to every panel IN THEIR GROUP. Within a comparison
+  // they must agree — two scenes under different render settings would be meaningless — but the
+  // two comparisons are independent, so each carries its own panel next to the thing it affects.
+  // (Trail max differs for that reason: 150 frames for bouncingballs, 200 for americano.)
+  const viewState=g=>({type:'view',
+    ellip:g.o.ellip.checked, ellipR:+g.o.ellipR.value/100,
+    traj:g.o.traj.checked,   trajCount:+g.o.trajN.value, trajTrail:+g.o.trajL.value,
+    offCol:g.o.off.checked,  offMix:+g.o.offMix.value/100});
+  function pushView(g){
+    g.o.ellipRN.textContent=(+g.o.ellipR.value/100).toFixed(2);
+    g.o.trajNN.textContent=g.o.trajN.value;
+    g.o.trajLN.textContent=g.o.trajL.value;
+    g.o.offMixN.textContent=g.o.offMix.value;
+    g.o.rowEllip.classList.toggle('off',!g.o.ellip.checked);
+    g.o.rowTraj.classList.toggle('off',!g.o.traj.checked);
+    g.o.rowOff.classList.toggle('off',!g.o.off.checked);
+    gsend(g,viewState(g));
   }
-  [vEllip,vTraj,vOff].forEach(c=>c.onchange=pushView);
-  [vEllipR,vTrajN,vTrajL,vOffMix].forEach(s=>s.oninput=pushView);
+  for(const g of GROUPS){
+    [g.o.ellip,g.o.traj,g.o.off].forEach(c=>c.onchange=()=>pushView(g));
+    [g.o.ellipR,g.o.trajN,g.o.trajL,g.o.offMix].forEach(sl=>sl.oninput=()=>pushView(g));
+  }
 
   function stage(g,label,pct){g.loadMsg=label;gsend(g,{type:'stage',label,pct});status(g);}
   function status(g){
@@ -470,7 +497,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
                   gops:p.built.map(b=>({kf:b.kf,start:b.start,end:b.end,gop_id:b.gop_id}))}))return;
       p.sentKf=true;p.kfAt=Date.now();
       send(p,{type:'stage',label:p.g.loadMsg,pct:null});
-      send(p,viewState());              // a panel installing late must not sit at the option defaults
+      send(p,viewState(p.g));           // a panel installing late must not sit at the option defaults
       if(p.g.lastCam)send(p,p.g.lastCam);  // nor at the opening pose if its group has moved on
     }
     // Motion is CLONED, not transferred, and the host's copy is freed only when the panel ACKs it

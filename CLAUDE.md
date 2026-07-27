@@ -218,10 +218,17 @@ to the camera, which is what bouncingballs (already square, 800×800) still does
   ends or it is silently dropped. Panels re-post `hello` until answered, because a panel's
   module script can in principle run before the host attaches its listener.
 - **View options (hard ellipsoids / trajectories / colorize motion) live on the host and are
-  always broadcast to BOTH panels** via one `view` message carrying the whole option set —
-  comparing two scenes under different render settings would be meaningless, so there is
-  deliberately no per-panel control. `flush()` re-sends it with the keyframe so a panel that
-  installs late doesn't sit at the defaults. The panel's handler must invalidate *both*
+  broadcast to every panel IN THEIR GROUP** via one `view` message carrying the whole option set.
+  Within a comparison they must agree — two scenes under different render settings would be
+  meaningless — but the comparisons are independent, so **each group has its own panel** next to
+  the thing it affects. Trail max differs for that reason: 150 for bouncingballs, 200 for
+  americano. `flush()` re-sends `viewState(p.g)` with the keyframe so a panel that installs late
+  doesn't sit at the defaults.
+- **The options block is repeated per group, so its controls are addressed by `data-o`, not by
+  id** — ids must stay unique in a document. That puts them outside `verify.py`'s id check, so
+  `check_repeated_controls()` instead asserts every `.viewopts` block exposes the full key list
+  the host looks up. A missing control in one copy is otherwise invisible until someone clicks
+  that group's toggle. The panel's handler must invalidate *both*
   `trajKey` (caches the built trail) and `builtFrame` (caches the written splat colours); an
   option change that doesn't also bump the frame otherwise shows the previous state — the same
   cache trap `syncViewOptions()` documents on the SMV side.

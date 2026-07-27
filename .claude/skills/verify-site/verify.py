@@ -119,6 +119,29 @@ def check_dom_ids(page, src):
         print(f"  ok    dom ids ({len(refs)} referenced, all present)")
 
 
+def check_repeated_controls(page, src):
+    """Every .viewopts block must expose the data-o controls the host looks up.
+
+    That block is duplicated once per comparison, so its controls are addressed by data-o rather
+    than by id — ids have to stay unique in a document. A typo or a missing control in one copy is
+    therefore invisible to the id check above, and would only surface as a TypeError inside an
+    event handler once someone clicked that group's toggle.
+    """
+    keys = re.search(r"for\s*\(\s*const k of \[([^\]]+)\]", src)
+    blocks = re.findall(r'<div class="viewopts"[^>]*id="([^"]+)"(.*?)\n    </div>', src, re.S)
+    if not keys or not blocks:
+        return
+    want = set(re.findall(r"'([^']+)'", keys.group(1)))
+    bad = False
+    for bid, body in blocks:
+        missing = sorted(want - set(re.findall(r'data-o="([^"]+)"', body)))
+        if missing:
+            bad = True
+            fail(page, f'#{bid} is missing view controls: {", ".join(missing)}')
+    if not bad:
+        print(f"  ok    view controls ({len(blocks)} panels x {len(want)} each)")
+
+
 def check_page_chrome(page, src):
     """Every page must declare color-scheme, a theme-color, and paint html's background.
 
@@ -287,6 +310,7 @@ def main():
         check_nesting(page, src)
         check_css(page, src)
         check_dom_ids(page, src)
+        check_repeated_controls(page, src)
         check_page_chrome(page, src)
         check_assets(page, src)
 
