@@ -110,7 +110,7 @@ def check_dom_ids(page, src):
                 r"_gate\(\s*['\"]([^'\"]+)['\"]",
                 r"querySelector\(\s*['\"]#([\w-]+)['\"]",
                 # ids named in the SpDef host's GROUPS config rather than passed to _ctl() directly
-                r"(?:play|scrub|lbl|reset|status|frId)\s*:\s*['\"]([A-Za-z][\w-]*)['\"]"):
+                r"(?:load|play|scrub|lbl|reset|status|frId)\s*:\s*['\"]([A-Za-z][\w-]*)['\"]"):
         refs |= set(re.findall(pat, src))
     missing = sorted(refs - ids)
     if missing:
@@ -174,7 +174,7 @@ def local_refs(src):
     """
     src = re.sub(r"<!--.*?-->", "", src, flags=re.S)
     out = set()
-    for pat in (r'(?:src|href)="([^"]+)"',
+    for pat in (r'(?:src|href|data-src)="([^"]+)"',
                 r"url\(\s*['\"]?([^'\")]+)",
                 # `../` as well as `./` — the SpDef page imports the decode path from ../smv/
                 r"from\s+['\"](\.{1,2}/[^'\"]+)['\"]",

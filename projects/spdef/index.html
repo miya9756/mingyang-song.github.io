@@ -88,6 +88,16 @@
   .stagebox{position:relative;aspect-ratio:1/1;border:1px solid var(--line);border-radius:12px;
             overflow:hidden;background:#ffffff}
   .stagebox iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
+  /* Idle = this comparison has not been asked for yet, so its iframe has no src and no viewer,
+     WebGL context or decoder exists for it. The panel is a plain empty box until then. */
+  .stagebox.idle{background:repeating-linear-gradient(45deg,#fbfcfe,#fbfcfe 10px,#f5f7fa 10px,#f5f7fa 20px)}
+  .stagebox.idle iframe{display:none}
+  .idlemsg{display:none}
+  .stagebox.idle .idlemsg{display:block;position:absolute;inset:0;margin:0;
+    display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted)}
+  .tload{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .tload:hover:not(:disabled){background:#1a52a6;border-color:#1a52a6;color:#fff}
+  .tload:disabled{opacity:.55}
   .transport{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:14px 0 0;
              padding:10px 14px;border:1px solid var(--line);border-radius:11px;background:var(--surface)}
   .tbtn{font:inherit;font-size:12.5px;font-weight:600;padding:5px 13px;border:1px solid var(--line);
@@ -115,6 +125,7 @@
   .vslide output{font:12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-width:3.4em;text-align:right}
   .vrow.off .vslide{opacity:.42}
   .hint{margin:9px 0 0;font-size:12.5px;color:var(--muted)}
+  .hint em{font-style:normal;font-weight:600;color:var(--ink)}
   .citebox{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
   .citehd{display:flex;align-items:center;justify-content:space-between;gap:12px;
           padding:10px 14px;border-bottom:1px solid var(--line);font-size:11.5px;font-weight:600;
@@ -155,27 +166,30 @@
     <div class="ab">
       <figure class="pane">
         <figcaption><span class="ptitle">With regularization</span><span class="ptag">velocity-divergence + acceleration</span></figcaption>
-        <div class="stagebox">
+        <div class="stagebox idle">
           <iframe id="paneA" title="Interactive viewer: bouncingballs reconstructed with temporal regularization"
-                  src="viewer.html?scene=scenes/bouncingballs_reg/scene.json&amp;id=reg"></iframe>
+                  data-src="viewer.html?scene=scenes/bouncingballs_reg/scene.json&amp;id=reg"></iframe>
+          <p class="idlemsg">not loaded</p>
         </div>
       </figure>
       <figure class="pane">
         <figcaption><span class="ptitle">Without regularization</span><span class="ptag">both terms set to zero</span></figcaption>
-        <div class="stagebox">
+        <div class="stagebox idle">
           <iframe id="paneB" title="Interactive viewer: bouncingballs reconstructed without temporal regularization"
-                  src="viewer.html?scene=scenes/bouncingballs_noreg/scene.json&amp;id=noreg"></iframe>
+                  data-src="viewer.html?scene=scenes/bouncingballs_noreg/scene.json&amp;id=noreg"></iframe>
+          <p class="idlemsg">not loaded</p>
         </div>
       </figure>
     </div>
 
     <div class="transport">
+      <button id="abLoad" class="tbtn tload">Load this comparison · 2.5 MB</button>
       <button id="abPlay" class="tbtn" disabled>▶ play</button>
       <input id="abScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
       <span id="abFrame" class="tnum">—</span>
       <button id="abReset" class="tbtn">reset view</button>
     </div>
-    <p id="abStatus" class="hint">Loading…</p>
+    <p id="abStatus" class="hint">Not loaded.</p>
 
     <h3 class="abhd">Knot count as a regularizer</h3>
     <p class="lede">A casual hand-held capture (HyperNeRF <em>americano</em>) — the unreliable case, where the input barely constrains the motion. Cutting the number of spline knots removes degrees of freedom from the trajectory, which stabilizes the reconstruction much as the loss terms do, at the cost of some high-frequency detail. The third panel shows what the full knot count does with no regularizers at all.</p>
@@ -184,34 +198,38 @@
     <div class="ab ab3">
       <figure class="pane">
         <figcaption><span class="ptitle">33 knots</span><span class="ptag">regularized · fewest degrees of freedom</span></figcaption>
-        <div class="stagebox">
+        <div class="stagebox idle">
           <iframe id="paneC" title="Interactive viewer: americano reconstructed with 33 spline knots and temporal regularization"
-                  src="viewer.html?scene=scenes/americano_knots33/scene.json&amp;id=k33&amp;fit=square"></iframe>
+                  data-src="viewer.html?scene=scenes/americano_knots33/scene.json&amp;id=k33&amp;fit=square"></iframe>
+          <p class="idlemsg">not loaded</p>
         </div>
       </figure>
       <figure class="pane">
         <figcaption><span class="ptitle">Full knots</span><span class="ptag">regularized</span></figcaption>
-        <div class="stagebox">
+        <div class="stagebox idle">
           <iframe id="paneD" title="Interactive viewer: americano reconstructed with the full knot count and temporal regularization"
-                  src="viewer.html?scene=scenes/americano_full/scene.json&amp;id=kfull&amp;fit=square"></iframe>
+                  data-src="viewer.html?scene=scenes/americano_full/scene.json&amp;id=kfull&amp;fit=square"></iframe>
+          <p class="idlemsg">not loaded</p>
         </div>
       </figure>
       <figure class="pane">
         <figcaption><span class="ptitle">Full knots, no reg</span><span class="ptag">velocity-divergence terms off</span></figcaption>
-        <div class="stagebox">
+        <div class="stagebox idle">
           <iframe id="paneE" title="Interactive viewer: americano reconstructed with the full knot count and no temporal regularization"
-                  src="viewer.html?scene=scenes/americano_full_noreg/scene.json&amp;id=knoreg&amp;fit=square"></iframe>
+                  data-src="viewer.html?scene=scenes/americano_full_noreg/scene.json&amp;id=knoreg&amp;fit=square"></iframe>
+          <p class="idlemsg">not loaded</p>
         </div>
       </figure>
     </div>
 
     <div class="transport">
+      <button id="amLoad" class="tbtn tload">Load this comparison · 8.1 MB</button>
       <button id="amPlay" class="tbtn" disabled>▶ play</button>
       <input id="amScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
       <span id="amFrame" class="tnum">—</span>
       <button id="amReset" class="tbtn">reset view</button>
     </div>
-    <p id="amStatus" class="hint">Loading…</p>
+    <p id="amStatus" class="hint">Not loaded.</p>
 
     <div class="viewopts">
       <p class="vlead">Toggle the options below to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full path.</p>
@@ -229,7 +247,7 @@
         <label class="vslide" title="0 = original colour, 100 = pure motion-vector colour">Offset blend <input type="range" id="vOffMix" min="0" max="100" value="60"><output id="vOffMixN" for="vOffMix">60</output></label>
       </div>
     </div>
-    <p class="hint">Drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. View options apply to every panel on the page.</p>
+    <p class="hint">Nothing is downloaded until you press <em>Load</em> — each comparison fetches and decodes in your browser, and the two share a one-time ~31&nbsp;MB decoder. Once loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. View options apply to every loaded panel.</p>
   </section>
 
   <section>
@@ -266,20 +284,27 @@
 <script>
 // Boot watchdog. Deliberately a CLASSIC script: the host below is a module, and module loading is
 // all-or-nothing — one dropped fetch anywhere in its graph (../smv/decode*.js and everything under
-// vendor/) and the module never evaluates, boot() never runs, and BOTH panels sit at "waiting for
-// host…" for ever with nothing retrying and nothing said. That is the "neither canvas loaded"
-// failure, and it cannot be caught from inside the module that failed to load. localhost never
-// drops a request; a CDN occasionally does, which is why it only appears on the deployed site.
+// vendor/) and the module never evaluates. Nothing then wires the Load buttons, so every button on
+// the page is silently inert and no amount of clicking does anything. This cannot be caught from
+// inside the module that failed to load. localhost never drops a request; a CDN occasionally does,
+// which is why it only shows up on the deployed site.
 window.__spdefBooted = false;
 setTimeout(function () {
   if (window.__spdefBooted) return;
-  var el = document.getElementById('abStatus');
-  if (!el) return;
-  el.textContent = '✗ The viewer failed to start — a script did not load. ';
-  var b = document.createElement('button');
-  b.className = 'tbtn'; b.textContent = 'Retry';
-  b.onclick = function () { location.reload(); };
-  el.appendChild(b);
+  ['abStatus', 'amStatus'].forEach(function (id, i) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = '✗ The viewer failed to start — a script did not load. ';
+    if (i) return;                       // one Retry button is enough; it reloads the whole page
+    var b = document.createElement('button');
+    b.className = 'tbtn'; b.textContent = 'Retry';
+    b.onclick = function () { location.reload(); };
+    el.appendChild(b);
+  });
+  ['abLoad', 'amLoad'].forEach(function (id) {
+    var b = document.getElementById(id);
+    if (b) { b.disabled = true; b.textContent = 'unavailable'; }
+  });
 }, 9000);
 </script>
 <script type="module">
@@ -307,10 +332,10 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // and the view options — is shared. Linking the two clocks or the two cameras would be
   // meaningless: they are different scenes, different captures and different frame counts.
   const GROUPS=[
-    {key:'balls',ui:{play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',status:'abStatus'},
+    {key:'balls',ui:{load:'abLoad',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',status:'abStatus'},
      panes:[{id:'reg',    frId:'paneA',url:'scenes/bouncingballs_reg/scene.json',    name:'with reg'},
             {id:'noreg',  frId:'paneB',url:'scenes/bouncingballs_noreg/scene.json',  name:'without reg'}]},
-    {key:'amer',ui:{play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',status:'amStatus'},
+    {key:'amer',ui:{load:'amLoad',play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',status:'amStatus'},
      panes:[{id:'k33',    frId:'paneC',url:'scenes/americano_knots33/scene.json',    name:'33 knots'},
             {id:'kfull',  frId:'paneD',url:'scenes/americano_full/scene.json',       name:'full knots'},
             {id:'knoreg', frId:'paneE',url:'scenes/americano_full_noreg/scene.json', name:'full knots, no reg'}]}
@@ -318,14 +343,16 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   const _ctl=id=>document.getElementById(id);
   const byId=new Map(), ALL=[];
   for(const g of GROUPS){
-    g.el={play:_ctl(g.ui.play),scrub:_ctl(g.ui.scrub),lbl:_ctl(g.ui.lbl),reset:_ctl(g.ui.reset),status:_ctl(g.ui.status)};
-    g.playing=false;g.gFrame=0;g.total=0;g.acc=0;g.lastT=0;g.loadMsg='loading…';g.loaded=false;g.lastCam=null;
+    g.el={load:_ctl(g.ui.load),play:_ctl(g.ui.play),scrub:_ctl(g.ui.scrub),lbl:_ctl(g.ui.lbl),
+          reset:_ctl(g.ui.reset),status:_ctl(g.ui.status)};
+    g.playing=false;g.gFrame=0;g.total=0;g.acc=0;g.lastT=0;g.loadMsg='loading…';
+    g.started=false;g.loaded=false;g.lastCam=null;
     for(const p of g.panes){
       // `src` is captured from the markup so the watchdog can reload a frame without duplicating
       // the query string here; `tries` bounds those reloads.
-      p.g=g;p.fr=_ctl(p.frId);p.frames=0;p.buffered=0;p.splats=0;
-      p.alive=false;p.ready=false;p.sentKf=false;p.built=null;p.scene=null;
-      p.src=p.fr.getAttribute('src');p.tries=0;
+      p.g=g;p.fr=_ctl(p.frId);p.box=p.fr.parentElement;p.frames=0;p.buffered=0;p.splats=0;
+      p.alive=false;p.ready=false;p.sentKf=false;p.kfAt=0;p.kfRetries=0;p.built=null;p.scene=null;
+      p.src=p.fr.getAttribute('data-src');p.tries=0;p.t0=0;
       byId.set(p.id,p);ALL.push(p);
     }
   }
@@ -367,6 +394,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
 
   function stage(g,label,pct){g.loadMsg=label;gsend(g,{type:'stage',label,pct});status(g);}
   function status(g){
+    if(!g.started){g.el.status.textContent='Not loaded — press “Load” to fetch and decode this comparison in your browser.';return;}
     if(g.loaded&&g.panes.every(p=>p.ready)){const s=g.panes.reduce((a,p)=>Math.max(a,p.splats),0);
       g.el.status.textContent=g.total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.';
       return;}
@@ -376,28 +404,38 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     g.el.status.textContent=g.loadMsg+(late.length?'  ·  waiting for '+late.join(', ')+' to start…':'');
   }
 
-  // Watchdog. A panel that never says hello has failed to load — its document 404'd, or its script
-  // threw before it could announce itself. No message can recover that, because the protocol needs
-  // the panel alive to begin, so nothing retried and the frame stayed blank until the user hit
-  // refresh. Reload just that frame instead, cache-busted so a cached failure is not re-served.
-  // Only frames that never announced are reloaded, so by construction they have received nothing
-  // and the host still holds every motion buffer needed to serve them.
-  const T0=Date.now(),MAX_TRIES=2;
-  const watchdog=setInterval(function(){
-    if(ALL.every(p=>p.ready)){clearInterval(watchdog);return;}
+  // Watchdog. Two distinct stalls, both of which used to need a manual refresh:
+  //
+  //   1. A panel that never says hello — its document 404'd, or its script threw before it could
+  //      announce itself. No message can recover that, because the protocol needs the panel alive
+  //      to begin. Reload just that frame, cache-busted so a cached failure is not re-served.
+  //      Only frames that never announced are reloaded, so by construction they have received
+  //      nothing and the host still holds every motion buffer needed to serve them.
+  //   2. A panel that IS alive but never installed its keyframe. Re-send it rather than reload the
+  //      whole frame — cheaper, and it keeps the WebGL context and any motion already delivered.
+  //
+  // Timers run from the moment a group is STARTED, not from page load, since nothing loads until
+  // its Load button is pressed.
+  const MAX_TRIES=2;
+  setInterval(function(){
     for(const p of ALL){
-      if(p.alive||p.ready)continue;
-      if(Date.now()-T0<8000*(p.tries+1))continue;      // generous: a cold CDN fetch is not a failure
-      if(p.tries>=MAX_TRIES){
-        p.g.loadMsg='✗ the “'+p.name+'” panel could not be loaded — please refresh the page';status(p.g);
-        continue;}
-      p.tries++;
-      p.sentKf=false;                                   // the reloaded document knows nothing
-      if(p.built)p.built.forEach(b=>{if(!b.acked)b.sent=false;});
-      p.fr.src=p.src+'&r='+p.tries;
-      p.g.loadMsg='restarting the “'+p.name+'” panel (attempt '+p.tries+')…';status(p.g);
+      if(!p.g.started||p.ready)continue;
+      if(!p.alive){
+        if(Date.now()-p.t0<6000*(p.tries+1))continue;   // generous: a cold CDN fetch is not a failure
+        if(p.tries>=MAX_TRIES){
+          p.g.loadMsg='\u2717 the \u201c'+p.name+'\u201d panel could not be loaded \u2014 please reload the page';
+          status(p.g);continue;}
+        p.tries++;
+        p.sentKf=false;                                 // the reloaded document knows nothing
+        if(p.built)p.built.forEach(b=>{if(!b.acked)b.sent=false;});
+        p.t0=Date.now();
+        p.fr.src=p.src+'&r='+p.tries;
+        p.g.loadMsg='restarting the \u201c'+p.name+'\u201d panel (attempt '+p.tries+')\u2026';status(p.g);
+      }else if(p.sentKf&&p.kfAt&&Date.now()-p.kfAt>8000&&p.kfRetries<MAX_TRIES){
+        p.kfRetries++;p.sentKf=false;flush(p);           // alive but nothing installed — re-deliver
+      }
     }
-  },2000);
+  },1500);
 
   addEventListener('message',function(e){
     if(e.origin!==location.origin)return;const m=e.data;
@@ -430,7 +468,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     if(!p.sentKf){
       if(!send(p,{type:'keyframe',totalFrames:p.scene.num_frames,camera:p.scene.camera,
                   gops:p.built.map(b=>({kf:b.kf,start:b.start,end:b.end,gop_id:b.gop_id}))}))return;
-      p.sentKf=true;
+      p.sentKf=true;p.kfAt=Date.now();
       send(p,{type:'stage',label:p.g.loadMsg,pct:null});
       send(p,viewState());              // a panel installing late must not sit at the option defaults
       if(p.g.lastCam)send(p,p.g.lastCam);  // nor at the opening pose if its group has moved on
@@ -450,56 +488,88 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       stage(g,label,totalB?recv/totalB*100:null);}
     const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}return out;}
 
-  async function boot(){
-    // Phase 1 — every keyframe on the page, before any decoding. No decoder is involved, so all
-    // five panels are on screen and orbitable well before the ~32 MB core is even fetched.
-    for(const g of GROUPS) for(const p of g.panes){
+  // ---- on-demand loading --------------------------------------------------
+  // Nothing loads until its Load button is pressed. Five panels is ~11 MB of scenes, five WebGL
+  // contexts and a ~32 MB decoder — far too much to spend on a visitor who came for the paper
+  // link. Until started, a group's iframes have no src at all, so no viewer, no GL context and no
+  // decoder exists for it.
+  //
+  // Groups run ONE AT A TIME through this queue. Two quick clicks would otherwise put two decode
+  // chains on one wasm heap and race disposeFFmpeg() against a live decode.
+  const queue=[];let pumping=false;
+
+  function startGroup(g){
+    if(g.started)return;
+    g.started=true;
+    g.el.load.disabled=true;g.el.load.textContent='loading\u2026';
+    for(const p of g.panes){p.t0=Date.now();p.box.classList.remove('idle');p.fr.src=p.src;}
+    stage(g,'starting\u2026',2);
+    queue.push(g);pump();
+  }
+
+  async function pump(){
+    if(pumping)return;pumping=true;
+    try{
+      for(;;){
+        if(queue.length){
+          const g=queue.shift();
+          try{await loadGroup(g);}
+          catch(e){console.error(e);g.loadMsg='\u2717 '+(e.message||e);status(g);
+                   gsend(g,{type:'error',msg:String(e.message||e)});}
+          continue;
+        }
+        // Queue drained: hand the ~32 MB core back. A click landing during the await is picked up
+        // by the re-check below, and ffmpegReady() simply re-acquires from a warm cache.
+        await disposeFFmpeg();
+        if(!queue.length)break;
+      }
+    }finally{pumping=false;}
+  }
+
+  async function loadGroup(g){
+    // Keyframes first for every panel in the group — no decoder involved, so they are on screen
+    // and orbitable before the core is fetched.
+    for(const p of g.panes){
       const base=p.url.replace(/[^/]*$/,'');
       p.scene=await (await fetch(p.url)).json();
       let shared=null;
       if(p.scene.has_shared_statics&&p.scene.shared_statics_path)
-        shared=decodeShared(parseNpz(await grab(g,base+p.scene.shared_statics_path,'shared statics…')));
+        shared=decodeShared(parseNpz(await grab(g,base+p.scene.shared_statics_path,'shared statics\u2026')));
       p.built=[];
       for(const sg of p.scene.gops)
-        p.built.push({kf:buildKeyframe(parseNpz(await grab(g,base+sg.reference_path,p.name+' — keyframe…')),shared,sg.num_shared_statics||0),
+        p.built.push({kf:buildKeyframe(parseNpz(await grab(g,base+sg.reference_path,p.name+' \u2014 keyframe\u2026')),shared,sg.num_shared_statics||0),
                       start:sg.start_frame,end:sg.end_frame,gop_id:sg.gop_id,motion:null,F:0,sent:false,acked:false});
       flush(p);   // keyframes go out now; they are cloned, not transferred, so decode below still has them
     }
-    // Phase 2 — ONE decoder for every GOP on the page. Groups run in document order so the top
-    // comparison becomes playable first; within a group the loop is interleaved by GOP index, since
-    // playback is held at min(decodedEnd) across that group's panels and draining one scene first
-    // would pin its timeline at 0. (Interleaving is a no-op on the single-GOP scenes shipped today;
-    // it is the shape that stays correct if a multi-GOP packing is dropped back in.)
-    GROUPS.forEach((g,i)=>stage(g,i?'queued — decoding the comparison above first…':'loading decoder (ffmpeg.wasm, ~31 MB, one-time)…',6));
+    // Then motion, interleaved by GOP index across this group's panels: playback is held at
+    // min(decodedEnd) over the group, so draining one scene first would pin its timeline at 0.
+    // (A no-op on the single-GOP scenes shipped today; it is the shape that stays correct if a
+    // multi-GOP packing is dropped back in.)
+    stage(g,'loading decoder (ffmpeg.wasm, ~31 MB, one-time)\u2026',6);
     let ff=await ffmpegReady(()=>{});
-    const totalG=ALL.reduce((n,p)=>n+p.scene.gops.length,0);
+    const maxG=g.panes.reduce((n,p)=>Math.max(n,p.scene.gops.length),0);
+    const totalG=g.panes.reduce((n,p)=>n+p.scene.gops.length,0);
     let nDone=0;
-    for(const g of GROUPS){
-      const maxG=g.panes.reduce((n,p)=>Math.max(n,p.scene.gops.length),0);
-      for(let gi=0;gi<maxG;gi++) for(const p of g.panes){
-        if(gi>=p.scene.gops.length)continue;
-        const base=p.url.replace(/[^/]*$/,''),sg=p.scene.gops[gi],ng=p.scene.gops.length;
-        const tag=ng>1?`${p.name} — GOP ${gi+1}/${ng}`:p.name;
-        const streams={xyz:{bytes:await grab(g,base+sg.streams.xyz.path,tag+' — motion xyz…'),meta:sg.streams.xyz.meta},
-                       rot:{bytes:await grab(g,base+sg.streams.rot.path,tag+' — motion rot…'),meta:sg.streams.rot.meta}};
-        stage(g,'decoding '+tag+'…',Math.round(10+80*nDone/totalG));
-        const r=await decodeMotionGopBundle(ff,streams,p.built[gi].kf);
-        // kf is kept, not freed: dropping it here would race a panel that says hello late and
-        // still needs its keyframe sent.
-        p.built[gi].motion=r.motion;p.built[gi].F=r.F;
-        flush(p);
-        // Recycle the primary's wasm heap every 4 decodes, as the SMV loader does — this page now
-        // runs five sequential decodes on one instance.
-        if(++nDone%4===0&&nDone<totalG)ff=await recreateFFmpeg(()=>{});
-        await new Promise(res=>requestAnimationFrame(res));
-      }
-      g.loaded=true;status(g);
+    for(let gi=0;gi<maxG;gi++) for(const p of g.panes){
+      if(gi>=p.scene.gops.length)continue;
+      const base=p.url.replace(/[^/]*$/,''),sg=p.scene.gops[gi],ng=p.scene.gops.length;
+      const tag=ng>1?p.name+' \u2014 GOP '+(gi+1)+'/'+ng:p.name;
+      const streams={xyz:{bytes:await grab(g,base+sg.streams.xyz.path,tag+' \u2014 motion xyz\u2026'),meta:sg.streams.xyz.meta},
+                     rot:{bytes:await grab(g,base+sg.streams.rot.path,tag+' \u2014 motion rot\u2026'),meta:sg.streams.rot.meta}};
+      stage(g,'decoding '+tag+'\u2026',Math.round(10+80*nDone/totalG));
+      const r=await decodeMotionGopBundle(ff,streams,p.built[gi].kf);
+      // kf is kept, not freed: dropping it here would race a panel that says hello late and
+      // still needs its keyframe sent.
+      p.built[gi].motion=r.motion;p.built[gi].F=r.F;
+      flush(p);
+      // Recycle the primary's wasm heap every 4 decodes, as the SMV loader does.
+      if(++nDone%4===0&&nDone<totalG)ff=await recreateFFmpeg(()=>{});
+      await new Promise(res=>requestAnimationFrame(res));
     }
-    await disposeFFmpeg();      // nothing downstream needs wasm again
+    g.loaded=true;g.el.load.style.display='none';status(g);
   }
-  boot().catch(e=>{console.error(e);
-    GROUPS.forEach(g=>{g.loadMsg='✗ '+(e.message||e);status(g);});
-    everyone({type:'error',msg:String(e.message||e)});});
+
+  for(const g of GROUPS){g.el.load.onclick=()=>startGroup(g);status(g);}
 
   for(const g of GROUPS){
     g.el.play.onclick=()=>{g.playing=!g.playing;g.el.play.textContent=g.playing?'❚❚ pause':'▶ play';g.lastT=0;g.acc=0;};

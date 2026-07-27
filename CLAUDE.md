@@ -145,6 +145,15 @@ bouncingballs the 4-GOP packing (`bundle_4_packed`) was tried and rolled back �
 worse, since a GOP boundary is a hard cut between two independently-keyframed point clouds when
 overlap is 0. The loader stays multi-GOP-capable either way.
 
+**Nothing loads until its Load button is pressed.** Five panels is ~11 MB of scenes, five WebGL
+contexts and a ~32 MB decoder — too much to spend on a visitor who came for the paper link. Until
+a group is started its iframes carry the viewer URL in **`data-src`, not `src`**, so no viewer,
+GL context or decoder exists for it. `startGroup()` assigns `src` and enqueues; groups run **one
+at a time** through `pump()`, because two quick clicks would otherwise put two decode chains on
+one wasm heap and race `disposeFFmpeg()` against a live decode. The decoder is released when the
+queue drains and re-acquired (warm cache) if another group is loaded later. `verify.py` reads
+`data-src` for asset checking; without that it stopped seeing `viewer.html` entirely.
+
 **Groups are the unit of synchronisation.** Clock and camera are per group — the two comparisons
 are different scenes with different frame counts, so linking them would be meaningless. The
 decoder and the view options are shared across the whole page. Adding a third comparison means
@@ -194,8 +203,13 @@ to the camera, which is what bouncingballs (already square, 800×800) still does
     A **classic** `<script>` before the module arms a timer that the module clears via
     `window.__spdefBooted`; it cannot be done from inside the module that failed. Keep it
     classic, and keep the flag assignment at the very top of the module.
+  - *A panel that is alive but never installed its keyframe* gets the keyframe re-sent rather
+    than the whole frame reloaded — cheaper, and it keeps the GL context and any motion already
+    delivered.
   - `status()` names a panel that has not come up. Silence is what made these look like a
     rendering bug rather than a frame that never loaded.
+  - Watchdog timers run from the moment a group is **started**, not from page load — with
+    on-demand loading those are no longer the same instant.
 - **The decode loop is interleaved by GOP index, not scene by scene**, and recycles the ffmpeg
   primary every 4 decodes (`recreateFFmpeg`) as the SMV loader does. Both are inert on the
   single-GOP scenes shipped today — they are there so a multi-GOP packing can be dropped back
