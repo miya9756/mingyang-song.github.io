@@ -23,6 +23,7 @@ static-only is fine for a quick loop while iterating.
 | **Tag nesting** | Converting the built-with card from `<div>` to `<p>` left the old `</div>` behind. Reports which open tag a bad close actually hit, with both line numbers. |
 | **CSS braces** | A dropped `}` in the single inline `<style>` block silently kills every rule after it. |
 | **JS → DOM ids** | Removing the *Native camera res* control left `getElementById('nativeResChk')` behind. That **throws on load and blanks the viewer** — the worst failure mode in this repo, and invisible until you open a browser. Covers `getElementById`, `_ctl`, `_gate`, `querySelector('#…')`. |
+| **Page chrome** | The landing page read warm in Chrome and pure white in Safari. The page CSS was identical — what differed was everything *around* it. Requires `color-scheme`, a `<meta name="theme-color">`, and a `background` on an `html` rule; warns when a theme-color hex appears nowhere in the CSS (drifted from `--bg`). See the *Page chrome* section of [site-design](../site-design/SKILL.md). |
 | **Asset existence** | `assets/*.png` added but never committed → card renders empty in production. Resolves refs relative to the referencing file. |
 | **Root-absolute paths** | This repo deploys as a **project site** (`…github.io/mingyang-song.github.io/`), so `src="/assets/x.png"` 404s in production while working locally. Always use relative paths. |
 

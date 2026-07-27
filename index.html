@@ -7,16 +7,32 @@
 <link rel="icon" type="image/png" sizes="64x64" href="assets/web_icon.png">
 <link rel="apple-touch-icon" href="assets/web_icon.png">
 <meta name="description" content="Mingyang Song — researcher, Disney Research Studios &amp; ETH Zürich. Dynamic scene compression, neural rendering.">
+<!-- Must track --bg below. Safari 15+ tints its tab bar / the iOS toolbars from this; with no
+     theme-color it falls back to white, which visually swamps an off-white page. -->
+<meta name="theme-color" media="(prefers-color-scheme:light)" content="#f4f2ec">
+<meta name="theme-color" media="(prefers-color-scheme:dark)" content="#0e1014">
 <style>
-  :root{--bg:#0e1014;--fg:#e8e6e3;--dim:#9aa0a6;--accent:#7cc4ff;--line:#22262e;
+  /* color-scheme is not decoration: without it the UA paints the canvas, scrollbars, form
+     controls and Safari's overscroll/rubber-band area white regardless of --bg. Chrome guesses
+     from the body background, Safari does not — that divergence is why this page read warm in
+     one and pure white in the other. Declare it on every page of this site. */
+  :root{color-scheme:light dark;
+        --bg:#0e1014;--surface:#161a20;--fg:#e8e6e3;--dim:#9aa0a6;--accent:#7cc4ff;--line:#22262e;
         --accent-ring:rgba(124,196,255,.5);--shadow:rgba(0,0,0,.55);
         --grad-wash:linear-gradient(90deg,rgba(110,137,224,.16) 0%,rgba(224,163,76,.16) 100%)}
-  @media(prefers-color-scheme:light){:root{--bg:#fbfaf8;--fg:#16181d;--dim:#5f6672;--accent:#0b6bcb;--line:#e3e1dd;
+  /* Light --bg is the same warm paper as the viewer (#f4f2ec) so landing → project is seamless.
+     It used to be #fbfaf8 — only 3/255 off white, which is inside the noise floor of sRGB→display
+     profile conversion on a wide-gamut screen, so the warmth survived in one browser and not the
+     other. Keep any future off-white far enough from #fff to be a colour, not a rounding error. */
+  @media(prefers-color-scheme:light){:root{--bg:#f4f2ec;--surface:#fdfbf6;--fg:#16181d;--dim:#5f6672;--accent:#0b6bcb;--line:#e6e2d8;
         --accent-ring:rgba(11,107,203,.35);--shadow:rgba(16,24,40,.16);
         --grad-wash:linear-gradient(90deg,rgba(110,137,224,.11) 0%,rgba(224,163,76,.11) 100%)}}
   /* the active-card accent: periwinkle → amber, same in both themes */
   :root{--grad:linear-gradient(90deg,rgba(110,137,224,1) 0%,rgba(224,163,76,1) 100%)}
   *{box-sizing:border-box}
+  /* on <html> as well as <body>: body's background propagates to the canvas, but only html's
+     paints the overscroll area Safari rubber-bands into. */
+  html{background:var(--bg)}
   body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
   .wrap{max-width:760px;margin:0 auto;padding:12vh 24px 12vh}
   h1{font-size:clamp(2rem,6vw,3rem);line-height:1.1;margin:0 0 .3em;letter-spacing:-.02em}
@@ -41,17 +57,25 @@
   h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);font-weight:600;margin:3em 0 1em;padding-bottom:.6em;border-bottom:1px solid var(--line)}
   a{color:var(--accent);text-decoration:none}
   a:hover{text-decoration:underline}
-  /* The card is the whole click target, so it has to look like one: it lifts off the page on
-     hover and carries a named action rather than relying on the border alone. */
+  /* The card is the whole click target, so it has to look like one. It was `background:transparent`
+     with a 1px border, which on the warm paper --bg read as a hairline box rather than an object —
+     the card only became a *thing* once you hovered it. So it now sits on its own --surface with a
+     close-contact shadow: raised at rest, further raised on hover. The two states differ in degree
+     rather than in kind, which is what makes the resting state look intentional. --surface is a
+     token, not a hardcoded white, because it has to be *lighter* than --bg in light mode and
+     *lighter* than the near-black --bg in dark mode — opposite directions, same relationship. */
   .card{display:block;position:relative;border:1px solid var(--line);border-radius:12px;padding:20px 22px;color:inherit;
-        background:transparent;cursor:pointer;transition:border-color .18s,transform .18s,box-shadow .18s,background-color .18s}
+        background:var(--surface);box-shadow:0 1px 2px -1px var(--shadow),0 5px 14px -12px var(--shadow);
+        cursor:pointer;transition:border-color .18s,transform .18s,box-shadow .18s,background-color .18s}
   /* Active card. border-color can't take a gradient, so the border IS the gradient: paint --grad
-     clipped to border-box, then cover the interior with an opaque --bg layer clipped to padding-box,
-     with a faint gradient wash on top. Unlike border-image this respects border-radius. */
+     clipped to border-box, then cover the interior with an opaque --surface layer clipped to
+     padding-box, with a faint gradient wash on top. Unlike border-image this respects border-radius.
+     The interior must be --surface, not --bg: anything else makes the card change colour under the
+     cursor instead of just lifting. */
   .card:hover,.card:focus-visible{border-color:transparent;transform:translateY(-3px);
               box-shadow:0 12px 30px -14px var(--shadow);text-decoration:none;
               background:var(--grad-wash) padding-box,
-                         linear-gradient(var(--bg),var(--bg)) padding-box,
+                         linear-gradient(var(--surface),var(--surface)) padding-box,
                          var(--grad) border-box}
   /* the title takes the same gradient, clipped to the glyphs */
   .card:hover h3,.card:focus-visible h3{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
@@ -98,8 +122,10 @@
      nothing to click, so it must not be focusable, must not claim cursor:pointer, and must not run
      the hover/active treatment — every one of those would promise a destination that isn't there.
      A <div> can still be hovered, so the base .card:hover rules are explicitly neutralised below.
-     Dashed border is the "empty slot" signal. Promote to <a class="card feat"> when it has a URL. */
-  .card.slot{border-style:dashed;cursor:default;min-height:132px;
+     Dashed border is the "empty slot" signal. Promote to <a class="card feat"> when it has a URL.
+     It also opts out of --surface and the resting shadow: an empty slot is a hole in the page, not
+     an object sitting on it, so it stays flush with --bg while the real cards stand off it. */
+  .card.slot{border-style:dashed;cursor:default;min-height:132px;background:transparent;box-shadow:none;
              display:flex;flex-direction:column;justify-content:center}
   .card.slot h3{color:var(--dim)}
   .card.slot:hover{border-color:var(--line);border-style:dashed;transform:none;

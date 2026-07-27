@@ -154,6 +154,11 @@ Never hand-edit `scenes.json`.
 
 ## Conventions & cautions
 
+- **Every page declares `color-scheme`, a `<meta name="theme-color">` tracking its `--bg`, and
+  a `background` on its `html` rule** — without them the page is tinted but the browser chrome
+  around it is not, and Chrome and Safari disagree about the gap. Enforced by `verify.py`;
+  rationale in the *Page chrome* section of `.claude/skills/site-design/SKILL.md`. Applies to
+  any new project page too.
 - The viewer is intentionally **one big `index.html`** with dense, single-line helpers
   (quaternion/vector math, half-float packing, GLSL as template strings). Match that
   terse style; don't reformat wholesale.

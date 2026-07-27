@@ -8,16 +8,23 @@
 <link rel="apple-touch-icon" href="../../assets/web_icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="theme-color" content="#f4f2ec"><!-- must track --bg; Safari tints its chrome from this -->
+
 <!-- non-blocking: never delay first paint or compete with the scene download -->
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
 <style>
   :root{
+    /* fixed light palette, so pin color-scheme rather than leaving it `normal` — otherwise the
+       UA canvas, scrollbars, form controls and Safari's overscroll area stay white on a warm page.
+       Keep the theme-color meta above in sync with --bg. */
+    color-scheme:light;
     --bg:#f4f2ec; --surface:#ffffff; --ink:#211d17; --muted:#7c746a;
     --line:#e8e3d9; --accent:#5a3ec8; --accent-2:#9a86f2; --ok:#1c9b6b; --err:#c0392b; --view:#0c0c0f;
   }
   *{box-sizing:border-box}
-  html{height:100%}
+  /* background on html too — only html's paints the overscroll area Safari rubber-bands into */
+  html{height:100%;background:var(--bg)}
   body{margin:0;min-height:100%;color:var(--ink);
     background:var(--bg);
     font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
