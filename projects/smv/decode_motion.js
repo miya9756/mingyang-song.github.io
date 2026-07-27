@@ -14,12 +14,16 @@ import { FFmpeg } from './vendor/ffmpeg/index.js';
 import { toBlobURL } from './vendor/util/index.js';
 
 let _ff = null, _loading = null, _coreURLs = null;
+// Resolve the vendored core against THIS MODULE's url, not the document's. toBlobURL fetches,
+// and fetch() resolves a relative string against the importing *page* — so the old './vendor/core'
+// worked only for a page sitting in this folder and 404'd for any other consumer (the SpDef page
+// imports this module from ../smv/). Matches how dqWorker() already resolves dequant_worker.js.
 async function coreURLs() {
   if (_coreURLs) return _coreURLs;
-  const base = './vendor/core';
+  const V = import.meta.url;
   _coreURLs = {
-    coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+    coreURL: await toBlobURL(new URL('./vendor/core/ffmpeg-core.js', V).href, 'text/javascript'),
+    wasmURL: await toBlobURL(new URL('./vendor/core/ffmpeg-core.wasm', V).href, 'application/wasm'),
   };
   return _coreURLs;
 }
@@ -107,6 +111,26 @@ async function poolDecode(primary, srcs) {
     }
   }));
   return out;
+}
+
+// Hand the decoder's memory back. Motion decode is one-shot preprocessing — once a GOP's offsets
+// are dequantised into the motion array, nothing downstream touches wasm again — so a consumer
+// that decodes a fixed set of scenes up front (the SpDef side-by-side) can free the primary, the
+// helper pool, the dequant worker and the blob URLs still holding a copy of the ~32 MB core.
+// The SMV viewer deliberately does NOT call this: it re-decodes on scene switch.
+// A later ffmpegReady() just re-fetches (warm HTTP/SW cache) and works normally.
+export async function disposeFFmpeg() {
+  const kill = (f) => { try { f.terminate(); } catch (e) {} };
+  if (_ff) kill(_ff);
+  _ff = null; _loading = null;
+  try { await _helpersInit; } catch (e) {}          // don't leak a helper still mid-spawn
+  for (const h of _helpers) kill(h.ff);
+  _helpers.length = 0; _helpersInit = null;
+  if (_dq) { kill(_dq); _dq = null; _dqJobs = null; }
+  if (_coreURLs) {
+    for (const u of Object.values(_coreURLs)) { try { URL.revokeObjectURL(u); } catch (e) {} }
+    _coreURLs = null;
+  }
 }
 
 // ── dequant worker ───────────────────────────────────────────────────────────

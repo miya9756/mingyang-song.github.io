@@ -9,6 +9,8 @@
 <meta name="description" content="Spline Deformation Field — SIGGRAPH Conference Papers '25. A spline-based trajectory representation for reconstructing dynamic scenes, where the number of knots explicitly sets the degrees of freedom.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="theme-color" content="#eef1f5"><!-- must track --bg; Safari tints its chrome from this -->
+
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
 <style>
@@ -18,11 +20,16 @@
      lifted from this paper's own teaser (its blue and green), so the figure sits native on the page
      rather than imported onto it. */
   :root{
+    /* fixed light palette, so pin color-scheme rather than leaving it `normal` — otherwise the
+       UA canvas, scrollbars, form controls and Safari's overscroll area stay white while the page
+       is tinted. Keep the theme-color meta above in sync with --bg. */
+    color-scheme:light;
     --bg:#eef1f5; --surface:#ffffff; --ink:#14181d; --muted:#5f6a78; --line:#dde3ea;
     --accent:#1f5fbf; --accent-2:#2e8b57; --shadow:rgba(20,30,45,.13);
   }
   *{box-sizing:border-box}
-  html{-webkit-text-size-adjust:100%}
+  /* background on html too — only html's paints the overscroll area Safari rubber-bands into */
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
   body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
        font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
        -webkit-font-smoothing:antialiased}
@@ -57,12 +64,50 @@
   main{padding:30px 0 20px}
   h2{font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;margin:0 0 14px;color:var(--ink)}
   section{margin:0 0 40px}
-  /* Placeholder for the interactive demo. Same dashed "empty slot" idiom the landing page uses for
-     a project with no page yet, so an unfinished thing looks unfinished on purpose. */
-  .slot{border:1px dashed var(--line);border-radius:12px;padding:30px 24px;text-align:center;
-        background:rgba(255,255,255,.45)}
-  .slot .slothd{font-family:'Fraunces',Georgia,serif;font-size:18px;font-weight:600;color:var(--ink);opacity:.75}
-  .slot p{margin:8px auto 0;max-width:560px;font-size:13.5px;color:var(--muted)}
+  .lede{margin:0 0 16px;font-size:14.5px;color:var(--muted);max-width:78ch}
+
+  /* Side-by-side playground. Each pane is an <iframe> of viewer.html, one scene each — the
+     renderer keeps its scene in module-level state, so a document per pane buys two independent
+     WebGL contexts and decoders for free. The host page owns the transport and the camera link;
+     see the script at the foot of this file for the message protocol.
+     aspect-ratio 1/1 matches the D-NeRF test camera (800x800), so the pane is the right shape
+     before the viewer loads and the page never jumps. */
+  .ab{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.ab{grid-template-columns:1fr}}
+  .pane{margin:0}
+  .pane figcaption{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 9px;margin:0 0 7px}
+  .ptitle{font-family:'Fraunces',Georgia,serif;font-size:15.5px;font-weight:600;color:var(--ink)}
+  .ptag{font-size:11.5px;color:var(--muted)}
+  .stagebox{position:relative;aspect-ratio:1/1;border:1px solid var(--line);border-radius:12px;
+            overflow:hidden;background:#f7f9fc}
+  .stagebox iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
+  .transport{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:14px 0 0;
+             padding:10px 14px;border:1px solid var(--line);border-radius:11px;background:var(--surface)}
+  .tbtn{font:inherit;font-size:12.5px;font-weight:600;padding:5px 13px;border:1px solid var(--line);
+        border-radius:8px;background:var(--bg);color:var(--ink);cursor:pointer;
+        transition:color .16s,border-color .16s}
+  .tbtn:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
+  .tbtn:disabled{opacity:.45;cursor:default}
+  #abScrub{flex:1 1 170px;min-width:110px;accent-color:var(--accent)}
+  .tnum{font:12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--muted);white-space:nowrap}
+  .tchk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
+  .tchk input{accent-color:var(--accent)}
+  /* View options. One row per feature: the toggle owns the row, its sliders sit to the right and
+     dim when it is off, so the dependency is visible without disabling (and greying out) them. */
+  .viewopts{margin:10px 0 0;padding:10px 14px;border:1px solid var(--line);border-radius:11px;background:var(--surface)}
+  /* Call to action for the panel below it. Sits inside the box, and carries the same bottom rule
+     the rows use to separate themselves, so it reads as this panel's caption rather than as a
+     stray paragraph between the transport and the controls. */
+  .vlead{margin:0 0 9px;padding:0 0 9px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  .vlead em{font-style:normal;font-weight:600;color:var(--ink)}
+  .vrow{display:flex;flex-wrap:wrap;align-items:center;gap:7px 16px}
+  .vrow+.vrow{margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
+  .vrow .tchk{min-width:9.5em;color:var(--ink);font-weight:500}
+  .vslide{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+  .vslide input[type=range]{width:104px;accent-color:var(--accent)}
+  .vslide output{font:12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-width:3.4em;text-align:right}
+  .vrow.off .vslide{opacity:.42}
+  .hint{margin:9px 0 0;font-size:12.5px;color:var(--muted)}
   .citebox{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
   .citehd{display:flex;align-items:center;justify-content:space-between;gap:12px;
           padding:10px 14px;border-bottom:1px solid var(--line);font-size:11.5px;font-weight:600;
@@ -77,7 +122,7 @@
   footer{border-top:1px solid var(--line);margin-top:20px;padding:26px 0 48px;color:var(--muted);font-size:13px}
 
   @media(prefers-reduced-motion:reduce){
-    .back,.back .barrow,.byline .authors a{transition:none}
+    .back,.back .barrow,.byline .authors a,.tbtn{transition:none}
     .back:hover .barrow{transform:none}
   }
 </style>
@@ -98,10 +143,49 @@
 <main class="inner">
   <section>
     <h2>Playground</h2>
-    <div class="slot">
-      <div class="slothd">In preparation</div>
-      <p>An interactive playground for exploring the spline trajectories in the browser is on the way. In the meantime, the paper linked below covers the method in full.</p>
+    <p class="lede">Two reconstructions of the same D-NeRF <em>bouncingballs</em> sequence, trained identically apart from the temporal regularizers on the spline deformation field. Both panels share one camera and one clock, so any difference on screen is a difference between the models.</p>
+
+    <div class="ab">
+      <figure class="pane">
+        <figcaption><span class="ptitle">With regularization</span><span class="ptag">velocity-divergence + acceleration</span></figcaption>
+        <div class="stagebox">
+          <iframe id="paneA" title="Interactive viewer: bouncingballs reconstructed with temporal regularization"
+                  src="viewer.html?scene=scenes/bouncingballs_reg/scene.json&amp;id=reg"></iframe>
+        </div>
+      </figure>
+      <figure class="pane">
+        <figcaption><span class="ptitle">Without regularization</span><span class="ptag">both terms set to zero</span></figcaption>
+        <div class="stagebox">
+          <iframe id="paneB" title="Interactive viewer: bouncingballs reconstructed without temporal regularization"
+                  src="viewer.html?scene=scenes/bouncingballs_noreg/scene.json&amp;id=noreg"></iframe>
+        </div>
+      </figure>
     </div>
+
+    <div class="transport">
+      <button id="abPlay" class="tbtn" disabled>▶ play</button>
+      <input id="abScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
+      <span id="abFrame" class="tnum">—</span>
+      <button id="abReset" class="tbtn">reset view</button>
+    </div>
+    <div class="viewopts">
+      <p class="vlead">Toggle the options below to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 150-frame path.</p>
+      <div class="vrow off" id="vrowEllip">
+        <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the underlying point-based representation is visible"><input type="checkbox" id="vEllip"> Hard ellipsoids</label>
+        <label class="vslide" title="Ellipsoid radius in standard deviations — shrink to separate individual points">Radius <input type="range" id="vEllipR" min="20" max="200" value="100"><output id="vEllipRN" for="vEllipR">1.00</output></label>
+      </div>
+      <div class="vrow off" id="vrowTraj">
+        <label class="tchk" title="Overlay motion trails on a sample of dynamic gaussians (blue = oldest → red = newest)"><input type="checkbox" id="vTraj"> Trajectories</label>
+        <label class="vslide" title="How many gaussians to trail">Count <input type="range" id="vTrajN" min="100" max="5000" step="100" value="1500"><output id="vTrajNN" for="vTrajN">1500</output></label>
+        <label class="vslide" title="Trail length in frames; 150 is the whole sequence">Trail <input type="range" id="vTrajL" min="2" max="150" value="24"><output id="vTrajLN" for="vTrajL">24</output></label>
+      </div>
+      <div class="vrow off" id="vrowOff">
+        <label class="tchk" title="Tint each dynamic gaussian by its per-frame motion offset and blend that with the gaussian's real colour"><input type="checkbox" id="vOff"> Colorize motion</label>
+        <label class="vslide" title="0 = original colour, 100 = pure motion-vector colour">Offset blend <input type="range" id="vOffMix" min="0" max="100" value="60"><output id="vOffMixN" for="vOffMix">60</output></label>
+      </div>
+    </div>
+    <p id="abStatus" class="hint">Loading…</p>
+    <p class="hint">Drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. View options apply to both panels.</p>
   </section>
 
   <section>
@@ -135,7 +219,181 @@
   <div class="inner">&copy; 2026 Mingyang Song</div>
 </footer>
 
-<script>
+<script type="module">
+// ===== side-by-side host =====
+// The panels are pure renderers; ALL loading and decoding happens here, once, for both scenes.
+//
+// Why here and not per panel: motion decode is one-shot preprocessing. Once a GOP's offsets are
+// dequantised into the motion array, nothing downstream touches wasm again — the panels are pure
+// WebGL from that point on. Decoding in the panels meant two module graphs each instantiating a
+// primary + pool helper: four ffmpeg.wasm instances, four workers, four copies of the ~32 MB core
+// compiled, none of them ever freed. Here it is one instance set, reused across both scenes and
+// disposed when the last GOP lands.
+//
+// Protocol, both directions, is {ch:'spdef', ...}: panel->host carries `id`, host->panel carries
+// `to`. Anything else on the page posting messages is ignored by both ends.
+import { parseNpz, decodeShared, buildKeyframe } from '../smv/decode.js';
+import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle, disposeFFmpeg } from '../smv/decode_motion.js';
+
+(function(){
+  const PANES=[{id:'reg',  fr:document.getElementById('paneA'),url:'scenes/bouncingballs_reg/scene.json'},
+               {id:'noreg',fr:document.getElementById('paneB'),url:'scenes/bouncingballs_noreg/scene.json'}];
+  const byId=new Map(PANES.map(p=>[p.id,p]));
+  PANES.forEach(p=>{p.frames=0;p.buffered=0;p.splats=0;p.alive=false;p.built=null;p.scene=null;});
+  const playBtn=document.getElementById('abPlay'),scrub=document.getElementById('abScrub'),
+        frameLbl=document.getElementById('abFrame'),
+        resetBtn=document.getElementById('abReset'),statusEl=document.getElementById('abStatus');
+  const FPS=30;
+  let playing=false,gFrame=0,total=0,acc=0,lastT=0,loadMsg='loading…',loaded=false;
+
+  const send=(p,m,tr)=>{try{p.fr.contentWindow.postMessage(Object.assign({ch:'spdef',to:p.id},m),location.origin,tr||[]);}catch(e){}};
+  const all=m=>PANES.forEach(p=>send(p,m));
+  const minBuffered=()=>PANES.reduce((n,p)=>Math.min(n,p.buffered),Infinity);
+
+  function setFrame(f){if(!total)return;gFrame=((f%total)+total)%total;
+    scrub.value=gFrame;frameLbl.textContent='frame '+gFrame+' / '+(total-1);all({type:'seek',frame:gFrame});}
+
+  // View options are host-owned and always broadcast to BOTH panels — comparing two scenes under
+  // different render settings would be meaningless, so there is deliberately no per-panel control.
+  const _ctl=id=>document.getElementById(id);
+  const vEllip=_ctl('vEllip'),vEllipR=_ctl('vEllipR'),vTraj=_ctl('vTraj'),vTrajN=_ctl('vTrajN'),
+        vTrajL=_ctl('vTrajL'),vOff=_ctl('vOff'),vOffMix=_ctl('vOffMix');
+  const viewState=()=>({type:'view',
+    ellip:vEllip.checked, ellipR:+vEllipR.value/100,
+    traj:vTraj.checked,   trajCount:+vTrajN.value, trajTrail:+vTrajL.value,
+    offCol:vOff.checked,  offMix:+vOffMix.value/100});
+  function pushView(){
+    _ctl('vEllipRN').textContent=(+vEllipR.value/100).toFixed(2);
+    _ctl('vTrajNN').textContent=vTrajN.value;
+    _ctl('vTrajLN').textContent=vTrajL.value;
+    _ctl('vOffMixN').textContent=vOffMix.value;
+    _ctl('vrowEllip').classList.toggle('off',!vEllip.checked);
+    _ctl('vrowTraj').classList.toggle('off',!vTraj.checked);
+    _ctl('vrowOff').classList.toggle('off',!vOff.checked);
+    all(viewState());
+  }
+  [vEllip,vTraj,vOff].forEach(c=>c.onchange=pushView);
+  [vEllipR,vTrajN,vTrajL,vOffMix].forEach(s=>s.oninput=pushView);
+
+  function stage(label,pct){loadMsg=label;all({type:'stage',label,pct});status();}
+  function status(){
+    if(loaded){const s=PANES.reduce((a,p)=>Math.max(a,p.splats),0);
+      statusEl.textContent=total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.';
+    }else statusEl.textContent=loadMsg;
+  }
+
+  addEventListener('message',function(e){
+    if(e.origin!==location.origin)return;const m=e.data;
+    if(!m||m.ch!=='spdef'||m.to)return;                  // `to` means it was ours, going the other way
+    const p=byId.get(m.id);if(!p)return;
+    if(m.type==='hello'){p.alive=true;flush(p);}         // panels re-announce until we answer
+    else if(m.type==='stats'){p.splats=m.splats;}
+    else if(m.type==='ready'){
+      p.frames=m.frames;p.splats=m.splats;
+      // Both scenes are the same sequence; if they ever aren't, the shorter one bounds the timeline.
+      if(PANES.every(q=>q.frames>0)){total=PANES.reduce((n,q)=>Math.min(n,q.frames),Infinity);
+        scrub.max=total-1;scrub.disabled=false;setFrame(0);}
+      status();
+    }
+    else if(m.type==='buffered'){p.buffered=m.end;if(minBuffered()>0)playBtn.disabled=false;status();}
+    // Cameras are always linked and not user-togglable: two panels at different poses would not
+    // be a comparison, so there is nothing to decide here.
+    else if(m.type==='cam'){PANES.forEach(q=>{if(q!==p)send(q,{type:'cam',pos:m.pos,quat:m.quat,speed:m.speed});});}
+    else if(m.type==='error'){loaded=false;loadMsg='✗ '+(p.id==='reg'?'with reg':'without reg')+': '+m.msg;status();}
+  });
+
+  // A panel may say hello before or after its data is ready, so anything already decoded is
+  // (re)sent the moment it announces itself. Motion buffers are transferred, so they can only go
+  // out once — `sent` guards the second flush.
+  function flush(p){
+    if(!p.alive||!p.built)return;
+    if(!p.sentKf){p.sentKf=true;
+      send(p,{type:'keyframe',totalFrames:p.scene.num_frames,camera:p.scene.camera,
+              gops:p.built.map(g=>({kf:g.kf,start:g.start,end:g.end,gop_id:g.gop_id}))});
+      send(p,{type:'stage',label:loadMsg,pct:null});
+      send(p,viewState());}   // a panel installing late must not sit at the option defaults
+    p.built.forEach((g,gi)=>{if(g.motion&&!g.sent){g.sent=true;
+      send(p,{type:'motion',gop:gi,motion:g.motion,F:g.F},[g.motion.buffer]);g.motion=null;}});
+    if(p.built.every(g=>g.sent))send(p,{type:'hide'});
+  }
+
+  async function grab(url,label){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status+' '+url);
+    const totalB=+r.headers.get('content-length')||0,rd=r.body.getReader(),chunks=[];let recv=0;
+    for(;;){const{done,value}=await rd.read();if(done)break;chunks.push(value);recv+=value.length;
+      stage(label,totalB?recv/totalB*100:null);}
+    const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}return out;}
+
+  async function boot(){
+    // Phase 1 — keyframes for both panels. No decoder involved, so both are on screen and
+    // orbitable before the 32 MB core is even fetched.
+    for(const p of PANES){
+      const base=p.url.replace(/[^/]*$/,'');
+      p.scene=await (await fetch(p.url)).json();
+      let shared=null;
+      if(p.scene.has_shared_statics&&p.scene.shared_statics_path)
+        shared=decodeShared(parseNpz(await grab(base+p.scene.shared_statics_path,'shared statics…')));
+      p.built=[];
+      for(const g of p.scene.gops)
+        p.built.push({kf:buildKeyframe(parseNpz(await grab(base+g.reference_path,'keyframes…')),shared,g.num_shared_statics||0),
+                      start:g.start_frame,end:g.end_frame,gop_id:g.gop_id,motion:null,F:0,sent:false});
+      flush(p);   // keyframes go out now; they are cloned, not transferred, so decode below still has them
+    }
+    // Phase 2 — one decoder for every GOP of both scenes, then give the memory back.
+    //
+    // Interleaved by GOP index, NOT scene by scene. Playback is held at min(decodedEnd) across the
+    // panels, so draining one scene first would keep the timeline pinned at 0 until the other
+    // scene's GOP 0 landed. A no-op for the single-GOP scenes shipped today; kept because it is
+    // the shape that stays correct if a multi-GOP packing is dropped back in.
+    stage('loading decoder (ffmpeg.wasm, ~31 MB, one-time)…',6);
+    let ff=await ffmpegReady(()=>{});
+    const maxG=PANES.reduce((n,p)=>Math.max(n,p.scene.gops.length),0);
+    const totalG=PANES.reduce((n,p)=>n+p.scene.gops.length,0);
+    let nDone=0;
+    for(let gi=0;gi<maxG;gi++){
+      for(const p of PANES){
+        if(gi>=p.scene.gops.length)continue;
+        const base=p.url.replace(/[^/]*$/,''),g=p.scene.gops[gi],tag=(p.id==='reg'?'with reg':'without reg');
+        const streams={xyz:{bytes:await grab(base+g.streams.xyz.path,`${tag} — GOP ${gi+1}/${p.scene.gops.length} xyz…`),meta:g.streams.xyz.meta},
+                       rot:{bytes:await grab(base+g.streams.rot.path,`${tag} — GOP ${gi+1}/${p.scene.gops.length} rot…`),meta:g.streams.rot.meta}};
+        stage(`decoding ${tag} — GOP ${gi+1}/${p.scene.gops.length}…`,Math.round(10+80*nDone/totalG));
+        const r=await decodeMotionGopBundle(ff,streams,p.built[gi].kf);
+        // kf is kept, not freed: it is ~900 KB, and dropping it here would race a panel that says
+        // hello late and still needs its keyframe sent.
+        p.built[gi].motion=r.motion;p.built[gi].F=r.F;
+        flush(p);
+        // Recycle the primary's wasm heap every 4 decodes, as the SMV loader does. Never fires at
+        // the 2 decodes the current scenes need; it is here so a multi-GOP packing doesn't run a
+        // long decode chain on one instance.
+        if(++nDone%4===0&&nDone<totalG)ff=await recreateFFmpeg(()=>{});
+        await new Promise(res=>requestAnimationFrame(res));
+      }
+    }
+    await disposeFFmpeg();      // nothing downstream needs wasm again
+    loaded=true;status();
+  }
+  boot().catch(e=>{console.error(e);loadMsg='✗ '+(e.message||e);status();all({type:'error',msg:String(e.message||e)});});
+
+  playBtn.onclick=()=>{playing=!playing;playBtn.textContent=playing?'❚❚ pause':'▶ play';lastT=0;acc=0;};
+  scrub.oninput=()=>{playing=false;playBtn.textContent='▶ play';setFrame(+scrub.value);};
+  resetBtn.onclick=()=>all({type:'resetView'});
+
+  function tick(t){requestAnimationFrame(tick);
+    if(!total)return;
+    if(!playing){lastT=t;return;}
+    // Hold at the slower panel's decode frontier rather than advancing into undecoded motion,
+    // which would just freeze that panel on its static keyframe and desync the comparison.
+    const de=minBuffered();
+    acc+=(t-(lastT||t))/1000*FPS;lastT=t;
+    if(acc<1)return;
+    const adv=Math.floor(acc);acc-=adv;
+    if(de>=total)setFrame(gFrame+adv);
+    else if(de<=0)acc=0;
+    else{const nx=gFrame+adv;
+      if(nx<de)setFrame(nx);else if(gFrame<de-1)setFrame(de-1);else acc=0;}
+  }
+  requestAnimationFrame(tick);
+})();
+
   document.querySelectorAll('.copybtn').forEach(b=>b.onclick=()=>{
     const el=document.getElementById(b.dataset.target);
     navigator.clipboard.writeText(el.textContent).then(()=>{

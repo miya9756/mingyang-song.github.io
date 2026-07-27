@@ -4,8 +4,9 @@ Static checks for this site. Stdlib only — no deps, no network, no build step.
 
 Catches the failure modes this repo actually hits: a stale closing tag left behind by an
 edit, an unbalanced <style> block, a getElementById() whose element was deleted (throws on
-page load, blanking the viewer), a referenced asset that was never committed, and a
-root-absolute path that breaks the project-site subpath deploy.
+page load, blanking the viewer), a page that tints itself but not the browser chrome around
+it (Safari then renders white where Chrome does not), a referenced asset that was never
+committed, and a root-absolute path that breaks the project-site subpath deploy.
 
     python3 .claude/skills/verify-site/verify.py            # static checks
     python3 .claude/skills/verify-site/verify.py --serve    # + serve and GET everything
@@ -25,7 +26,8 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
-PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html"]
+PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
+         "projects/spdef/viewer.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
@@ -115,6 +117,53 @@ def check_dom_ids(page, src):
         print(f"  ok    dom ids ({len(refs)} referenced, all present)")
 
 
+def check_page_chrome(page, src):
+    """Every page must declare color-scheme, a theme-color, and paint html's background.
+
+    Without these the *page* is tinted but the browser chrome around it is not, and the two
+    browsers disagree about the gap: Chrome infers the canvas from the body background,
+    Safari leaves it white — canvas, scrollbars, form controls, the iOS toolbars, and the
+    overscroll area Safari rubber-bands into. That is invisible on a near-white palette and
+    glaring on this site's warm paper. All three are one-liners; a new project page that
+    picks its own palette must carry them too.
+    """
+    style = re.sub(r"/\*.*?\*/", "", "\n".join(
+        re.findall(r"<style[^>]*>(.*?)</style>", src, re.S)), flags=re.S)
+    if not style:
+        return
+
+    if "color-scheme" not in style:
+        fail(page, "no `color-scheme` declared — Safari paints the UA canvas white "
+                   "regardless of --bg (use `light dark` if themed, `light` if fixed)")
+
+    # `([^{}]*)\{([^{}]*)\}` only ever matches innermost rules, so a rule nested in @media is
+    # found and the @media wrapper itself is skipped. Good enough without a real CSS parser.
+    html_bg = any(
+        "background" in decls
+        and "html" in [t for t in re.split(r"[\s,>+~]+", sel.strip()) if t]
+        for sel, decls in re.findall(r"([^{}]*)\{([^{}]*)\}", style))
+    if not html_bg:
+        fail(page, "no `background` on an `html` rule — body's background propagates to the "
+                   "canvas but not to Safari's overscroll area")
+
+    metas = re.findall(r"<meta[^>]*name=\"theme-color\"[^>]*>", src)
+    if not metas:
+        fail(page, "no <meta name=\"theme-color\"> — Safari 15+ tints its tab bar and the iOS "
+                   "toolbars from it, and falls back to white without one")
+        return
+
+    # Drift guard: the meta is markup and --bg is CSS, so nothing but this keeps them together
+    # when a palette is retuned. A WARN, not a FAIL — pointing theme-color at a header or hero
+    # colour instead of the page background is a legitimate choice.
+    lo = style.lower()
+    for m in metas:
+        c = re.search(r'content="([^"]+)"', m)
+        if c and c.group(1).strip().lower() not in lo:
+            warn(page, f'theme-color {c.group(1)} appears nowhere in the CSS — likely drifted '
+                       f'from --bg')
+    print(f"  ok    page chrome (color-scheme, {len(metas)} theme-color, html background)")
+
+
 def local_refs(src):
     """Relative asset/module paths referenced by this page.
 
@@ -125,8 +174,11 @@ def local_refs(src):
     out = set()
     for pat in (r'(?:src|href)="([^"]+)"',
                 r"url\(\s*['\"]?([^'\")]+)",
-                r"from\s+['\"](\./[^'\"]+)['\"]",
-                r"new\s+URL\(\s*['\"](\./[^'\"]+)['\"]",
+                # `../` as well as `./` — the SpDef page imports the decode path from ../smv/
+                r"from\s+['\"](\.{1,2}/[^'\"]+)['\"]",
+                # dynamic import() — the SpDef panel loads the decode path only when standalone
+                r"import\(\s*['\"](\.{1,2}/[^'\"]+)['\"]",
+                r"new\s+URL\(\s*['\"](\.{1,2}/[^'\"]+)['\"]",
                 r"fetch\(\s*['\"]([^'\"`]+)['\"]",          # scenes.json
                 r"\.register\(\s*['\"]([^'\"]+)['\"]"):     # sw.js
         out |= set(re.findall(pat, src))
@@ -233,6 +285,7 @@ def main():
         check_nesting(page, src)
         check_css(page, src)
         check_dom_ids(page, src)
+        check_page_chrome(page, src)
         check_assets(page, src)
 
     for mod in MODULES:
