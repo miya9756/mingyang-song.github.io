@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mingyang Song</title>
+<link rel="icon" type="image/png" sizes="64x64" href="assets/web_icon.png">
+<link rel="apple-touch-icon" href="assets/web_icon.png">
 <meta name="description" content="Mingyang Song — researcher, Disney Research Studios &amp; ETH Zürich. Dynamic scene compression, neural rendering.">
 <style>
   :root{--bg:#0e1014;--fg:#e8e6e3;--dim:#9aa0a6;--accent:#7cc4ff;--line:#22262e;
@@ -19,6 +21,23 @@
   .wrap{max-width:760px;margin:0 auto;padding:12vh 24px 12vh}
   h1{font-size:clamp(2rem,6vw,3rem);line-height:1.1;margin:0 0 .3em;letter-spacing:-.02em}
   .role{color:var(--dim);margin:0 0 2.5em;font-size:1.05rem}
+  /* Header. The photo is 3:4 portrait (0.74:1) and carries real scenery, so it keeps its native
+     shape instead of being cropped to a circular avatar — a circle would throw away a quarter of
+     the frame and all of the snow. Text left so the name still lands first; `auto` column means the
+     photo sets its own width and the text takes the rest. At 160px it stands 217px tall, which is
+     close to the height of the h1 + role block, so the two columns balance. Stacks under 620px. */
+  .hero{display:grid;grid-template-columns:1fr auto;gap:30px;align-items:start;margin:0 0 2.5em}
+  .hero .role{margin:0}
+  /* align-items:start lines the photo's box up with the h1's line box, but the cap of "M" sits a
+     few px below that — the h1's line-height leaves half-leading above the glyphs. The small
+     margin-top pays that back so the photo's top edge reads level with the top of the name rather
+     than with an invisible box edge. Zeroed when the layout stacks and the photo moves below. */
+  .photo{display:block;width:160px;height:auto;margin-top:.3rem;
+         border-radius:12px;border:1px solid var(--line)}
+  @media(max-width:620px){
+    .hero{grid-template-columns:1fr;gap:20px;justify-items:start}
+    .photo{width:130px;margin-top:0}
+  }
   h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);font-weight:600;margin:3em 0 1em;padding-bottom:.6em;border-bottom:1px solid var(--line)}
   a{color:var(--accent);text-decoration:none}
   a:hover{text-decoration:underline}
@@ -123,8 +142,14 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Mingyang Song</h1>
-  <p class="role">Ph.D. Student between DisneyResearch|Studios &amp; ETH Zürich.<br>Dynamic scene reconstruction and compression; <br>Video denoising; <br>Digital camera noise modeling.</p>
+  <div class="hero">
+    <div>
+      <h1>Mingyang Song</h1>
+      <p class="role">Ph.D. Student between DisneyResearch|Studios &amp; ETH Zürich.<br>Dynamic scene reconstruction and compression; <br>Video denoising; <br>Digital camera noise modeling.</p>
+    </div>
+    <img class="photo" src="assets/photo.jpg" width="1260" height="1708" decoding="async"
+         alt="Portrait of Mingyang Song on a snow-covered mountain path.">
+  </div>
 
   <h2>Selected Projects</h2>
   <a class="card feat" href="projects/smv/">
