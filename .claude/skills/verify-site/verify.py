@@ -26,7 +26,8 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
-PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html"]
+PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
+         "projects/spdef/viewer.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
@@ -173,8 +174,11 @@ def local_refs(src):
     out = set()
     for pat in (r'(?:src|href)="([^"]+)"',
                 r"url\(\s*['\"]?([^'\")]+)",
-                r"from\s+['\"](\./[^'\"]+)['\"]",
-                r"new\s+URL\(\s*['\"](\./[^'\"]+)['\"]",
+                # `../` as well as `./` — the SpDef page imports the decode path from ../smv/
+                r"from\s+['\"](\.{1,2}/[^'\"]+)['\"]",
+                # dynamic import() — the SpDef panel loads the decode path only when standalone
+                r"import\(\s*['\"](\.{1,2}/[^'\"]+)['\"]",
+                r"new\s+URL\(\s*['\"](\.{1,2}/[^'\"]+)['\"]",
                 r"fetch\(\s*['\"]([^'\"`]+)['\"]",          # scenes.json
                 r"\.register\(\s*['\"]([^'\"]+)['\"]"):     # sw.js
         out |= set(re.findall(pat, src))
