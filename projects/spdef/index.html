@@ -77,10 +77,19 @@
   @media(max-width:760px){.ab{grid-template-columns:1fr}}
   /* three square panels need more room than two before they stop being readable */
   @media(max-width:980px){.ab3{grid-template-columns:1fr}}
-  /* Sub-heading for a second comparison inside the same section. Smaller than h2 so the section
-     still reads as one Playground rather than as two sections. */
-  .abhd{font-family:'Fraunces',Georgia,serif;font-size:18.5px;font-weight:600;color:var(--ink);
-        margin:34px 0 10px;padding-top:22px;border-top:1px solid var(--line)}
+  /* Each comparison is a self-contained card: its own heading, panels, transport, status line and
+     view options. With two of them the section otherwise runs on, and it stops being obvious which
+     transport drives which set of panels.
+     Three tones, so the nesting reads without extra borders: page --bg, card #f7f9fc, and the
+     white panels/boxes inside it. A card is NOT a .card from the landing page — that one is an
+     <a> with a gradient hover, and this has no single destination to click. */
+  .subcard{background:#f7f9fc;border:1px solid var(--line);border-radius:14px;
+           padding:16px 18px 18px;margin:0 0 18px}
+  .subhd{margin:0 0 12px;padding:0 0 11px;border-bottom:1px solid var(--line)}
+  .subhd h3{margin:0;font-family:'Fraunces',Georgia,serif;font-size:18.5px;font-weight:600;color:var(--ink)}
+  .subtag{margin:4px 0 0;font-size:11.5px;color:var(--muted)}
+  .subcard .lede{font-size:13.5px;margin:0 0 14px}
+  .subcard .hint:last-child{margin-bottom:0}
   .pane{margin:0}
   .pane figcaption{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 9px;margin:0 0 7px}
   .ptitle{font-family:'Fraunces',Georgia,serif;font-size:15.5px;font-weight:600;color:var(--ink)}
@@ -161,7 +170,14 @@
 <main class="inner">
   <section>
     <h2>Playground</h2>
-    <p class="lede">Two reconstructions of the same D-NeRF <em>bouncingballs</em> sequence, trained identically apart from the temporal regularizers on the spline deformation field. Both panels share one camera and one clock, so any difference on screen is a difference between the models.</p>
+    <p class="lede">Two comparisons, each loaded on demand and decoded entirely in your browser. Within a comparison the panels share one camera and one clock, so any difference on screen is a difference between the models.</p>
+
+    <article class="subcard">
+      <div class="subhd">
+        <h3>Regularizers on a clean sequence</h3>
+        <p class="subtag">D-NeRF <em>bouncingballs</em> · synthetic · 150 frames · 2.5 MB</p>
+      </div>
+      <p class="lede">The same sequence trained identically apart from the temporal regularizers on the spline deformation field. Both panels share one camera and one clock, so any difference on screen is a difference between the models.</p>
 
     <div class="ab">
       <figure class="pane">
@@ -206,10 +222,15 @@
         <label class="vslide" title="0 = original colour, 100 = pure motion-vector colour">Offset blend <input type="range" data-o="offMix" min="0" max="100" value="60"><output data-o="offMixN">60</output></label>
       </div>
     </div>
+    </article>
 
-    <h3 class="abhd">Knot count as a regularizer</h3>
-    <p class="lede">A casual hand-held capture (HyperNeRF <em>americano</em>) — the unreliable case, where the input barely constrains the motion. Cutting the number of spline knots removes degrees of freedom from the trajectory, which stabilizes the reconstruction much as the loss terms do, at the cost of some high-frequency detail. The third panel shows what the full knot count does with no regularizers at all.</p>
-    <p class="lede">These three are rendered <em>square and wider than the capture camera</em>, which was a 536×960 portrait frame. You are seeing well outside the filmed frustum, floaters included — that is the point: it shows what the reconstruction actually is in 3D, rather than replaying the one view that was supervised.</p>
+    <article class="subcard">
+      <div class="subhd">
+        <h3>Knot count as a regularizer</h3>
+        <p class="subtag">HyperNeRF <em>americano</em> · casual hand-held capture · 200 frames · 8.1 MB</p>
+      </div>
+      <p class="lede">The unreliable case, where the input barely constrains the motion. Cutting the number of spline knots removes degrees of freedom from the trajectory, which stabilizes the reconstruction much as the loss terms do, at the cost of some high-frequency detail. The third panel shows what the full knot count does with no regularizers at all.</p>
+      <p class="lede">These three are rendered <em>square and wider than the capture camera</em>, which was a 536×960 portrait frame. You are seeing well outside the filmed frustum, floaters included — that is the point: it shows what the reconstruction actually is in 3D, rather than replaying the one view that was supervised.</p>
 
     <div class="ab ab3">
       <figure class="pane">
@@ -263,7 +284,8 @@
         <label class="vslide" title="0 = original colour, 100 = pure motion-vector colour">Offset blend <input type="range" data-o="offMix" min="0" max="100" value="60"><output data-o="offMixN">60</output></label>
       </div>
     </div>
-    <p class="hint">Nothing is downloaded until you press <em>Load</em> — each comparison fetches and decodes in your browser, and the two share a one-time ~31&nbsp;MB decoder. Once loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. Each comparison carries its own view options.</p>
+    </article>
+    <p class="hint">The two comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load. Once a card is loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel.</p>
   </section>
 
   <section>

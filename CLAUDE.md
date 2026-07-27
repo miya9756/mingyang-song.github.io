@@ -154,6 +154,13 @@ one wasm heap and race `disposeFFmpeg()` against a live decode. The decoder is r
 queue drains and re-acquired (warm cache) if another group is loaded later. `verify.py` reads
 `data-src` for asset checking; without that it stopped seeing `viewer.html` entirely.
 
+**Each comparison is a `.subcard`** — heading, lede, panels, transport, status line and view
+options in one bordered block, so it is unambiguous which transport drives which panels. Three
+tones make the nesting read without extra rules: page `--bg`, card `#f7f9fc`, white boxes inside.
+It is deliberately **not** the landing page's `.card`: that one is an `<a>` with a gradient hover,
+and a comparison has no single destination to click. A third comparison is another `.subcard`
+plus its `GROUPS` entry.
+
 **Groups are the unit of synchronisation.** Clock and camera are per group — the two comparisons
 are different scenes with different frame counts, so linking them would be meaningless. The
 decoder and the view options are shared across the whole page. Adding a third comparison means
