@@ -108,7 +108,9 @@ def check_dom_ids(page, src):
     for pat in (r"getElementById\(\s*['\"]([^'\"]+)['\"]",
                 r"_ctl\(\s*['\"]([^'\"]+)['\"]",
                 r"_gate\(\s*['\"]([^'\"]+)['\"]",
-                r"querySelector\(\s*['\"]#([\w-]+)['\"]"):
+                r"querySelector\(\s*['\"]#([\w-]+)['\"]",
+                # ids named in the SpDef host's GROUPS config rather than passed to _ctl() directly
+                r"(?:play|scrub|lbl|reset|status|frId)\s*:\s*['\"]([A-Za-z][\w-]*)['\"]"):
         refs |= set(re.findall(pat, src))
     missing = sorted(refs - ids)
     if missing:

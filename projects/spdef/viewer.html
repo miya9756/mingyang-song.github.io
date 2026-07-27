@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SpDef comparison panel</title>
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#f7f9fc"><!-- must track --panel; this page is also openable standalone -->
+<meta name="theme-color" content="#ffffff"><!-- must track --panel; this page is also openable standalone -->
 <!--
   One panel of the SpDef side-by-side. Deliberately NOT a copy of the SMV viewer: this is the
   render core + eager decode only, driven entirely from outside over postMessage, with no scene
@@ -24,7 +24,7 @@
 -->
 <style>
   :root{color-scheme:light;
-        --panel:#f7f9fc; --ink:#14181d; --muted:#5f6a78; --line:#dde3ea; --accent:#1f5fbf; --err:#b4331f}
+        --panel:#ffffff; --ink:#14181d; --muted:#5f6a78; --line:#dde3ea; --accent:#1f5fbf; --err:#b4331f}
   *{box-sizing:border-box}
   /* background on html too, not just body — this page is standalone-openable and Safari
      rubber-bands into html's background, not body's. Same rule as every other page here. */
@@ -38,7 +38,7 @@
   /* status overlay — one line + a bar, centered. Sits above the canvas so the keyframe stays
      visible underneath once it lands and only the motion decode is still pending. */
   #load{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;
-        background:linear-gradient(180deg,rgba(247,249,252,0),rgba(247,249,252,.92) 40%);
+        background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.92) 40%);
         font-size:11.5px;color:var(--muted);pointer-events:none}
   #load.hide{display:none}
   #stage{display:block;margin:0 0 5px}
@@ -60,6 +60,12 @@
 // No static imports on purpose: hosted, this panel is a pure renderer and never loads the decode
 // path at all. The standalone fallback at the foot of this file pulls it in dynamically.
 const Q=new URLSearchParams(location.search),SCENE=Q.get('scene')||'',ID=Q.get('id')||'panel';
+// fit=square: ignore the capture camera's aspect and render the full (square) canvas at the WIDER
+// of its two FoVs, so the view covers at least as much as the camera did on both axes and more on
+// the narrow one. For a portrait capture like HyperNeRF americano (536x960, fovx 0.63 / fovy 1.06)
+// that deliberately exposes reconstruction outside the filmed frustum — floaters included — which
+// reads as 3D rather than as a flat replay of the training view. Default letterboxes to the camera.
+const FIT_SQUARE=Q.get('fit')==='square';
 const canvas=document.getElementById('gl'),wrap=document.getElementById('wrap');
 const loadEl=document.getElementById('load'),stageEl=document.getElementById('stage'),barEl=document.getElementById('barfill'),errEl=document.getElementById('err');
 function showErr(m){errEl.textContent='✗ '+m;errEl.style.display='flex';loadEl.classList.add('hide');post({type:'error',msg:String(m)});}
@@ -293,7 +299,9 @@ function frame(t){requestAnimationFrame(frame);moveCam(t);
  emitCamIfMoved();
  fpsN++;if(t-fpsT>1000){fps=Math.round(fpsN*1000/(t-fpsT));fpsN=0;fpsT=t;post({type:'stats',fps,splats:N});}
  let vw=canvas.width,vh=canvas.height,vx=0,vy=0,fx,fy;
- if(camMeta){const asp=camMeta.width/camMeta.height;   // letterbox to the dataset camera's aspect
+ if(camMeta&&FIT_SQUARE){   // full canvas, square pixels, widest FoV — see beyond the capture frustum
+   const fov=Math.max(camMeta.fovx,camMeta.fovy);fx=fy=0.5*Math.min(vw,vh)/Math.tan(fov/2);
+ }else if(camMeta){const asp=camMeta.width/camMeta.height;   // letterbox to the dataset camera's aspect
    if(canvas.width/canvas.height>asp){vh=canvas.height;vw=Math.round(vh*asp);}else{vw=canvas.width;vh=Math.round(vw/asp);}
    vx=(canvas.width-vw)>>1;vy=(canvas.height-vh)>>1;fy=0.5*vh/Math.tan(camMeta.fovy/2);fx=0.5*vw/Math.tan(camMeta.fovx/2);
  }else{fy=0.5*canvas.height/Math.tan(0.5*1.1);fx=fy;}

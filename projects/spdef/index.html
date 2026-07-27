@@ -73,13 +73,20 @@
      aspect-ratio 1/1 matches the D-NeRF test camera (800x800), so the pane is the right shape
      before the viewer loads and the page never jumps. */
   .ab{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .ab3{grid-template-columns:repeat(3,1fr)}
   @media(max-width:760px){.ab{grid-template-columns:1fr}}
+  /* three square panels need more room than two before they stop being readable */
+  @media(max-width:980px){.ab3{grid-template-columns:1fr}}
+  /* Sub-heading for a second comparison inside the same section. Smaller than h2 so the section
+     still reads as one Playground rather than as two sections. */
+  .abhd{font-family:'Fraunces',Georgia,serif;font-size:18.5px;font-weight:600;color:var(--ink);
+        margin:34px 0 10px;padding-top:22px;border-top:1px solid var(--line)}
   .pane{margin:0}
   .pane figcaption{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 9px;margin:0 0 7px}
   .ptitle{font-family:'Fraunces',Georgia,serif;font-size:15.5px;font-weight:600;color:var(--ink)}
   .ptag{font-size:11.5px;color:var(--muted)}
   .stagebox{position:relative;aspect-ratio:1/1;border:1px solid var(--line);border-radius:12px;
-            overflow:hidden;background:#f7f9fc}
+            overflow:hidden;background:#ffffff}
   .stagebox iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
   .transport{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:14px 0 0;
              padding:10px 14px;border:1px solid var(--line);border-radius:11px;background:var(--surface)}
@@ -88,7 +95,7 @@
         transition:color .16s,border-color .16s}
   .tbtn:hover:not(:disabled){color:var(--accent);border-color:var(--accent)}
   .tbtn:disabled{opacity:.45;cursor:default}
-  #abScrub{flex:1 1 170px;min-width:110px;accent-color:var(--accent)}
+  #abScrub,#amScrub{flex:1 1 170px;min-width:110px;accent-color:var(--accent)}
   .tnum{font:12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--muted);white-space:nowrap}
   .tchk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
   .tchk input{accent-color:var(--accent)}
@@ -168,8 +175,46 @@
       <span id="abFrame" class="tnum">—</span>
       <button id="abReset" class="tbtn">reset view</button>
     </div>
+    <p id="abStatus" class="hint">Loading…</p>
+
+    <h3 class="abhd">Knot count as a regularizer</h3>
+    <p class="lede">A casual hand-held capture (HyperNeRF <em>americano</em>) — the unreliable case, where the input barely constrains the motion. Cutting the number of spline knots removes degrees of freedom from the trajectory, which stabilizes the reconstruction much as the loss terms do, at the cost of some high-frequency detail. The third panel shows what the full knot count does with no regularizers at all.</p>
+    <p class="lede">These three are rendered <em>square and wider than the capture camera</em>, which was a 536×960 portrait frame. You are seeing well outside the filmed frustum, floaters included — that is the point: it shows what the reconstruction actually is in 3D, rather than replaying the one view that was supervised.</p>
+
+    <div class="ab ab3">
+      <figure class="pane">
+        <figcaption><span class="ptitle">33 knots</span><span class="ptag">regularized · fewest degrees of freedom</span></figcaption>
+        <div class="stagebox">
+          <iframe id="paneC" title="Interactive viewer: americano reconstructed with 33 spline knots and temporal regularization"
+                  src="viewer.html?scene=scenes/americano_knots33/scene.json&amp;id=k33&amp;fit=square"></iframe>
+        </div>
+      </figure>
+      <figure class="pane">
+        <figcaption><span class="ptitle">Full knots</span><span class="ptag">regularized</span></figcaption>
+        <div class="stagebox">
+          <iframe id="paneD" title="Interactive viewer: americano reconstructed with the full knot count and temporal regularization"
+                  src="viewer.html?scene=scenes/americano_full/scene.json&amp;id=kfull&amp;fit=square"></iframe>
+        </div>
+      </figure>
+      <figure class="pane">
+        <figcaption><span class="ptitle">Full knots, no reg</span><span class="ptag">velocity-divergence terms off</span></figcaption>
+        <div class="stagebox">
+          <iframe id="paneE" title="Interactive viewer: americano reconstructed with the full knot count and no temporal regularization"
+                  src="viewer.html?scene=scenes/americano_full_noreg/scene.json&amp;id=knoreg&amp;fit=square"></iframe>
+        </div>
+      </figure>
+    </div>
+
+    <div class="transport">
+      <button id="amPlay" class="tbtn" disabled>▶ play</button>
+      <input id="amScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
+      <span id="amFrame" class="tnum">—</span>
+      <button id="amReset" class="tbtn">reset view</button>
+    </div>
+    <p id="amStatus" class="hint">Loading…</p>
+
     <div class="viewopts">
-      <p class="vlead">Toggle the options below to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 150-frame path.</p>
+      <p class="vlead">Toggle the options below to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full path.</p>
       <div class="vrow off" id="vrowEllip">
         <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the underlying point-based representation is visible"><input type="checkbox" id="vEllip"> Hard ellipsoids</label>
         <label class="vslide" title="Ellipsoid radius in standard deviations — shrink to separate individual points">Radius <input type="range" id="vEllipR" min="20" max="200" value="100"><output id="vEllipRN" for="vEllipR">1.00</output></label>
@@ -184,8 +229,7 @@
         <label class="vslide" title="0 = original colour, 100 = pure motion-vector colour">Offset blend <input type="range" id="vOffMix" min="0" max="100" value="60"><output id="vOffMixN" for="vOffMix">60</output></label>
       </div>
     </div>
-    <p id="abStatus" class="hint">Loading…</p>
-    <p class="hint">Drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. View options apply to both panels.</p>
+    <p class="hint">Drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. View options apply to every panel on the page.</p>
   </section>
 
   <section>
@@ -257,33 +301,51 @@ import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle, disposeFFmpeg } fro
 window.__spdefBooted=true;   // clears the classic watchdog above: the module graph did resolve
 
 (function(){
-  const PANES=[{id:'reg',  fr:document.getElementById('paneA'),url:'scenes/bouncingballs_reg/scene.json'},
-               {id:'noreg',fr:document.getElementById('paneB'),url:'scenes/bouncingballs_noreg/scene.json'}];
-  const byId=new Map(PANES.map(p=>[p.id,p]));
-  // `src` is captured from the markup so the watchdog can reload a frame without duplicating the
-  // query string here; `tries` bounds those reloads.
-  PANES.forEach(p=>{p.frames=0;p.buffered=0;p.splats=0;p.alive=false;p.ready=false;p.sentKf=false;
-                    p.built=null;p.scene=null;p.src=p.fr.getAttribute('src');p.tries=0;});
-  const playBtn=document.getElementById('abPlay'),scrub=document.getElementById('abScrub'),
-        frameLbl=document.getElementById('abFrame'),
-        resetBtn=document.getElementById('abReset'),statusEl=document.getElementById('abStatus');
+  // ---- comparisons on this page -------------------------------------------
+  // Two independent groups. Everything that must agree WITHIN a comparison — the clock and the
+  // camera — is per group; everything that must agree across the whole page — the single decoder
+  // and the view options — is shared. Linking the two clocks or the two cameras would be
+  // meaningless: they are different scenes, different captures and different frame counts.
+  const GROUPS=[
+    {key:'balls',ui:{play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',status:'abStatus'},
+     panes:[{id:'reg',    frId:'paneA',url:'scenes/bouncingballs_reg/scene.json',    name:'with reg'},
+            {id:'noreg',  frId:'paneB',url:'scenes/bouncingballs_noreg/scene.json',  name:'without reg'}]},
+    {key:'amer',ui:{play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',status:'amStatus'},
+     panes:[{id:'k33',    frId:'paneC',url:'scenes/americano_knots33/scene.json',    name:'33 knots'},
+            {id:'kfull',  frId:'paneD',url:'scenes/americano_full/scene.json',       name:'full knots'},
+            {id:'knoreg', frId:'paneE',url:'scenes/americano_full_noreg/scene.json', name:'full knots, no reg'}]}
+  ];
+  const _ctl=id=>document.getElementById(id);
+  const byId=new Map(), ALL=[];
+  for(const g of GROUPS){
+    g.el={play:_ctl(g.ui.play),scrub:_ctl(g.ui.scrub),lbl:_ctl(g.ui.lbl),reset:_ctl(g.ui.reset),status:_ctl(g.ui.status)};
+    g.playing=false;g.gFrame=0;g.total=0;g.acc=0;g.lastT=0;g.loadMsg='loading…';g.loaded=false;g.lastCam=null;
+    for(const p of g.panes){
+      // `src` is captured from the markup so the watchdog can reload a frame without duplicating
+      // the query string here; `tries` bounds those reloads.
+      p.g=g;p.fr=_ctl(p.frId);p.frames=0;p.buffered=0;p.splats=0;
+      p.alive=false;p.ready=false;p.sentKf=false;p.built=null;p.scene=null;
+      p.src=p.fr.getAttribute('src');p.tries=0;
+      byId.set(p.id,p);ALL.push(p);
+    }
+  }
   const FPS=30;
-  let playing=false,gFrame=0,total=0,acc=0,lastT=0,loadMsg='loading…',loaded=false;
 
   // Reports whether the message actually went out, so delivery state is only advanced on success
   // rather than optimistically — a silently swallowed send used to mark the payload as delivered.
   const send=(p,m,tr)=>{const w=p.fr.contentWindow;if(!w)return false;
     try{w.postMessage(Object.assign({ch:'spdef',to:p.id},m),location.origin,tr||[]);return true;}catch(e){return false;}};
-  const all=m=>PANES.forEach(p=>send(p,m));
-  let lastCam=null;   // replayed to a panel that had to be reloaded, so it rejoins the camera lock
-  const minBuffered=()=>PANES.reduce((n,p)=>Math.min(n,p.buffered),Infinity);
+  const gsend=(g,m)=>g.panes.forEach(p=>send(p,m));
+  const everyone=m=>ALL.forEach(p=>send(p,m));
+  const minBuffered=g=>g.panes.reduce((n,p)=>Math.min(n,p.buffered),Infinity);
 
-  function setFrame(f){if(!total)return;gFrame=((f%total)+total)%total;
-    scrub.value=gFrame;frameLbl.textContent='frame '+gFrame+' / '+(total-1);all({type:'seek',frame:gFrame});}
+  function setFrame(g,f){if(!g.total)return;g.gFrame=((f%g.total)+g.total)%g.total;
+    g.el.scrub.value=g.gFrame;g.el.lbl.textContent='frame '+g.gFrame+' / '+(g.total-1);
+    gsend(g,{type:'seek',frame:g.gFrame});}
 
-  // View options are host-owned and always broadcast to BOTH panels — comparing two scenes under
-  // different render settings would be meaningless, so there is deliberately no per-panel control.
-  const _ctl=id=>document.getElementById(id);
+  // View options are host-owned and broadcast to EVERY panel on the page, across both groups —
+  // comparing scenes under different render settings would be meaningless, so there is
+  // deliberately no per-panel and no per-group control.
   const vEllip=_ctl('vEllip'),vEllipR=_ctl('vEllipR'),vTraj=_ctl('vTraj'),vTrajN=_ctl('vTrajN'),
         vTrajL=_ctl('vTrajL'),vOff=_ctl('vOff'),vOffMix=_ctl('vOffMix');
   const viewState=()=>({type:'view',
@@ -298,21 +360,20 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     _ctl('vrowEllip').classList.toggle('off',!vEllip.checked);
     _ctl('vrowTraj').classList.toggle('off',!vTraj.checked);
     _ctl('vrowOff').classList.toggle('off',!vOff.checked);
-    all(viewState());
+    everyone(viewState());
   }
   [vEllip,vTraj,vOff].forEach(c=>c.onchange=pushView);
   [vEllipR,vTrajN,vTrajL,vOffMix].forEach(s=>s.oninput=pushView);
 
-  function stage(label,pct){loadMsg=label;all({type:'stage',label,pct});status();}
-  const nameOf=p=>p.id==='reg'?'with reg':'without reg';
-  function status(){
-    if(loaded&&PANES.every(p=>p.ready)){const s=PANES.reduce((a,p)=>Math.max(a,p.splats),0);
-      statusEl.textContent=total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.';
+  function stage(g,label,pct){g.loadMsg=label;gsend(g,{type:'stage',label,pct});status(g);}
+  function status(g){
+    if(g.loaded&&g.panes.every(p=>p.ready)){const s=g.panes.reduce((a,p)=>Math.max(a,p.splats),0);
+      g.el.status.textContent=g.total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.';
       return;}
     // Name a panel that has not come up. Silence here is what made the CDN failures look like
     // "the canvas just didn't render" instead of "that frame never loaded".
-    const late=PANES.filter(p=>!p.alive).map(nameOf);
-    statusEl.textContent=loadMsg+(late.length?'  ·  waiting for '+late.join(' and ')+' to start…':'');
+    const late=g.panes.filter(p=>!p.alive).map(p=>p.name);
+    g.el.status.textContent=g.loadMsg+(late.length?'  ·  waiting for '+late.join(', ')+' to start…':'');
   }
 
   // Watchdog. A panel that never says hello has failed to load — its document 404'd, or its script
@@ -323,140 +384,143 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // and the host still holds every motion buffer needed to serve them.
   const T0=Date.now(),MAX_TRIES=2;
   const watchdog=setInterval(function(){
-    if(PANES.every(p=>p.ready)){clearInterval(watchdog);return;}
-    for(const p of PANES){
+    if(ALL.every(p=>p.ready)){clearInterval(watchdog);return;}
+    for(const p of ALL){
       if(p.alive||p.ready)continue;
       if(Date.now()-T0<8000*(p.tries+1))continue;      // generous: a cold CDN fetch is not a failure
       if(p.tries>=MAX_TRIES){
-        loadMsg='✗ the “'+nameOf(p)+'” panel could not be loaded — please refresh the page';status();
-        clearInterval(watchdog);return;}
+        p.g.loadMsg='✗ the “'+p.name+'” panel could not be loaded — please refresh the page';status(p.g);
+        continue;}
       p.tries++;
       p.sentKf=false;                                   // the reloaded document knows nothing
-      if(p.built)p.built.forEach(g=>{if(!g.acked)g.sent=false;});
+      if(p.built)p.built.forEach(b=>{if(!b.acked)b.sent=false;});
       p.fr.src=p.src+'&r='+p.tries;
-      loadMsg='restarting the “'+nameOf(p)+'” panel (attempt '+p.tries+')…';status();
+      p.g.loadMsg='restarting the “'+p.name+'” panel (attempt '+p.tries+')…';status(p.g);
     }
   },2000);
 
   addEventListener('message',function(e){
     if(e.origin!==location.origin)return;const m=e.data;
     if(!m||m.ch!=='spdef'||m.to)return;                  // `to` means it was ours, going the other way
-    const p=byId.get(m.id);if(!p)return;
+    const p=byId.get(m.id);if(!p)return;const g=p.g;
     if(m.type==='hello'){p.alive=true;flush(p);}         // panels re-announce until we answer
     else if(m.type==='stats'){p.splats=m.splats;}
     else if(m.type==='ready'){
       p.frames=m.frames;p.splats=m.splats;p.ready=true;
-      // Both scenes are the same sequence; if they ever aren't, the shorter one bounds the timeline.
-      if(PANES.every(q=>q.frames>0)){total=PANES.reduce((n,q)=>Math.min(n,q.frames),Infinity);
-        scrub.max=total-1;scrub.disabled=false;setFrame(0);}
-      status();
+      // Same sequence across a group; if they ever aren't, the shortest bounds that timeline.
+      if(g.panes.every(q=>q.frames>0)){g.total=g.panes.reduce((n,q)=>Math.min(n,q.frames),Infinity);
+        g.el.scrub.max=g.total-1;g.el.scrub.disabled=false;setFrame(g,0);}
+      status(g);
     }
     else if(m.type==='buffered'){p.buffered=m.end;
       // ACK: the panel has this GOP, so the host's copy can go.
       if(m.gop!=null&&p.built&&p.built[m.gop]){p.built[m.gop].acked=true;p.built[m.gop].motion=null;}
-      if(minBuffered()>0)playBtn.disabled=false;status();}
-    // Cameras are always linked and not user-togglable: two panels at different poses would not
-    // be a comparison, so there is nothing to decide here.
-    else if(m.type==='cam'){lastCam={type:'cam',pos:m.pos,quat:m.quat,speed:m.speed};
-      PANES.forEach(q=>{if(q!==p)send(q,lastCam);});}
-    else if(m.type==='error'){loaded=false;loadMsg='✗ '+(p.id==='reg'?'with reg':'without reg')+': '+m.msg;status();}
+      if(minBuffered(g)>0)g.el.play.disabled=false;status(g);}
+    // Cameras are always linked WITHIN a group and never across one: the two comparisons are
+    // different scenes, so a shared pose would be meaningless.
+    else if(m.type==='cam'){g.lastCam={type:'cam',pos:m.pos,quat:m.quat,speed:m.speed};
+      g.panes.forEach(q=>{if(q!==p)send(q,g.lastCam);});}
+    else if(m.type==='error'){g.loaded=false;g.loadMsg='✗ '+p.name+': '+m.msg;status(g);}
   });
 
   // A panel may say hello before or after its data is ready, so anything already decoded is
-  // (re)sent the moment it announces itself. Motion buffers are transferred, so they can only go
-  // out once — `sent` guards the second flush.
+  // (re)sent the moment it announces itself.
   function flush(p){
     if(!p.alive||!p.built)return;
     if(!p.sentKf){
       if(!send(p,{type:'keyframe',totalFrames:p.scene.num_frames,camera:p.scene.camera,
-                  gops:p.built.map(g=>({kf:g.kf,start:g.start,end:g.end,gop_id:g.gop_id}))}))return;
+                  gops:p.built.map(b=>({kf:b.kf,start:b.start,end:b.end,gop_id:b.gop_id}))}))return;
       p.sentKf=true;
-      send(p,{type:'stage',label:loadMsg,pct:null});
-      send(p,viewState());          // a panel installing late must not sit at the option defaults
-      if(lastCam)send(p,lastCam);   // nor at the opening pose if the other panel has moved on
+      send(p,{type:'stage',label:p.g.loadMsg,pct:null});
+      send(p,viewState());              // a panel installing late must not sit at the option defaults
+      if(p.g.lastCam)send(p,p.g.lastCam);  // nor at the opening pose if its group has moved on
     }
     // Motion is CLONED, not transferred, and the host's copy is freed only when the panel ACKs it
     // (the `gop` field on `buffered`). Transferring destroyed the only copy at send time, which
     // made a failed or reloaded panel permanently unrecoverable — the host had nothing left to
     // re-send. The extra copy is transient: it lives from send to ACK, then goes.
-    p.built.forEach((g,gi)=>{if(g.motion&&!g.sent){
-      if(send(p,{type:'motion',gop:gi,motion:g.motion,F:g.F}))g.sent=true;}});
-    if(p.built.every(g=>g.sent))send(p,{type:'hide'});
+    p.built.forEach((b,gi)=>{if(b.motion&&!b.sent){
+      if(send(p,{type:'motion',gop:gi,motion:b.motion,F:b.F}))b.sent=true;}});
+    if(p.built.every(b=>b.sent))send(p,{type:'hide'});
   }
 
-  async function grab(url,label){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status+' '+url);
+  async function grab(g,url,label){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status+' '+url);
     const totalB=+r.headers.get('content-length')||0,rd=r.body.getReader(),chunks=[];let recv=0;
     for(;;){const{done,value}=await rd.read();if(done)break;chunks.push(value);recv+=value.length;
-      stage(label,totalB?recv/totalB*100:null);}
+      stage(g,label,totalB?recv/totalB*100:null);}
     const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}return out;}
 
   async function boot(){
-    // Phase 1 — keyframes for both panels. No decoder involved, so both are on screen and
-    // orbitable before the 32 MB core is even fetched.
-    for(const p of PANES){
+    // Phase 1 — every keyframe on the page, before any decoding. No decoder is involved, so all
+    // five panels are on screen and orbitable well before the ~32 MB core is even fetched.
+    for(const g of GROUPS) for(const p of g.panes){
       const base=p.url.replace(/[^/]*$/,'');
       p.scene=await (await fetch(p.url)).json();
       let shared=null;
       if(p.scene.has_shared_statics&&p.scene.shared_statics_path)
-        shared=decodeShared(parseNpz(await grab(base+p.scene.shared_statics_path,'shared statics…')));
+        shared=decodeShared(parseNpz(await grab(g,base+p.scene.shared_statics_path,'shared statics…')));
       p.built=[];
-      for(const g of p.scene.gops)
-        p.built.push({kf:buildKeyframe(parseNpz(await grab(base+g.reference_path,'keyframes…')),shared,g.num_shared_statics||0),
-                      start:g.start_frame,end:g.end_frame,gop_id:g.gop_id,motion:null,F:0,sent:false,acked:false});
+      for(const sg of p.scene.gops)
+        p.built.push({kf:buildKeyframe(parseNpz(await grab(g,base+sg.reference_path,p.name+' — keyframe…')),shared,sg.num_shared_statics||0),
+                      start:sg.start_frame,end:sg.end_frame,gop_id:sg.gop_id,motion:null,F:0,sent:false,acked:false});
       flush(p);   // keyframes go out now; they are cloned, not transferred, so decode below still has them
     }
-    // Phase 2 — one decoder for every GOP of both scenes, then give the memory back.
-    //
-    // Interleaved by GOP index, NOT scene by scene. Playback is held at min(decodedEnd) across the
-    // panels, so draining one scene first would keep the timeline pinned at 0 until the other
-    // scene's GOP 0 landed. A no-op for the single-GOP scenes shipped today; kept because it is
-    // the shape that stays correct if a multi-GOP packing is dropped back in.
-    stage('loading decoder (ffmpeg.wasm, ~31 MB, one-time)…',6);
+    // Phase 2 — ONE decoder for every GOP on the page. Groups run in document order so the top
+    // comparison becomes playable first; within a group the loop is interleaved by GOP index, since
+    // playback is held at min(decodedEnd) across that group's panels and draining one scene first
+    // would pin its timeline at 0. (Interleaving is a no-op on the single-GOP scenes shipped today;
+    // it is the shape that stays correct if a multi-GOP packing is dropped back in.)
+    GROUPS.forEach((g,i)=>stage(g,i?'queued — decoding the comparison above first…':'loading decoder (ffmpeg.wasm, ~31 MB, one-time)…',6));
     let ff=await ffmpegReady(()=>{});
-    const maxG=PANES.reduce((n,p)=>Math.max(n,p.scene.gops.length),0);
-    const totalG=PANES.reduce((n,p)=>n+p.scene.gops.length,0);
+    const totalG=ALL.reduce((n,p)=>n+p.scene.gops.length,0);
     let nDone=0;
-    for(let gi=0;gi<maxG;gi++){
-      for(const p of PANES){
+    for(const g of GROUPS){
+      const maxG=g.panes.reduce((n,p)=>Math.max(n,p.scene.gops.length),0);
+      for(let gi=0;gi<maxG;gi++) for(const p of g.panes){
         if(gi>=p.scene.gops.length)continue;
-        const base=p.url.replace(/[^/]*$/,''),g=p.scene.gops[gi],tag=(p.id==='reg'?'with reg':'without reg');
-        const streams={xyz:{bytes:await grab(base+g.streams.xyz.path,`${tag} — GOP ${gi+1}/${p.scene.gops.length} xyz…`),meta:g.streams.xyz.meta},
-                       rot:{bytes:await grab(base+g.streams.rot.path,`${tag} — GOP ${gi+1}/${p.scene.gops.length} rot…`),meta:g.streams.rot.meta}};
-        stage(`decoding ${tag} — GOP ${gi+1}/${p.scene.gops.length}…`,Math.round(10+80*nDone/totalG));
+        const base=p.url.replace(/[^/]*$/,''),sg=p.scene.gops[gi],ng=p.scene.gops.length;
+        const tag=ng>1?`${p.name} — GOP ${gi+1}/${ng}`:p.name;
+        const streams={xyz:{bytes:await grab(g,base+sg.streams.xyz.path,tag+' — motion xyz…'),meta:sg.streams.xyz.meta},
+                       rot:{bytes:await grab(g,base+sg.streams.rot.path,tag+' — motion rot…'),meta:sg.streams.rot.meta}};
+        stage(g,'decoding '+tag+'…',Math.round(10+80*nDone/totalG));
         const r=await decodeMotionGopBundle(ff,streams,p.built[gi].kf);
-        // kf is kept, not freed: it is ~900 KB, and dropping it here would race a panel that says
-        // hello late and still needs its keyframe sent.
+        // kf is kept, not freed: dropping it here would race a panel that says hello late and
+        // still needs its keyframe sent.
         p.built[gi].motion=r.motion;p.built[gi].F=r.F;
         flush(p);
-        // Recycle the primary's wasm heap every 4 decodes, as the SMV loader does. Never fires at
-        // the 2 decodes the current scenes need; it is here so a multi-GOP packing doesn't run a
-        // long decode chain on one instance.
+        // Recycle the primary's wasm heap every 4 decodes, as the SMV loader does — this page now
+        // runs five sequential decodes on one instance.
         if(++nDone%4===0&&nDone<totalG)ff=await recreateFFmpeg(()=>{});
         await new Promise(res=>requestAnimationFrame(res));
       }
+      g.loaded=true;status(g);
     }
     await disposeFFmpeg();      // nothing downstream needs wasm again
-    loaded=true;status();
   }
-  boot().catch(e=>{console.error(e);loadMsg='✗ '+(e.message||e);status();all({type:'error',msg:String(e.message||e)});});
+  boot().catch(e=>{console.error(e);
+    GROUPS.forEach(g=>{g.loadMsg='✗ '+(e.message||e);status(g);});
+    everyone({type:'error',msg:String(e.message||e)});});
 
-  playBtn.onclick=()=>{playing=!playing;playBtn.textContent=playing?'❚❚ pause':'▶ play';lastT=0;acc=0;};
-  scrub.oninput=()=>{playing=false;playBtn.textContent='▶ play';setFrame(+scrub.value);};
-  resetBtn.onclick=()=>all({type:'resetView'});
+  for(const g of GROUPS){
+    g.el.play.onclick=()=>{g.playing=!g.playing;g.el.play.textContent=g.playing?'❚❚ pause':'▶ play';g.lastT=0;g.acc=0;};
+    g.el.scrub.oninput=()=>{g.playing=false;g.el.play.textContent='▶ play';setFrame(g,+g.el.scrub.value);};
+    g.el.reset.onclick=()=>gsend(g,{type:'resetView'});
+  }
 
   function tick(t){requestAnimationFrame(tick);
-    if(!total)return;
-    if(!playing){lastT=t;return;}
-    // Hold at the slower panel's decode frontier rather than advancing into undecoded motion,
-    // which would just freeze that panel on its static keyframe and desync the comparison.
-    const de=minBuffered();
-    acc+=(t-(lastT||t))/1000*FPS;lastT=t;
-    if(acc<1)return;
-    const adv=Math.floor(acc);acc-=adv;
-    if(de>=total)setFrame(gFrame+adv);
-    else if(de<=0)acc=0;
-    else{const nx=gFrame+adv;
-      if(nx<de)setFrame(nx);else if(gFrame<de-1)setFrame(de-1);else acc=0;}
+    for(const g of GROUPS){
+      if(!g.total||!g.playing){g.lastT=t;continue;}
+      // Hold at the slowest panel's decode frontier rather than advancing into undecoded motion,
+      // which would just freeze that panel on its keyframe and desync the comparison.
+      const de=minBuffered(g);
+      g.acc+=(t-(g.lastT||t))/1000*FPS;g.lastT=t;
+      if(g.acc<1)continue;
+      const adv=Math.floor(g.acc);g.acc-=adv;
+      if(de>=g.total)setFrame(g,g.gFrame+adv);
+      else if(de<=0)g.acc=0;
+      else{const nx=g.gFrame+adv;
+        if(nx<de)setFrame(g,nx);else if(g.gFrame<de-1)setFrame(g,de-1);else g.acc=0;}
+    }
   }
   requestAnimationFrame(tick);
 })();

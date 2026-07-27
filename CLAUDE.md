@@ -129,13 +129,33 @@ overlap, not the viewer.
 
 ## `projects/spdef/` — the side-by-side
 
-The SpDef page hosts a 1×2 comparison of the same D-NeRF *bouncingballs* sequence trained
-with and without the temporal regularizers (`xyz/rot_velocity_div_loss`,
-`xyz/rot_acceleration_loss`; the two runs' `deform_config.yaml` differ in nothing else).
-Both scenes are the **single-GOP** packing (`bundle_1_packed`): 150 frames, one keyframe,
-`overlap_frames = 0`. The 4-GOP packing (`bundle_4_packed`) was tried and rolled back — it
-demonstrates worse, since a GOP boundary is a hard cut between two independently-keyframed
-point clouds when overlap is 0. The loader stays multi-GOP-capable either way.
+The SpDef page hosts **two independent comparisons**, both driven by the one host script:
+
+1. **1×2, D-NeRF *bouncingballs*** — the same sequence trained with and without the temporal
+   regularizers (`xyz/rot_velocity_div_loss`, `xyz/rot_acceleration_loss`; the two runs'
+   `deform_config.yaml` differ in nothing else). 150 frames.
+2. **1×3, HyperNeRF *americano*** — a casual hand-held capture, showing knot count as a
+   regularizer: 33 knots (`spline_knot_ratio 0.2`, `temporal_capacity 13`) vs the full count
+   (`0.9` / `59`), plus full-count with `xyz/rot_velocity_div_loss` zeroed. 200 frames. Note
+   the *no-reg* run here zeroes only the velocity-divergence terms, not the acceleration ones
+   — unlike the bouncingballs pair, which zeroes both.
+
+All five scenes are the **single-GOP** packing: one keyframe, `overlap_frames = 0`. For
+bouncingballs the 4-GOP packing (`bundle_4_packed`) was tried and rolled back — it demonstrates
+worse, since a GOP boundary is a hard cut between two independently-keyframed point clouds when
+overlap is 0. The loader stays multi-GOP-capable either way.
+
+**Groups are the unit of synchronisation.** Clock and camera are per group — the two comparisons
+are different scenes with different frame counts, so linking them would be meaningless. The
+decoder and the view options are shared across the whole page. Adding a third comparison means
+one more entry in `GROUPS` plus its transport ids in the markup; nothing else changes.
+
+**The americano panels render `fit=square`.** The capture camera is 536×960 portrait; the panel
+ignores that aspect and renders the full square canvas at the *wider* of the two FoVs, so the
+view covers at least what the camera saw on both axes and more on the narrow one. That
+deliberately exposes reconstruction outside the filmed frustum, floaters included — it reads as
+3D instead of as a replay of the one supervised view. Without `fit=square` the panel letterboxes
+to the camera, which is what bouncingballs (already square, 800×800) still does.
 
 - `viewer.html` is **one panel**, not a copy of the SMV viewer: render core only, no picker,
   no monitor, no view-option panel. It takes `?scene=&id=` and is driven entirely from the
@@ -259,6 +279,8 @@ conda run -n 4dre python ~/4d-relight/web/player_browser/build_web_bundle.py \
   --name spdef1_reg --no-index \
   --scene_config /cluster/scratch/misong/4dre/dnerf/bouncingballs/scene_config.yaml \
   --source_path /cluster/scratch/misong/datasets/dnerf/bouncingballs
+# americano is the same, from /cluster/scratch/misong/4dre/hyper/misc/<run>/bundle_single_packed
+# with that run's scene_config.yaml and --source_path .../datasets/hypernerf/misc/americano/
 # then move web/player_browser/scenes/<name>/ -> projects/spdef/scenes/bouncingballs_reg/
 # and set scene.json's "name" to the destination folder (the --name is only a build handle)
 ```
