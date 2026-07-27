@@ -264,6 +264,10 @@ to the camera, which is what bouncingballs (already square, 800×800) still does
   point cloud, so the two panels would end up with different world-up axes and the comparison
   would no longer be the same view of the same thing. The held-out test camera is used
   verbatim, and `build_web_bundle.py` embeds an identical one in both scenes.
+- **Opening elevation is per panel, via `?elev=` degrees** (default 20; americano uses 10 —
+  the same angle reads as far more tilt on a close hand-held capture than on a synthetic
+  turntable at distance 4). The view is orbited about the world origin, which both cameras aim
+  near, so distance and framing are preserved.
 - **`worldUp` is therefore derived from the test camera** (`-vrot(camquat,[0,1,0])` in
   `frameScene()`), not left at the renderer's hardcoded `[0,-1,0]`. D-NeRF's world frame is
   Z-up: that default is ~81° off the camera's up and 0.96 aligned with its *forward*, so Q/E

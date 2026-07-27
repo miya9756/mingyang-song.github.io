@@ -214,9 +214,12 @@ function sortSplats(view){if(!depthIndex||depthIndex.length!==N)depthIndex=new U
 
 // ===== camera =====
 const worldUp=[0,-1,0];let camPos=[0,0,0],camQ=[1,0,0,0],radius=10,speed=5;
-// Opening elevation above the dataset camera, which sits exactly on the scene's equator. One
-// number to tune the initial framing; 0 restores the test camera verbatim. Applied in frameScene().
-const CAM_ELEV=20*Math.PI/180;
+// Opening elevation above the dataset camera, in degrees, from ?elev= (default 20). Per panel
+// because the right amount depends on the capture: bouncingballs is a synthetic turntable at
+// distance 4, americano a close hand-held capture at distance 1, where the same angle reads as far
+// more tilt. 0 restores the test camera verbatim. Applied in frameScene().
+const _elev=parseFloat(Q.get('elev'));
+const CAM_ELEV=(Number.isFinite(_elev)?_elev:20)*Math.PI/180;
 function vrot(q,v){const[w,x,y,z]=q,[a,b,c]=v;const ix=w*a+y*c-z*b,iy=w*b+z*a-x*c,iz=w*c+x*b-y*a,iw=-x*a-y*b-z*c;return[ix*w+iw*-x+iy*-z-iz*-y,iy*w+iw*-y+iz*-x-ix*-z,iz*w+iw*-z+ix*-y-iy*-x];}
 function qmul(a,b){const[aw,ax,ay,az]=a,[bw,bx,by,bz]=b;return[aw*bw-ax*bx-ay*by-az*bz,aw*bx+ax*bw+ay*bz-az*by,aw*by-ax*bz+ay*bw+az*bx,aw*bz+ax*by-ay*bx+az*bw];}
 function qaxis(ax,an){const h=an/2,s=Math.sin(h);return[Math.cos(h),ax[0]*s,ax[1]*s,ax[2]*s];}
