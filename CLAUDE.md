@@ -206,6 +206,23 @@ to the camera, which is what bouncingballs (already square, 800×800) still does
   - *A panel that is alive but never installed its keyframe* gets the keyframe re-sent rather
     than the whole frame reloaded — cheaper, and it keeps the GL context and any motion already
     delivered.
+  - *A hung fetch.* **This was the real cause of the recurring "only 1 of 2 / 2 of 3 canvases,
+    and I cannot play".** A CDN request that hangs rather than fails leaves `await rd.read()`
+    pending for ever; panels were loaded in sequence, so one hung fetch rendered every earlier
+    panel and left every later one blank permanently — a prefix, which is the reported shape.
+    Nothing recovered, because those panels *had* said hello and were simply never sent anything,
+    and play stayed disabled because `minBuffered()` sat at 0. Fixes, all in `grab()` and
+    `loadGroup()`: an **idle** timeout (no-progress, not total-duration, so slow-but-alive is
+    fine) with cache-busted retries; panels fetched **concurrently** so one cannot block the
+    others; and per-panel failure isolation, so a dead panel costs only itself and the rest of the
+    comparison stays playable.
+  - *Any other unbounded await.* `ffmpegReady()` (a ~32 MB fetch) and `decodeMotionGopBundle()`
+    (a worker round-trip) are wrapped in `withTimeout`. On a decoder timeout the retry must go
+    through `recreateFFmpeg()`, since `ffmpegReady()` caches its in-flight promise and would
+    otherwise hand back the same hung one.
+  - *A backgrounded tab.* The decode loop yielded with bare `requestAnimationFrame`, which never
+    fires while hidden — pressing Load and switching tabs froze it mid-group. `yieldFrame()`
+    races rAF against a `setTimeout`.
   - `status()` names a panel that has not come up. Silence is what made these look like a
     rendering bug rather than a frame that never loaded.
   - Watchdog timers run from the moment a group is **started**, not from page load — with

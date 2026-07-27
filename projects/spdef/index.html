@@ -377,7 +377,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       // `src` is captured from the markup so the watchdog can reload a frame without duplicating
       // the query string here; `tries` bounds those reloads.
       p.g=g;p.fr=_ctl(p.frId);p.box=p.fr.parentElement;p.frames=0;p.buffered=0;p.splats=0;
-      p.alive=false;p.ready=false;p.sentKf=false;p.kfAt=0;p.kfRetries=0;p.built=null;p.scene=null;
+      p.alive=false;p.ready=false;p.failed=false;p.sentKf=false;p.kfAt=0;p.kfRetries=0;p.built=null;p.scene=null;
       p.src=p.fr.getAttribute('data-src');p.tries=0;p.t0=0;
       byId.set(p.id,p);ALL.push(p);
     }
@@ -390,7 +390,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     try{w.postMessage(Object.assign({ch:'spdef',to:p.id},m),location.origin,tr||[]);return true;}catch(e){return false;}};
   const gsend=(g,m)=>g.panes.forEach(p=>send(p,m));
   const everyone=m=>ALL.forEach(p=>send(p,m));
-  const minBuffered=g=>g.panes.reduce((n,p)=>Math.min(n,p.buffered),Infinity);
+  // A panel that could not be loaded at all is excluded from the group's gating, so one dead
+  // panel leaves the rest of the comparison playable instead of disabling the whole transport.
+  const livePanes=g=>g.panes.filter(p=>!p.failed);
+  const minBuffered=g=>{const L=livePanes(g);
+    return L.length?L.reduce((n,p)=>Math.min(n,p.buffered),Infinity):0;};
 
   function setFrame(g,f){if(!g.total)return;g.gFrame=((f%g.total)+g.total)%g.total;
     g.el.scrub.value=g.gFrame;g.el.lbl.textContent='frame '+g.gFrame+' / '+(g.total-1);
@@ -422,12 +426,14 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   function stage(g,label,pct){g.loadMsg=label;gsend(g,{type:'stage',label,pct});status(g);}
   function status(g){
     if(!g.started){g.el.status.textContent='Not loaded — press “Load” to fetch and decode this comparison in your browser.';return;}
-    if(g.loaded&&g.panes.every(p=>p.ready)){const s=g.panes.reduce((a,p)=>Math.max(a,p.splats),0);
-      g.el.status.textContent=g.total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.';
+    const dead=g.panes.filter(p=>p.failed).map(p=>p.name);
+    if(g.loaded&&livePanes(g).every(p=>p.ready)){const s=g.panes.reduce((a,p)=>Math.max(a,p.splats),0);
+      g.el.status.textContent=g.total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.'
+        +(dead.length?'  ·  ✗ '+dead.join(', ')+' failed to load — reload the page to retry.':'');
       return;}
     // Name a panel that has not come up. Silence here is what made the CDN failures look like
     // "the canvas just didn't render" instead of "that frame never loaded".
-    const late=g.panes.filter(p=>!p.alive).map(p=>p.name);
+    const late=livePanes(g).filter(p=>!p.alive).map(p=>p.name);
     g.el.status.textContent=g.loadMsg+(late.length?'  ·  waiting for '+late.join(', ')+' to start…':'');
   }
 
@@ -473,7 +479,8 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     else if(m.type==='ready'){
       p.frames=m.frames;p.splats=m.splats;p.ready=true;
       // Same sequence across a group; if they ever aren't, the shortest bounds that timeline.
-      if(g.panes.every(q=>q.frames>0)){g.total=g.panes.reduce((n,q)=>Math.min(n,q.frames),Infinity);
+      const L=livePanes(g);
+      if(L.length&&L.every(q=>q.frames>0)){g.total=L.reduce((n,q)=>Math.min(n,q.frames),Infinity);
         g.el.scrub.max=g.total-1;g.el.scrub.disabled=false;setFrame(g,0);}
       status(g);
     }
@@ -509,11 +516,57 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     if(p.built.every(b=>b.sent))send(p,{type:'hide'});
   }
 
-  async function grab(g,url,label){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status+' '+url);
-    const totalB=+r.headers.get('content-length')||0,rd=r.body.getReader(),chunks=[];let recv=0;
-    for(;;){const{done,value}=await rd.read();if(done)break;chunks.push(value);recv+=value.length;
-      stage(g,label,totalB?recv/totalB*100:null);}
-    const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}return out;}
+  // Every fetch on this page gets an IDLE timeout and retries.
+  //
+  // This is the bug behind "only 1 of 2 / 2 of 3 canvases loaded, and I cannot play". A CDN request
+  // that hangs rather than failing leaves `await rd.read()` pending for ever. Panels used to be
+  // loaded strictly in order, so one hung fetch rendered every earlier panel and left every later
+  // one blank permanently — a prefix, which is exactly the reported shape. Nothing recovered: those
+  // panels HAD said hello, so the reload watchdog correctly left them alone; they were simply never
+  // sent anything. And play stayed disabled because minBuffered() sat at 0.
+  //
+  // The timeout is on *no progress*, not on total duration, so a genuinely slow large file is fine
+  // while a stalled connection is aborted and retried.
+  const FETCH_IDLE_MS=20000, FETCH_TRIES=3;
+  async function grab(g,url,label){
+    let lastErr;
+    for(let attempt=1;attempt<=FETCH_TRIES;attempt++){
+      const ac=new AbortController();let timer=0;
+      const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>ac.abort(),FETCH_IDLE_MS);};
+      // cache-bust the retry: a hung or truncated response must not be served back from cache
+      const u=attempt>1?url+(url.indexOf('?')<0?'?':'&')+'retry='+attempt:url;
+      try{
+        arm();
+        const r=await fetch(u,{signal:ac.signal,cache:attempt>1?'reload':'default'});
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        const totalB=+r.headers.get('content-length')||0,rd=r.body.getReader(),chunks=[];let recv=0;
+        for(;;){const{done,value}=await rd.read();if(done)break;
+          arm();                                   // progress — restart the idle clock
+          chunks.push(value);recv+=value.length;
+          stage(g,label+(attempt>1?' (retry '+attempt+')':''),totalB?recv/totalB*100:null);}
+        clearTimeout(timer);
+        const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}
+        return out;
+      }catch(e){
+        clearTimeout(timer);lastErr=e;
+        if(attempt<FETCH_TRIES){stage(g,label+' — retrying…',null);await sleep(400*attempt);}
+      }
+    }
+    throw new Error((lastErr&&lastErr.message||lastErr)+' — '+url);
+  }
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  // Guards the two awaits in the load path that carry no timeout of their own: ffmpegReady()
+  // fetches the ~32 MB core, and decodeMotionGopBundle() round-trips a worker. Either hanging
+  // would stall the group with no way back — the same class of failure as the hung fetch above.
+  function withTimeout(promise,ms,what){
+    let t;const guard=new Promise((_,rej)=>{t=setTimeout(()=>rej(new Error(what+' timed out')),ms);});
+    return Promise.race([promise,guard]).finally(()=>clearTimeout(t));
+  }
+  async function grabJSON(g,url,label){return JSON.parse(new TextDecoder().decode(await grab(g,url,label)));}
+  // rAF alone stalls for ever in a backgrounded tab, which froze the decode loop mid-group if you
+  // pressed Load and switched away. Whichever fires first wins.
+  const yieldFrame=()=>new Promise(res=>{const t=setTimeout(res,250);
+    requestAnimationFrame(()=>{clearTimeout(t);res();});});
 
   // ---- on-demand loading --------------------------------------------------
   // Nothing loads until its Load button is pressed. Five panels is ~11 MB of scenes, five WebGL
@@ -554,44 +607,68 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   }
 
   async function loadGroup(g){
-    // Keyframes first for every panel in the group — no decoder involved, so they are on screen
-    // and orbitable before the core is fetched.
-    for(const p of g.panes){
-      const base=p.url.replace(/[^/]*$/,'');
-      p.scene=await (await fetch(p.url)).json();
-      let shared=null;
-      if(p.scene.has_shared_statics&&p.scene.shared_statics_path)
-        shared=decodeShared(parseNpz(await grab(g,base+p.scene.shared_statics_path,'shared statics\u2026')));
-      p.built=[];
-      for(const sg of p.scene.gops)
-        p.built.push({kf:buildKeyframe(parseNpz(await grab(g,base+sg.reference_path,p.name+' \u2014 keyframe\u2026')),shared,sg.num_shared_statics||0),
-                      start:sg.start_frame,end:sg.end_frame,gop_id:sg.gop_id,motion:null,F:0,sent:false,acked:false});
-      flush(p);   // keyframes go out now; they are cloned, not transferred, so decode below still has them
+    // Keyframes first for every panel — no decoder involved, so they are on screen and orbitable
+    // before the core is fetched.
+    //
+    // Fetched CONCURRENTLY, and each panel's failure is isolated. Loading them in sequence meant
+    // one slow or dead panel blocked every panel after it (head-of-line blocking); one bad fetch
+    // now costs only its own panel, and the rest of the comparison still works.
+    const got=await Promise.all(g.panes.map(async p=>{
+      try{
+        const base=p.url.replace(/[^/]*$/,'');
+        p.scene=await grabJSON(g,p.url,p.name+' \u2014 manifest\u2026');
+        let shared=null;
+        if(p.scene.has_shared_statics&&p.scene.shared_statics_path)
+          shared=decodeShared(parseNpz(await grab(g,base+p.scene.shared_statics_path,'shared statics\u2026')));
+        const refs=[];
+        for(const sg of p.scene.gops)refs.push(await grab(g,base+sg.reference_path,p.name+' \u2014 keyframe\u2026'));
+        return {p,shared,refs};
+      }catch(e){console.error('[spdef]',p.name,e);return {p,err:e};}
+    }));
+    for(const r of got){
+      if(r.err){r.p.failed=true;send(r.p,{type:'error',msg:String(r.err.message||r.err)});continue;}
+      // buildKeyframe is synchronous and heavy, so it runs after the fetches, not during them
+      r.p.built=r.p.scene.gops.map((sg,i)=>({kf:buildKeyframe(parseNpz(r.refs[i]),r.shared,sg.num_shared_statics||0),
+        start:sg.start_frame,end:sg.end_frame,gop_id:sg.gop_id,motion:null,F:0,sent:false,acked:false}));
+      flush(r.p);   // keyframes go out now; they are cloned, not transferred, so decode below still has them
     }
+    if(g.panes.every(p=>p.failed))throw new Error('no panel in this comparison could be loaded');
     // Then motion, interleaved by GOP index across this group's panels: playback is held at
     // min(decodedEnd) over the group, so draining one scene first would pin its timeline at 0.
     // (A no-op on the single-GOP scenes shipped today; it is the shape that stays correct if a
     // multi-GOP packing is dropped back in.)
     stage(g,'loading decoder (ffmpeg.wasm, ~31 MB, one-time)\u2026',6);
-    let ff=await ffmpegReady(()=>{});
-    const maxG=g.panes.reduce((n,p)=>Math.max(n,p.scene.gops.length),0);
-    const totalG=g.panes.reduce((n,p)=>n+p.scene.gops.length,0);
+    let ff;
+    try{ff=await withTimeout(ffmpegReady(()=>{}),150000,'decoder download');}
+    catch(e){
+      // ffmpegReady caches its in-flight promise, so a hung load can only be retried by resetting
+      // it — recreateFFmpeg() is what clears _loading.
+      console.error('[spdef]',e);stage(g,'decoder stalled \u2014 retrying\u2026',6);
+      ff=await withTimeout(recreateFFmpeg(()=>{}),150000,'decoder download');}
+    const okPanes=g.panes.filter(p=>!p.failed);
+    const maxG=okPanes.reduce((n,p)=>Math.max(n,p.scene.gops.length),0);
+    const totalG=okPanes.reduce((n,p)=>n+p.scene.gops.length,0);
     let nDone=0;
     for(let gi=0;gi<maxG;gi++) for(const p of g.panes){
-      if(gi>=p.scene.gops.length)continue;
+      if(p.failed||gi>=p.scene.gops.length)continue;
       const base=p.url.replace(/[^/]*$/,''),sg=p.scene.gops[gi],ng=p.scene.gops.length;
       const tag=ng>1?p.name+' \u2014 GOP '+(gi+1)+'/'+ng:p.name;
       const streams={xyz:{bytes:await grab(g,base+sg.streams.xyz.path,tag+' \u2014 motion xyz\u2026'),meta:sg.streams.xyz.meta},
                      rot:{bytes:await grab(g,base+sg.streams.rot.path,tag+' \u2014 motion rot\u2026'),meta:sg.streams.rot.meta}};
       stage(g,'decoding '+tag+'\u2026',Math.round(10+80*nDone/totalG));
-      const r=await decodeMotionGopBundle(ff,streams,p.built[gi].kf);
+      let r;
+      try{r=await withTimeout(decodeMotionGopBundle(ff,streams,p.built[gi].kf),150000,'motion decode');}
+      catch(e){console.error('[spdef] decode failed for',p.name,e);
+        p.failed=true;send(p,{type:'error',msg:'motion decode failed'});
+        ff=await recreateFFmpeg(()=>{});                 // the heap may be poisoned; start clean
+        continue;}
       // kf is kept, not freed: dropping it here would race a panel that says hello late and
       // still needs its keyframe sent.
       p.built[gi].motion=r.motion;p.built[gi].F=r.F;
       flush(p);
       // Recycle the primary's wasm heap every 4 decodes, as the SMV loader does.
       if(++nDone%4===0&&nDone<totalG)ff=await recreateFFmpeg(()=>{});
-      await new Promise(res=>requestAnimationFrame(res));
+      await yieldFrame();
     }
     g.loaded=true;g.el.load.style.display='none';status(g);
   }
