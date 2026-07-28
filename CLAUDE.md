@@ -354,4 +354,6 @@ camera or the side-by-side stops being a comparison.
 - This is a **public site**: ship only publishable content. The D-NeRF scenes are
   synthetic; `neur3d` has human faces and must never be committed.
 - Citation/paper metadata lives inline in `projects/smv/index.html` (search `citeAcm`
-  / `citeBib`).
+  / `citeBib`). The SpDef page carries its own `citeAcm`/`citeBib` plus a **Datasets**
+  section crediting D-NeRF and HyperNeRF — the two it actually uses. Those citations are
+  verbatim copies of the SMV viewer's; keep them in sync if either is corrected.

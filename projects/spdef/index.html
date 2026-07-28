@@ -151,6 +151,13 @@
   pre{margin:0;padding:14px;overflow-x:auto;font:12.5px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
       color:var(--ink);white-space:pre-wrap;word-break:break-word}
   .paper{font-size:14px;color:var(--muted);margin:0 0 18px;line-height:1.7}
+  /* Dataset attribution. Same content and wording as the SMV viewer's Datasets block, in this
+     page's cool palette and card chrome — only the two datasets actually used here. */
+  .ack{margin:0 0 12px;font-size:13.5px;color:var(--muted);max-width:78ch}
+  .datacard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .ref{margin:0;font-size:12.5px;line-height:1.7;color:var(--muted)}
+  .ref strong{color:var(--ink);font-weight:600}
+  .ref+.ref{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
   footer{border-top:1px solid var(--line);margin-top:20px;padding:26px 0 48px;color:var(--muted);font-size:13px}
 
   @media(prefers-reduced-motion:reduce){
@@ -316,6 +323,17 @@
   location  = {Vancouver, BC, Canada},
   series    = {SIGGRAPH Conference Papers '25}
 }</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Datasets</h2>
+    <p class="ack">The sequences reconstructed above come from open-source dynamic-scene datasets, used here for research demonstration. Please cite the original authors:</p>
+    <div class="datacard">
+      <p class="ref"><strong><a href="https://www.albertpumarola.com/research/D-NeRF/index.html" target="_blank" rel="noopener">D-NeRF</a></strong> — synthetic dynamic scenes; <em>bouncingballs</em> above.<br>
+      Albert Pumarola, Enric Corona, Gerard Pons-Moll, and Francesc Moreno-Noguer. 2021. D-NeRF: Neural Radiance Fields for Dynamic Scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR).</p>
+      <p class="ref"><strong><a href="https://hypernerf.github.io/" target="_blank" rel="noopener">HyperNeRF</a></strong> — casually captured real-world scenes; <em>americano</em> above.<br>
+      Keunhong Park, Utkarsh Sinha, Peter Hedman, Jonathan T. Barron, Sofien Bouaziz, Dan B Goldman, Ricardo Martin-Brualla, and Steven M. Seitz. 2021. HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields. ACM Transactions on Graphics (Proc. SIGGRAPH Asia) 40, 6 (2021).</p>
     </div>
   </section>
 </main>
