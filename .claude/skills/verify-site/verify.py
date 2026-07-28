@@ -27,7 +27,7 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
-         "projects/spdef/viewer.html"]
+         "projects/spdef/viewer.html", "projects/grain/index.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
@@ -109,6 +109,9 @@ def check_dom_ids(page, src):
                 r"_ctl\(\s*['\"]([^'\"]+)['\"]",
                 r"_gate\(\s*['\"]([^'\"]+)['\"]",
                 r"querySelector\(\s*['\"]#([\w-]+)['\"]",
+                # the grain page's `$` is getElementById under a shorter name; without this its
+                # ~30 element lookups are invisible here and a deleted element throws on load
+                r"\$\(\s*['\"]([A-Za-z][\w-]*)['\"]\s*\)",
                 # ids named in the SpDef host's GROUPS config rather than passed to _ctl() directly
                 r"(?:load|play|scrub|lbl|reset|status|frId)\s*:\s*['\"]([A-Za-z][\w-]*)['\"]"):
         refs |= set(re.findall(pat, src))

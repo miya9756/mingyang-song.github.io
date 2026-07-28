@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Camera Noise Synthesis</title>
+<link rel="icon" type="image/png" sizes="64x64" href="../../assets/web_icon.png">
+<link rel="apple-touch-icon" href="../../assets/web_icon.png">
+<meta name="description" content="Digital Camera Noise Synthesis — a generative camera-noise model, distilled into a per-channel intensity/variance curve and a spatial correlation kernel you can drive live in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="theme-color" content="#f2f3f4"><!-- must track --bg; Safari tints its chrome from this -->
+
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  /* Third palette in the family. SMV is warm paper, SpDef is its cool counterpart; this one is
+     neutral graphite with a single darkroom-safelight amber, because the page's real colours are
+     the R/G/B chart series and the photographs — an accent with any hue of its own would compete
+     with both. Same bones as the other two on purpose (Fraunces display serif, the back pill, card
+     chrome, spacing rhythm, section order), so only the temperature changes between project pages. */
+  :root{
+    /* Fixed light palette, so pin color-scheme rather than leaving it `normal` — otherwise the UA
+       canvas, scrollbars, form controls and Safari's overscroll area stay white while the page is
+       tinted. Keep the theme-color meta above in sync with --bg. */
+    color-scheme:light;
+    --bg:#f2f3f4; --surface:#ffffff; --panel-2:#eaecee; --ink:#16181a; --muted:#5c6266;
+    --line:#d9dcdf; --accent:#a85a12; --accent-fg:#fff; --shadow:rgba(20,25,30,.13);
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    /* chart roles, kept as their own tokens: they were validated against this light surface as a
+       set, so retuning the page palette must not silently drag the series colours with it */
+    --surface-1:#fcfcfb; --text-primary:#0b0b0b; --text-secondary:#52514e; --grid:#e3e5e9;
+    --series-r:#e34948; --series-g:#008300; --series-b:#2a78d6;
+  }
+  *{box-sizing:border-box}
+  /* background on html too — only html's paints the overscroll area Safari rubber-bands into */
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .inner{max-width:1180px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{background:linear-gradient(180deg,#fafbfb,#eff1f2);border-bottom:1px solid var(--line);padding:32px 0 26px}
+  /* back to the personal site. '../../' not an absolute path, so it resolves correctly whether
+     the site is served from a user-site root or a project-site subpath. */
+  .back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:rgba(255,255,255,.6);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:#fff;text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+
+  h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(30px,4.4vw,46px);line-height:1.05;letter-spacing:-.018em;color:var(--ink)}
+  .subtitle{margin:10px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
+            font-size:clamp(15px,2vw,21px);color:var(--ink);opacity:.9;line-height:1.25}
+  .byline{margin:16px 0 0;font-size:13.5px;line-height:1.8;color:var(--muted)}
+  .byline .authors{color:var(--ink);font-weight:500}
+  .byline .affil{display:block;font-size:12px}
+  .byline sup{color:var(--accent);font-size:.7em;padding:0 1px}
+  .byline .authors a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);
+                     transition:color .16s,border-color .16s}
+  .byline .authors a:hover{color:var(--accent);border-color:var(--accent)}
+
+  main{padding:30px 0 20px}
+  section{margin:0 0 40px}
+  h2{font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;margin:0 0 14px;color:var(--ink)}
+  h3{font-family:'Fraunces',Georgia,serif;font-size:16.5px;font-weight:600;margin:0 0 6px;color:var(--ink)}
+  .lede{margin:0 0 16px;font-size:14.5px;color:var(--muted);max-width:78ch}
+  .lede em{font-style:normal;font-weight:600;color:var(--ink)}
+  .hint{margin:9px 0 0;font-size:12.5px;color:var(--muted)}
+  .hint em{font-style:normal;font-weight:600;color:var(--ink)}
+  code{font-family:var(--mono);font-size:.9em}
+
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+
+  /* Playground layout: a fixed-width control column beside a viewer that takes the rest. The
+     column is sized to the widest control row rather than to a fraction, so the sliders keep the
+     same length as the viewer grows. One column below 900px, where a 316px rail would leave the
+     image too narrow to judge grain in. */
+  .work{display:grid;grid-template-columns:316px minmax(0,1fr);gap:16px;align-items:start}
+  @media(max-width:900px){.work{grid-template-columns:1fr}}
+  .controls{display:flex;flex-direction:column;gap:13px}
+  fieldset{border:1px solid var(--line);border-radius:9px;padding:12px;margin:0;
+           display:flex;flex-direction:column;gap:12px}
+  legend{padding:0 6px;font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .field>label{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+               display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row.tight{grid-template-columns:1fr auto;gap:8px;align-items:end}
+  select,input[type=number]{width:100%;padding:7px 9px;background:var(--panel-2);color:var(--ink);
+                            border:1px solid var(--line);border-radius:7px;font:inherit}
+  button{font:inherit;border-radius:7px;cursor:pointer;border:1px solid var(--line);
+         transition:color .14s,border-color .14s,background-color .14s}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .ghost{background:var(--panel-2);color:var(--ink);padding:7px 11px}
+  .ghost:not(:disabled):hover{color:var(--accent);border-color:var(--accent)}
+  .dice{padding:7px 10px}
+  /* Choose is the primary action here, so it is a filled variant of .ghost. It MUST come after the
+     .ghost rules — same specificity, so source order alone decides which hover colour wins, and
+     the base rule would otherwise repaint the label to the accent on top of the accent fill. */
+  .prim,.prim:not(:disabled):hover{color:var(--accent-fg)}
+  .prim{background:var(--accent);border-color:var(--accent)}
+  .prim:not(:disabled):hover{background:#8e4a0d;border-color:#8e4a0d}
+  .drop{border:1px dashed var(--line);border-radius:9px;padding:12px;background:var(--panel-2);
+        display:flex;flex-direction:column;gap:7px}
+  .drop.over{border-color:var(--accent)}
+  .note{margin:0;font-size:.75rem;color:var(--muted)}
+  .muted{color:var(--muted);font-weight:400}
+  .status{margin:0;font-size:.82rem;color:var(--muted);min-height:1.3em}
+  .status.err{color:#c0392b}
+
+  /* Viewer. The wipe is the whole point of the panel, so it sits on black and goes edge to edge:
+     grain is judged against the image next to it, not against page furniture. */
+  .viewer{display:flex;flex-direction:column;gap:10px}
+  .stage{position:relative;background:var(--panel-2);border-radius:9px;overflow:hidden;min-height:300px;
+         display:flex;align-items:center;justify-content:center}
+  .placeholder{color:var(--muted);font-size:.9rem;padding:40px 20px;text-align:center;margin:0}
+  .stage:not(.empty) .placeholder{display:none}
+  .wipe{position:relative;width:100%;user-select:none;touch-action:none;cursor:ew-resize;line-height:0;background:#000}
+  .wipe canvas{display:block;width:100%;height:auto}
+  .wipe .wipe-top{position:absolute;inset:0;clip-path:inset(0 0 0 50%)}
+  .wipe .wipe-bar{position:absolute;top:0;left:50%;width:2px;height:100%;background:#fff;
+                  box-shadow:0 0 5px rgba(0,0,0,.7);transform:translateX(-50%);pointer-events:none}
+  .ptag{position:absolute;top:8px;color:#fff;font:600 11px/1 Inter,system-ui,sans-serif;
+        text-shadow:0 1px 3px #000;pointer-events:none}
+  .ptag-l{left:10px} .ptag-r{right:10px}
+  .fs{position:absolute;right:8px;bottom:8px;width:30px;height:30px;padding:0;border:none;border-radius:6px;
+      background:rgba(0,0,0,.55);color:#fff;font-size:15px}
+  /* Busy state. The synthesis loop blocks the main thread, so this cannot be a spinner that keeps
+     spinning — it is painted once, before the loop starts, and taken down after. That is why the
+     bar sweeps on a CSS animation (the compositor keeps it moving while JS is busy) rather than on
+     anything driven from script, which would freeze on the first frame. */
+  .busybar{position:absolute;top:0;left:0;right:0;height:2px;overflow:hidden;z-index:4;
+           opacity:0;transition:opacity .18s;pointer-events:none}
+  .stage.busy .busybar{opacity:1}
+  .busybar::after{content:"";position:absolute;top:0;height:100%;width:38%;left:-40%;
+                  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+                  animation:sweep 1.05s ease-in-out infinite}
+  @keyframes sweep{to{left:100%}}
+  .working{position:absolute;left:10px;bottom:10px;z-index:4;margin:0;display:none;
+           align-items:center;gap:7px;padding:5px 11px 5px 9px;border-radius:999px;
+           background:rgba(8,10,12,.66);color:#fff;font:600 11.5px/1 Inter,system-ui,sans-serif;
+           letter-spacing:.01em;pointer-events:none;backdrop-filter:blur(2px)}
+  .stage.busy .working{display:inline-flex}
+  .working::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);
+                   flex:none;animation:throb 1.05s ease-in-out infinite}
+  @keyframes throb{0%,100%{opacity:.35;transform:scale(.75)}50%{opacity:1;transform:scale(1.15)}}
+  /* While a frame is being rebuilt the canvas under it is the *previous* one, which is misleading
+     on a preset change. Half a step of desaturation says "stale" without hiding it. */
+  .stage.busy .wipe{filter:saturate(.72) brightness(.9)}
+  .wipe{transition:filter .18s}
+  .wipe:fullscreen{width:100vw;height:100vh;background:#000}
+  .wipe:fullscreen canvas{width:100%;height:100%;object-fit:contain}
+  .viewer-bar{display:flex;align-items:center;gap:10px;font-size:.82rem}
+  #timing{font-family:var(--mono);font-size:.74rem;font-variant-numeric:tabular-nums;color:var(--muted)}
+  .spacer{flex:1}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .seg-btn{border:none;border-radius:0;background:var(--panel-2);color:var(--muted);padding:6px 12px;font-size:.84rem}
+  .seg-btn+.seg-btn{border-left:1px solid var(--line)}
+  .seg-btn.active{background:var(--accent);color:var(--accent-fg)}
+
+  /* Charts. Both are canvas, so identity is never colour alone: every series is also labelled at
+     its right-hand end and repeated in a <details> table for anyone the canvas fails. */
+  .charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px;margin-top:16px}
+  .chart{margin:0;background:var(--surface-1)}
+  .chart figcaption h3{margin:0 0 3px}
+  .chart figcaption p{margin:0 0 10px;font-size:.8rem;color:var(--text-secondary)}
+  .chart canvas{width:100%;height:auto;display:block}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:.78rem;color:var(--text-secondary)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+  details{margin-top:8px;font-size:.78rem;color:var(--text-secondary)}
+  summary{cursor:pointer}
+  .table-wrap{overflow-x:auto;margin-top:6px}
+  table{border-collapse:collapse;font-size:.74rem;font-variant-numeric:tabular-nums}
+  th,td{border:1px solid var(--line);padding:3px 7px;text-align:right;white-space:nowrap}
+  th{color:var(--text-secondary);font-weight:600}
+
+  .eq{margin:0 0 16px;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:12px;
+      font-family:var(--mono);font-size:13.5px;line-height:1.9;color:var(--ink);overflow-x:auto}
+  .eq .gloss{display:block;font-family:Inter,sans-serif;font-size:12.5px;color:var(--muted);margin-top:6px}
+
+  .citebox{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+  /* second half of the Citation section. The gap does the separating — a rule here would read as
+     a section break, and citing the page is a footnote to citing the paper, not a peer of it. */
+  .citesub{margin:26px 0 8px}
+  .citehd{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;
+          border-bottom:1px solid var(--line);font-size:11.5px;font-weight:600;letter-spacing:.06em;
+          text-transform:uppercase;color:var(--muted)}
+  .copybtn{font:inherit;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+           padding:4px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);
+           color:var(--muted);cursor:pointer;transition:color .16s,border-color .16s}
+  .copybtn:hover{color:var(--accent);border-color:var(--accent)}
+  pre{margin:0;padding:14px;overflow-x:auto;font:12.5px/1.7 var(--mono);color:var(--ink);
+      white-space:pre-wrap;word-break:break-word}
+  .paper{font-size:14px;color:var(--muted);margin:0 0 18px;line-height:1.7}
+  .ack{margin:0 0 12px;font-size:13.5px;color:var(--muted);max-width:78ch}
+  .datacard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .ref{margin:0;font-size:12.5px;line-height:1.7;color:var(--muted)}
+  .ref strong{color:var(--ink);font-weight:600}
+  .ref+.ref{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  footer{border-top:1px solid var(--line);margin-top:20px;padding:26px 0 48px;color:var(--muted);font-size:13px}
+
+  :where(button,select,input,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){
+    .back,.back .barrow,.byline .authors a,button,.wipe{transition:none}
+    .back:hover .barrow{transform:none}
+    /* The busy state still has to be legible without motion, so the sweep becomes a static bar
+       and the pulsing dot a steady one — the pill's text is doing the work either way. */
+    .busybar::after{animation:none;left:0;width:100%;opacity:.6;background:var(--accent)}
+    .working::before{animation:none;opacity:1;transform:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <a class="back" href="../../"><span class="barrow" aria-hidden="true">←</span> Mingyang Song</a>
+    <h1>Digital Camera Noise Synthesis</h1>
+    <p class="subtitle">What a camera’s grain actually looks like — measured, and put back on your own photographs.</p>
+    <div class="byline">
+      <span class="authors">Mingyang Song<sup>1,2</sup>, <a href="https://scholar.google.com/citations?user=gwP_ARgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Yang Zhang</a><sup>2</sup>, <a href="https://scholar.google.com/citations?user=E0fxZeUAAAAJ&amp;hl=en" target="_blank" rel="noopener">Tun&ccedil; O. Ayd&#305;n</a><sup>2</sup>, Elham Amin Mansour<sup>1,2</sup>, <a href="https://scholar.google.com/citations?user=j0nCulgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Christopher Schroers</a><sup>2</sup></span>
+      <span class="affil"><sup>1</sup>ETH Zürich, Switzerland &nbsp;&nbsp; <sup>2</sup>DisneyResearch|Studios, Switzerland</span>
+    </div>
+  </div>
+</header>
+
+<main class="inner">
+  <section>
+    <h2>Playground</h2>
+    <p class="lede">Sensor noise is not the white Gaussian speckle that denoising papers used to assume. It is <em>coloured</em> — brighter in the shadows than in the highlights, unequal across R, G and B, and correlated between neighbouring pixels by the camera’s own processing. Pick an image below and it is regrained as one of five smartphones at one of fourteen ISO levels, then drag the divider to compare against the clean original.</p>
+    <p class="lede">What runs here is <em>not</em> the network. The generator is conditioned on camera and ISO and trained adversarially; probing it as a black box reduces its behaviour to two measurable things: how loud the grain is at each clean intensity, and how strongly neighbouring pixels agree, and those are what this page ships: 70 presets of summary statistics, about 180&nbsp;KB of numbers.</p>
+
+    <div class="work">
+      <!-- Deliberately <div>, not <section>: these two are panes of one playground, not sections
+           of the document, and a nested <section> would also inherit the 40px section margin. -->
+      <div class="panel controls">
+        <div class="field">
+          <label for="pick">Image</label>
+          <div id="drop" class="drop">
+            <input type="file" id="file" accept="image/*" hidden>
+            <div class="row tight">
+              <button type="button" id="pick" class="ghost prim">Choose…</button>
+              <button type="button" id="sample" class="ghost">Sample</button>
+            </div>
+            <p class="note">or drop / paste an image — nothing is uploaded</p>
+          </div>
+        </div>
+
+        <fieldset>
+          <legend>Measured preset</legend>
+          <div class="row">
+            <div class="field">
+              <label for="camera">Camera</label>
+              <select id="camera"></select>
+            </div>
+            <div class="field">
+              <label for="iso">ISO</label>
+              <select id="iso"></select>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- No free grain controls here, deliberately. Upstream has strength / colour / size /
+             shadow-lift / monochrome sliders, which are a nice toy but turn the page into a grain
+             tool: what is on screen is then no longer a measurement of anything. This page shows
+             the pattern instead — a preset is reproduced as measured, or not at all. -->
+
+        <div class="row tight">
+          <div class="field">
+            <label for="seed">Seed</label>
+            <input type="number" id="seed" value="0" min="0" step="1">
+          </div>
+          <button type="button" id="reseed" class="ghost dice" title="New seed" aria-label="New random seed">🎲</button>
+        </div>
+
+        <div class="field">
+          <label for="maxdim">Working resolution <span class="muted" id="maxdim-note"></span></label>
+          <select id="maxdim">
+            <option value="512">512 px</option>
+            <option value="768" selected>768 px</option>
+            <option value="1024">1024 px</option>
+            <option value="0">Original</option>
+          </select>
+        </div>
+
+        <button type="button" id="download" class="ghost" disabled>Download</button>
+
+        <p id="status" class="status">Loading parameters…</p>
+      </div>
+
+      <div class="panel viewer">
+        <div id="stage" class="stage empty">
+          <p class="placeholder">Choose an image, or hit <strong>Sample</strong>.</p>
+          <div id="wipe" class="wipe" hidden>
+            <canvas id="canvas-a"></canvas>
+            <canvas id="canvas-b" class="wipe-top"></canvas>
+            <div class="wipe-bar"></div>
+            <span class="ptag ptag-l">clean</span>
+            <span class="ptag ptag-r" id="tag-r">grainy</span>
+            <button type="button" class="fs" id="fs" title="Fullscreen" aria-label="Fullscreen">⤢</button>
+          </div>
+          <!-- Busy state. Both of these live in the stage rather than in the status line because
+               the wait they cover is the wait for *this* box to change. -->
+          <div class="busybar" aria-hidden="true"></div>
+          <p class="working" id="working" role="status">Synthesising grain…</p>
+        </div>
+        <div class="viewer-bar">
+          <div class="seg" role="group" aria-label="Right-hand view">
+            <button type="button" class="seg-btn active" data-view="grainy">Grainy</button>
+            <button type="button" class="seg-btn" data-view="grain">Grain ×4</button>
+          </div>
+          <div class="spacer"></div>
+          <span id="timing"></span>
+        </div>
+      </div>
+    </div>
+
+    <p class="hint">Every preset is reproduced exactly as measured — there is nothing here to dial in, so what you see is the model’s own answer for that camera at that ISO. <em>Grain ×4</em> shows the noise field on its own, amplified four times about mid-grey; <em>Seed</em> draws a different realisation of the same distribution.</p>
+  </section>
+
+  <section>
+    <h2>What the charts show</h2>
+    <p class="lede">Both charts redraw for the selected preset, so they are the numbers behind whatever is on the canvas above — change camera or ISO and watch them move.</p>
+    <div class="charts">
+      <figure class="panel chart">
+        <figcaption>
+          <h3>Intensity vs noise level</h3>
+          <p>Noise standard deviation as a function of clean pixel intensity, per colour channel. Non-monotonic: grain peaks in the shadows-to-midtones and falls off toward the highlights.</p>
+        </figcaption>
+        <canvas id="chart-sigma" width="720" height="300" role="img"
+                aria-label="Noise standard deviation versus clean intensity for red, green and blue channels"></canvas>
+        <div class="legend" id="legend-sigma"></div>
+        <details>
+          <summary>Table view</summary>
+          <div class="table-wrap"><table id="table-sigma"></table></div>
+        </details>
+      </figure>
+
+      <figure class="panel chart">
+        <figcaption>
+          <h3>Spatial correlation</h3>
+          <p>Correlation between grain values at increasing pixel distance. Above zero means neighbouring pixels vary together — the grain clumps rather than being pixel-independent.</p>
+        </figcaption>
+        <canvas id="chart-corr" width="720" height="300" role="img"
+                aria-label="Grain autocorrelation versus pixel distance for red, green and blue channels"></canvas>
+        <div class="legend" id="legend-corr"></div>
+        <details>
+          <summary>Table view</summary>
+          <div class="table-wrap"><table id="table-corr"></table></div>
+        </details>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>The model</h2>
+    <p class="eq">n<sub>c</sub> = k<sub>c</sub> ∗ ( σ<sub>c</sub>(I<sub>c</sub>) · w<sub>c</sub> ) &nbsp;&nbsp;&nbsp; noisy = clip(I + n, 0, 1)
+      <span class="gloss"><code>w</code> is unit Gaussian noise, correlated across channels by a 3×3 Cholesky factor; <code>σ<sub>c</sub></code> is a 17-knot lookup evaluated at the <em>clean</em> intensity; <code>k<sub>c</sub></code> is a 9×9 symmetric kernel supplying the spatial correlation, normalised so that <code>Σk² = 1</code> — convolution then preserves exactly the variance the curve asked for.</span>
+    </p>
+    <p class="lede">Both ingredients are plotted above, and neither is what the textbook model would predict: the curve is not affine in intensity, and the kernel is not a blur. The paper is where they are derived and evaluated.</p>
+  </section>
+
+  <section>
+    <h2>Citation</h2>
+    <p class="paper">📄 <a href="https://arxiv.org/abs/2303.09199" target="_blank" rel="noopener">A Generative Model for Digital Camera Noise Synthesis</a><br>arXiv:2303.09199 · <a href="https://arxiv.org/pdf/2303.09199" target="_blank" rel="noopener">PDF</a></p>
+    <div class="citebox">
+      <div class="citehd"><span>Reference format</span><button class="copybtn" data-target="citeAcm">Copy</button></div>
+      <pre id="citeAcm">Mingyang Song, Yang Zhang, Tunç O. Aydın, Elham Amin Mansour, and Christopher Schroers. 2023. A Generative Model for Digital Camera Noise Synthesis. arXiv:2303.09199 [cs.CV]. https://arxiv.org/abs/2303.09199</pre>
+    </div>
+    <div class="citebox">
+      <div class="citehd"><span>BibTeX</span><button class="copybtn" data-target="citeBib">Copy</button></div>
+      <pre id="citeBib">@article{song2023generativecameranoise,
+  author  = {Song, Mingyang and Zhang, Yang and Ayd{\i}n, Tun\c{c} O. and Amin Mansour, Elham and Schroers, Christopher},
+  title   = {A Generative Model for Digital Camera Noise Synthesis},
+  journal = {arXiv preprint arXiv:2303.09199},
+  year    = {2023},
+  url     = {https://arxiv.org/abs/2303.09199}
+}</pre>
+    </div>
+
+    <h3 class="citesub">Citing this page</h3>
+    <p class="lede">The playground is not part of the paper — the parametric model, the 70 measured presets and this implementation were made for it. If <em>those</em> are what you used, please cite the page alongside the paper rather than instead of it.</p>
+    <div class="citebox">
+      <div class="citehd"><span>BibTeX</span><button class="copybtn" data-target="citeWeb">Copy</button></div>
+      <pre id="citeWeb">@misc{song2026grainplayground,
+  author       = {Song, Mingyang},
+  title        = {Digital Camera Noise Synthesis: An Interactive Camera-Grain Playground},
+  year         = {2026},
+  howpublished = {\url{https://miya9756.github.io/mingyang-song.github.io/projects/grain/}},
+  note         = {Accessed: 2026-07-28}
+}</pre>
+    </div>
+    <p class="hint">Plain BibTeX has no entry type for a web page, so one goes in as <code>@misc</code> with the address in <code>howpublished</code>; <code>\url{}</code> needs <code>\usepackage{hyperref}</code> or <code>\usepackage{url}</code> in your preamble. On <em>biblatex</em> you can use the real <code>@online</code> type instead, with separate <code>url</code> and <code>urldate</code> fields. Either way, set the access date to the day you actually visited.</p>
+  </section>
+
+  <section>
+    <h2>Datasets</h2>
+    <p class="ack">The noise model behind the presets was trained on an open-source smartphone-noise dataset, and the sample photograph comes from a standard test suite. Please cite the original authors:</p>
+    <div class="datacard">
+      <p class="ref"><strong><a href="https://abdokamel.github.io/sidd/" target="_blank" rel="noopener">SIDD</a></strong> — real clean/noisy smartphone pairs; the source of every preset above (G4, GP, IP, N6 and S6 are its five cameras).<br>
+      Abdelrahman Abdelhamed, Stephen Lin, and Michael S. Brown. 2018. A High-Quality Denoising Dataset for Smartphone Cameras. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR).</p>
+      <p class="ref"><strong><a href="https://r0k.us/graphics/kodak/" target="_blank" rel="noopener">Kodak Lossless True Color Image Suite</a></strong> — the <em>Sample</em> image is a crop of <em>kodim16</em>, long used as a reference image for image-processing work.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="inner">&copy; 2026 Mingyang Song</div>
+</footer>
+
+<script>
+/* Parametric grain synthesis — no network, no wasm, no worker.
+ *
+ *   n_c = k_c * ( sigma_c(I_c) . w_c )
+ *
+ * sigma_c is a per-channel LUT over clean intensity; k_c is a symmetric kernel carrying the
+ * spatial correlation; w is unit Gaussian noise, correlated across channels by a 3x3 Cholesky
+ * factor. The presets in assets/grain_params.json were measured from the generative noise model;
+ * the sliders modify them freely. Ported from the tempformer repo's playground/ — see CLAUDE.md.
+ */
+'use strict';
+const $=(id)=>document.getElementById(id);
+const PARAMS_URL='./assets/grain_params.json', SAMPLE_URL='./assets/sample.png';
+/* SIDD ships its cameras as two-letter codes; nobody reads "N6" as a phone. */
+const CAM_NAMES={G4:'LG G4',GP:'Google Pixel',IP:'iPhone 7',N6:'Nexus 6',S6:'Galaxy S6 Edge'};
+
+const els={
+  file:$('file'),pick:$('pick'),sample:$('sample'),drop:$('drop'),
+  camera:$('camera'),iso:$('iso'),seed:$('seed'),reseed:$('reseed'),
+  maxdim:$('maxdim'),maxdimNote:$('maxdim-note'),
+  download:$('download'),status:$('status'),timing:$('timing'),working:$('working'),
+  stage:$('stage'),wipe:$('wipe'),a:$('canvas-a'),b:$('canvas-b'),
+  bar:document.querySelector('.wipe-bar'),fs:$('fs'),tagR:$('tag-r'),
+};
+// `dirty` exists because render() now awaits a paint before its blocking loop: a preset change
+// during that window used to be dropped by the busy guard, leaving the canvas showing the
+// previous ISO. It is re-run once instead of queued, since only the latest selection matters.
+const state={params:null,source:null,clean:null,grainy:null,grainVis:null,view:'grainy',
+             busy:false,dirty:false};
+
+/* Paint the busy state before blocking on it. One rAF only schedules the callback for the next
+   frame; the paint happens after it, so a single rAF still hands control back to synthesis
+   before anything reaches the screen. The second one lands after that paint. */
+const nextPaint=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+function setBusy(on,label){
+  if(label) els.working.textContent=label;
+  els.stage.classList.toggle('busy',on);
+}
+
+/* ── seeded RNG ────────────────────────────────────────────────── */
+function mulberry32(seed){
+  let a=seed>>>0;
+  return function(){
+    a=(a+0x6d2b79f5)|0;
+    let t=Math.imul(a^(a>>>15),1|a);
+    t=(t+Math.imul(t^(t>>>7),61|t))^t;
+    return ((t^(t>>>14))>>>0)/4294967296;
+  };
+}
+function gaussians(n,seed){
+  const rand=mulberry32(seed), out=new Float32Array(n);
+  for(let i=0;i<n;i+=2){
+    const r=Math.sqrt(-2*Math.log(1-rand())), th=2*Math.PI*rand();
+    out[i]=r*Math.cos(th);
+    if(i+1<n) out[i+1]=r*Math.sin(th);
+  }
+  return out;
+}
+
+/* ── kernels ───────────────────────────────────────────────────── */
+/* The measured kernel as a sparse tap list, renormalised so sum(k^2) = 1 — that is what makes
+   the convolution preserve exactly the variance the sigma curve asked for, so the two ingredients
+   stay independent. (Upstream also convolves in an extra Gaussian here for its "Grain size"
+   slider; with no slider on this page the kernel is only ever the measured one.) */
+function effectiveKernel(flat,size){
+  const k=flat, n=size;
+  let peak=0;
+  for(let i=0;i<k.length;i++) peak=Math.max(peak,Math.abs(k[i]));
+  const r=(n-1)/2, taps=[];
+  for(let y=0;y<n;y++) for(let x=0;x<n;x++){
+    const v=k[y*n+x];
+    if(Math.abs(v)>peak*0.004) taps.push([y-r,x-r,v]);   // drop negligible taps
+  }
+  let e=0;
+  for(const t of taps) e+=t[2]*t[2];
+  const s=1/Math.sqrt(e);
+  for(const t of taps) t[2]*=s;
+  return taps;
+}
+/* autocorrelation of a tap list, averaged over the two axes — the correlation chart */
+function autocorr(taps,maxDist){
+  const out=[];
+  for(let d=0;d<=maxDist;d++){
+    let h=0,v=0;
+    for(const [y1,x1,w1] of taps) for(const [y2,x2,w2] of taps){
+      if(y2===y1&&x2===x1+d) h+=w1*w2;
+      if(y2===y1+d&&x2===x1) v+=w1*w2;
+    }
+    out.push((h+v)/2);
+  }
+  const c=out[0]||1;
+  return out.map(v=>v/c);
+}
+
+/* ── curve ─────────────────────────────────────────────────────── */
+function sigmaAt(curve,knots,t){
+  const x=Math.min(1,Math.max(0,t))*(knots.length-1);
+  const i=Math.min(knots.length-2,Math.floor(x)), f=x-i;
+  return curve[i]*(1-f)+curve[i+1]*f;
+}
+/* Everything the renderer is allowed to vary. The preset itself is never scaled or reshaped:
+   only which preset, and which realisation of it. */
+function readControls(){
+  return {camera:els.camera.value,iso:els.iso.value,
+          seed:Math.abs(parseInt(els.seed.value,10)||0)>>>0};
+}
+
+/* ── synthesis ─────────────────────────────────────────────────── */
+function synthesize(clean,o){
+  const {width:W,height:H,data:src}=clean, px=W*H, p=state.params;
+  const entry=p.params[`${o.camera}|${o.iso}`];
+  if(!entry) throw new Error(`no preset for ${o.camera} ISO ${o.iso}`);
+  const knots=p.knots, curves=entry.sigma;
+  const taps=[0,1,2].map(c=>effectiveKernel(entry.kernel[c],p.kernel_size));
+  const L=entry.mix;
+
+  // three correlated unit-Gaussian fields
+  const g0=gaussians(px,o.seed||1), g1=gaussians(px,(o.seed^0x9e3779b9)>>>0||2),
+        g2=gaussians(px,(o.seed^0x85ebca6b)>>>0||3);
+  const w=[new Float32Array(px),new Float32Array(px),new Float32Array(px)];
+  for(let i=0;i<px;i++){
+    w[0][i]=L[0][0]*g0[i];
+    w[1][i]=L[1][0]*g0[i]+L[1][1]*g1[i];
+    w[2][i]=L[2][0]*g0[i]+L[2][1]*g1[i]+L[2][2]*g2[i];
+  }
+  const grainy=new Uint8ClampedArray(px*4), vis=new Uint8ClampedArray(px*4),
+        scaled=new Float32Array(px);
+  for(let c=0;c<3;c++){
+    const curve=curves[c];
+    for(let i=0;i<px;i++) scaled[i]=sigmaAt(curve,knots,src[i*4+c]/255)*w[c][i];
+    const tp=taps[c];
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      let acc=0;
+      for(let t=0;t<tp.length;t++){
+        const ty=tp[t][0], tx=tp[t][1];
+        let yy=y+ty, xx=x+tx;                     // reflect at the border
+        if(yy<0) yy=-yy; else if(yy>=H) yy=2*H-2-yy;
+        if(xx<0) xx=-xx; else if(xx>=W) xx=2*W-2-xx;
+        acc+=tp[t][2]*scaled[yy*W+xx];
+      }
+      const j=(y*W+x)*4+c;
+      grainy[j]=(src[j]/255+acc)*255;
+      vis[j]=128+acc*4*255;
+    }
+  }
+  for(let i=3;i<px*4;i+=4){ grainy[i]=255; vis[i]=255; }
+  return {grainy:new ImageData(grainy,W,H),vis:new ImageData(vis,W,H),curves,taps};
+}
+
+/* ── charts ────────────────────────────────────────────────────── */
+const SERIES=[{key:'R',varName:'--series-r'},{key:'G',varName:'--series-g'},{key:'B',varName:'--series-b'}];
+const css=(name)=>getComputedStyle(document.body).getPropertyValue(name).trim();
+
+function drawChart(canvas,opts){
+  const {series,xLabel,yLabel,xTicks,yMax,xOf,fmtY}=opts;
+  const ctx=canvas.getContext('2d'), dpr=window.devicePixelRatio||1;
+  const W=canvas.clientWidth||720, H=300;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  const m={l:54,r:46,t:10,b:34}, pw=W-m.l-m.r, ph=H-m.t-m.b;
+  const gridC=css('--grid'), txt=css('--text-secondary'), txtP=css('--text-primary');
+  ctx.strokeStyle=gridC; ctx.lineWidth=1;                    // recessive grid + axis
+  ctx.font='11px Inter,system-ui,sans-serif'; ctx.fillStyle=txt;
+  const yTicks=5;
+  for(let i=0;i<=yTicks;i++){
+    const v=(yMax*i)/yTicks, y=Math.round(m.t+ph-(v/yMax)*ph)+0.5;
+    ctx.beginPath(); ctx.moveTo(m.l,y); ctx.lineTo(m.l+pw,y); ctx.stroke();
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    ctx.fillText(fmtY(v),m.l-8,y);
+  }
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(const t of xTicks) ctx.fillText(String(t),m.l+xOf(t)*pw,m.t+ph+8);
+  ctx.fillText(xLabel,m.l+pw/2,m.t+ph+21);
+  ctx.save();
+  ctx.translate(13,m.t+ph/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(yLabel,0,0);
+  ctx.restore();
+
+  if(opts.yMin!==undefined&&opts.yMin<0){                    // zero line, where the scale crosses it
+    const y=Math.round(m.t+ph-((0-opts.yMin)/(yMax-opts.yMin))*ph)+0.5;
+    ctx.strokeStyle=txt; ctx.globalAlpha=0.35;
+    ctx.beginPath(); ctx.moveTo(m.l,y); ctx.lineTo(m.l+pw,y); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+  const lo=opts.yMin===undefined?0:opts.yMin;
+  const toY=(v)=>m.t+ph-((v-lo)/(yMax-lo))*ph;
+  series.forEach(s=>{
+    ctx.strokeStyle=s.color; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.beginPath();
+    s.points.forEach((pt,i)=>{
+      const x=m.l+xOf(pt[0])*pw, y=toY(pt[1]);
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    });
+    ctx.stroke();
+    const last=s.points[s.points.length-1];                  // direct label — identity is never colour alone
+    ctx.fillStyle=s.color; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.font='600 11px Inter,system-ui,sans-serif';
+    ctx.fillText(s.key,m.l+xOf(last[0])*pw+7,toY(last[1]));
+  });
+  ctx.fillStyle=txtP;
+}
+function renderLegend(el,series){
+  el.innerHTML=series.map(s=>`<span><i style="background:${s.color}"></i>${s.label}</span>`).join('');
+}
+function renderTable(el,header,rows){
+  el.innerHTML=`<thead><tr>${header.map(h=>`<th>${h}</th>`).join('')}</tr></thead>`+
+    `<tbody>${rows.map(r=>`<tr>${r.map(v=>`<td>${v}</td>`).join('')}</tr>`).join('')}</tbody>`;
+}
+function updateCharts(curves,taps){
+  const knots=state.params.knots, colors=SERIES.map(s=>css(s.varName));
+
+  const sSeries=SERIES.map((s,c)=>({key:s.key,label:`${s.key} channel`,color:colors[c],
+    points:curves[c].map((v,i)=>[knots[i],v*255])}));
+  const yMax=Math.max(4,...sSeries.flatMap(s=>s.points.map(p=>p[1])))*1.12;
+  drawChart($('chart-sigma'),{series:sSeries,xLabel:'clean intensity',yLabel:'noise σ (/255)',
+    xTicks:[0,0.25,0.5,0.75,1],xOf:(t)=>t,yMax,fmtY:(v)=>v.toFixed(v<10?1:0)});
+  renderLegend($('legend-sigma'),sSeries);
+  renderTable($('table-sigma'),['intensity','R σ','G σ','B σ'],
+    knots.filter((_,i)=>i%2===0).map((k,j)=>[k.toFixed(2),...curves.map(c=>(c[j*2]*255).toFixed(2))]));
+
+  const D=4;
+  const cSeries=SERIES.map((s,c)=>({key:s.key,label:`${s.key} channel`,color:colors[c],
+    points:autocorr(taps[c],D).map((v,i)=>[i,v])}));
+  const cMin=Math.min(0,...cSeries.flatMap(s=>s.points.map(p=>p[1])))-0.05;
+  drawChart($('chart-corr'),{series:cSeries,xLabel:'pixel distance',yLabel:'correlation',
+    xTicks:[0,1,2,3,4],xOf:(t)=>t/D,yMax:1.05,yMin:cMin,fmtY:(v)=>v.toFixed(2)});
+  renderLegend($('legend-corr'),cSeries);
+  renderTable($('table-corr'),['distance','R','G','B'],
+    Array.from({length:D+1},(_,d)=>[d,...cSeries.map(s=>s.points[d][1].toFixed(3))]));
+}
+
+/* ── rendering pipeline ────────────────────────────────────────── */
+function targetSize(w,h,maxdim){
+  if(!maxdim||Math.max(w,h)<=maxdim) return [w,h];
+  const s=maxdim/Math.max(w,h);
+  return [Math.max(1,Math.round(w*s)),Math.max(1,Math.round(h*s))];
+}
+function rasterize(img,w,h){
+  const c=document.createElement('canvas');
+  c.width=w; c.height=h;
+  const ctx=c.getContext('2d',{willReadFrequently:true});
+  ctx.imageSmoothingQuality='high';
+  ctx.drawImage(img,0,0,w,h);
+  return ctx.getImageData(0,0,w,h);
+}
+function drawTo(canvas,imageData){
+  canvas.width=imageData.width; canvas.height=imageData.height;
+  canvas.getContext('2d').putImageData(imageData,0,0);
+}
+let renderTimer=null;
+function scheduleRender(delay=110){ clearTimeout(renderTimer); renderTimer=setTimeout(render,delay); }
+
+/* Synthesis is a few hundred milliseconds of straight-line arithmetic on the main thread — long
+   enough to look like a hang, and impossible to animate through. So the busy state is put up and
+   allowed to paint *before* the loop starts, and everything after the await re-reads the controls
+   in case the selection moved in the meantime. */
+async function render(){
+  if(!state.source||!state.params){ setBusy(false); return; }   // clear a decode indicator we can't use
+  if(state.busy){ state.dirty=true; return; }
+  state.busy=true;
+  setBusy(true,'Synthesising grain…');
+  await nextPaint();
+  const o=readControls();
+  const [w,h]=targetSize(state.source.width,state.source.height,parseInt(els.maxdim.value,10));
+  els.maxdimNote.textContent=`→ ${w}×${h}`;
+  try{
+    if(!state.clean||state.clean.width!==w||state.clean.height!==h){
+      state.clean=rasterize(state.source,w,h);
+      drawTo(els.a,state.clean);
+    }
+    const t0=performance.now();
+    const out=synthesize(state.clean,o);
+    const ms=performance.now()-t0;
+    state.grainy=out.grainy; state.grainVis=out.vis;
+    showView(state.view);
+    updateCharts(out.curves,out.taps);
+    els.download.disabled=false;
+    els.timing.textContent=`${w}×${h} · ${ms.toFixed(0)} ms · ${out.taps[1].length} kernel taps`;
+    els.status.textContent='Ready.';
+    els.status.className='status';
+  }catch(err){
+    els.status.textContent=String(err.message||err);
+    els.status.className='status err';
+  }finally{
+    state.busy=false;
+    setBusy(false);
+    if(state.dirty){ state.dirty=false; scheduleRender(0); }
+  }
+}
+function showView(view){
+  state.view=view;
+  els.tagR.textContent=view==='grain'?'grain ×4':'grainy';
+  const d=view==='grain'?state.grainVis:state.grainy;
+  if(d) drawTo(els.b,d);
+}
+
+/* ── input ─────────────────────────────────────────────────────── */
+async function loadImage(src){
+  const img=new Image();
+  img.crossOrigin='anonymous'; img.decoding='async';
+  img.src=src; await img.decode(); return img;
+}
+async function setSource(img){
+  state.source=img; state.clean=null;
+  els.stage.classList.remove('empty');
+  els.wipe.hidden=false;
+  return render();
+}
+function loadFailed(err){
+  setBusy(false);
+  els.status.textContent=`Could not read that image — ${err.message||err}`;
+  els.status.className='status err';
+}
+/* Decoding a large JPEG is itself a visible wait, and it happens before there is any canvas to
+   look at — so the indicator goes up here rather than in render(), and stays up through both. */
+async function handleFile(f){
+  if(!f||!f.type.startsWith('image/')) return;
+  const url=URL.createObjectURL(f);
+  setBusy(true,'Decoding image…');
+  try{ await setSource(await loadImage(url)); }
+  catch(err){ loadFailed(err); }
+  finally{ URL.revokeObjectURL(url); }
+}
+
+/* ── wiring ────────────────────────────────────────────────────── */
+function populate(){
+  const p=state.params;
+  els.camera.innerHTML=p.cameras.map(c=>
+    `<option value="${c}">${CAM_NAMES[c]?`${c} · ${CAM_NAMES[c]}`:c}</option>`).join('');
+  els.camera.value=p.cameras.includes('G4')?'G4':p.cameras[0];
+  els.iso.innerHTML=p.isos.map(v=>`<option${v===1600?' selected':''}>${v}</option>`).join('');
+}
+els.pick.addEventListener('click',()=>els.file.click());
+els.file.addEventListener('change',(e)=>handleFile(e.target.files[0]));
+els.sample.addEventListener('click',async()=>{
+  setBusy(true,'Fetching sample…');
+  try{ await setSource(await loadImage(SAMPLE_URL)); }
+  catch{ loadFailed(new Error(`sample image not found at ${SAMPLE_URL}`)); }
+});
+['dragenter','dragover'].forEach(t=>els.drop.addEventListener(t,(e)=>{e.preventDefault();els.drop.classList.add('over');}));
+['dragleave','drop'].forEach(t=>els.drop.addEventListener(t,(e)=>{e.preventDefault();els.drop.classList.remove('over');}));
+els.drop.addEventListener('drop',(e)=>handleFile(e.dataTransfer.files[0]));
+window.addEventListener('paste',(e)=>{
+  const it=[...(e.clipboardData?.items||[])].find(i=>i.type.startsWith('image/'));
+  if(it) handleFile(it.getAsFile());
+});
+
+/* Draw the selected preset's curves whether or not an image is loaded — before one is, and after
+   the sliders were dropped, the charts are the only thing on the page that answers a preset
+   change, and render() bails out with no source to work on. */
+function chartsForPreset(){
+  const o=readControls(), e=state.params&&state.params.params[`${o.camera}|${o.iso}`];
+  if(e) updateCharts(e.sigma,[0,1,2].map(c=>effectiveKernel(e.kernel[c],state.params.kernel_size)));
+}
+[els.camera,els.iso].forEach(el=>el.addEventListener('change',()=>{
+  if(!state.source) chartsForPreset();
+  scheduleRender(0);
+}));
+els.seed.addEventListener('change',()=>scheduleRender(0));
+els.maxdim.addEventListener('change',()=>{ state.clean=null; scheduleRender(0); });
+els.reseed.addEventListener('click',()=>{
+  els.seed.value=Math.floor(Math.random()*2**31);
+  scheduleRender(0);
+});
+els.download.addEventListener('click',()=>{
+  const d=state.view==='grain'?state.grainVis:state.grainy;
+  if(!d) return;
+  const c=document.createElement('canvas');
+  c.width=d.width; c.height=d.height;
+  c.getContext('2d').putImageData(d,0,0);
+  const a=document.createElement('a');
+  a.download=`grain_${els.camera.value}_${els.iso.value}_seed${els.seed.value}.png`;
+  a.href=c.toDataURL('image/png'); a.click();
+});
+document.querySelectorAll('.seg-btn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.seg-btn').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  showView(b.dataset.view);
+}));
+
+(function wipe(){
+  let dragging=false;
+  const set=(cx)=>{
+    const r=els.wipe.getBoundingClientRect();
+    const p=Math.max(0,Math.min(1,(cx-r.left)/r.width))*100;
+    els.b.style.clipPath=`inset(0 0 0 ${p}%)`;
+    els.bar.style.left=`${p}%`;
+  };
+  const X=(e)=>(e.touches&&e.touches[0]?e.touches[0].clientX:e.clientX);
+  els.wipe.addEventListener('mousedown',(e)=>{dragging=true;set(X(e));e.preventDefault();});
+  els.wipe.addEventListener('touchstart',(e)=>{dragging=true;set(X(e));e.preventDefault();},{passive:false});
+  window.addEventListener('mousemove',(e)=>dragging&&set(X(e)));
+  window.addEventListener('touchmove',(e)=>{if(dragging){set(X(e));e.preventDefault();}},{passive:false});
+  window.addEventListener('mouseup',()=>{dragging=false;});
+  window.addEventListener('touchend',()=>{dragging=false;});
+  els.fs.addEventListener('mousedown',(e)=>e.stopPropagation());
+  els.fs.addEventListener('click',(e)=>{
+    e.stopPropagation();
+    document.fullscreenElement?document.exitFullscreen():els.wipe.requestFullscreen?.();
+  });
+})();
+
+/* The charts are canvas, so they carry no layout of their own — a resize leaves them stretched
+   until something redraws them. Only re-render once an image exists; before that init() has
+   already drawn them at the right width. */
+window.addEventListener('resize',()=>{ if(state.grainy) scheduleRender(200); });
+
+document.querySelectorAll('.copybtn').forEach(b=>b.onclick=()=>{
+  const el=document.getElementById(b.dataset.target);
+  navigator.clipboard.writeText(el.textContent).then(()=>{
+    const o=b.textContent; b.textContent='✓ Copied'; setTimeout(()=>{b.textContent=o;},1500);
+  }).catch(()=>{b.textContent='⚠ select & copy';});
+});
+
+/* ── boot ──────────────────────────────────────────────────────── */
+(async function init(){
+  try{
+    const r=await fetch(PARAMS_URL);
+    if(!r.ok) throw new Error(`${PARAMS_URL} → HTTP ${r.status}`);
+    state.params=await r.json();
+    populate();
+    els.status.textContent=`Ready — ${Object.keys(state.params.params).length} measured presets.`;
+    chartsForPreset();
+  }catch(err){
+    els.status.textContent=`Could not load parameters: ${err.message}`;
+    els.status.className='status err';
+  }
+})();
+</script>
+</body>
+</html>

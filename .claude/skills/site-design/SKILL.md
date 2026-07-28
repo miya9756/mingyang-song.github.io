@@ -7,12 +7,19 @@ description: The design contract for this personal site — card pattern, gradie
 
 Hand-written CSS, no framework, no build. One inline `<style>` block per page:
 the landing page ([index.html](../../../index.html)), the SMV viewer
-([projects/smv/index.html](../../../projects/smv/index.html)), and the SpDef project page
-([projects/spdef/index.html](../../../projects/spdef/index.html)). They are **separate design
-systems that rhyme** — do not try to share tokens between them. The landing page is
-theme-aware dark/light on warm paper; the viewer is a fixed warm-paper palette; SpDef is its
-deliberately cool counterpart. A new project page picks its own palette the same way — the
-only thing it inherits is the page-chrome trio below.
+([projects/smv/index.html](../../../projects/smv/index.html)), the SpDef project page
+([projects/spdef/index.html](../../../projects/spdef/index.html)), and the camera-noise
+playground ([projects/grain/index.html](../../../projects/grain/index.html)). They are
+**separate design systems that rhyme** — do not try to share tokens between them. The landing
+page is theme-aware dark/light on warm paper; the viewer is a fixed warm-paper palette; SpDef
+is its deliberately cool counterpart; Grain is neutral graphite with one darkroom-amber accent.
+A new project page picks its own palette the same way — the only thing it inherits is the
+page-chrome trio below.
+
+The two most recent project pages also share **bones**, not just chrome: Fraunces display serif
+for `h1`/`h2`/`h3`, the same back pill, card radius, section rhythm and section order
+(work → citation → datasets → footer). Follow that for the next one; only the temperature and
+the accent should change.
 
 Run [verify-site](../verify-site/SKILL.md) after any change here.
 

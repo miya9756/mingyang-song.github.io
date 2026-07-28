@@ -8,7 +8,9 @@ Mingyang Song's personal site (GitHub Pages, user site). Fully static: **no back
 no build step, no bundler, no npm**. The only "build" is regenerating
 `projects/smv/scenes.json` from the committed scenes.
 
-The landing page is `index.html` at the root. The substantial piece is
+The landing page is `index.html` at the root, and it links three project pages:
+`projects/smv/` (SmoothMotionVectors), `projects/spdef/` (Spline Deformation Field) and
+`projects/grain/` (camera-noise playground). The substantial piece is
 `projects/smv/` — a 100 % client-side player for compressed dynamic 3D-Gaussian
 ("4D-GS") scenes, the results site for *SmoothMotionVectors* (SIGGRAPH 2026).
 
@@ -295,6 +297,89 @@ the document.** `toBlobURL` fetches, and `fetch` resolves relative strings again
 the old document-relative form worked only for a page in that folder and 404'd from SpDef.
 Keep it module-relative when syncing from `4d-relight/web/player_browser/` (which still has
 the document-relative version).
+
+## `projects/grain/` — the camera-noise playground
+
+Results page for *A Generative Model for Digital Camera Noise Synthesis*
+([arXiv:2303.09199](https://arxiv.org/abs/2303.09199)). Ported on 2026-07-28 from
+`~/tempformer/playground/` (`index.html` + `styles.css` + `app.js` + `assets/`), which is
+itself a static offshoot of the TempFormer repo's Gradio/ONNX demos.
+
+**This page is now the copy that gets polished — it is a fork, not a mirror.** Upstream keeps
+its own three-file layout and a `scripts/bundle_playground.py` that inlines the parameters; here
+everything is one `index.html` in the site's idiom, so a future upstream change has to be merged
+by hand rather than copied. What changed in the port, and why:
+
+- **One file.** Shell markup, the app CSS and the whole app script are inlined, as on the other
+  two project pages. It is also what gives `verify.py` its coverage: `check_dom_ids()` reads one
+  page's source, so an external `app.js` would have put ~30 element lookups outside every check.
+  (The `$('id')` helper is now one of the patterns that check scans for — added in the same edit.)
+- **Dark mode dropped.** Upstream themes on `prefers-color-scheme`; both other project pages pin
+  `color-scheme:light`, so this one does too. The chart-role tokens (`--series-*`, `--grid`,
+  `--text-*`, `--surface-1`) were validated as a set against the light surface — keep them
+  separate from the page palette, so retuning one cannot silently drag the other.
+- **Palette = neutral graphite + one darkroom-safelight amber.** Third temperature in the family
+  (SMV warm, SpDef cool). The accent is deliberately hue-poor: the page's real colours are the
+  R/G/B chart series and the photographs.
+- **Bundle hooks removed** (`window.__GRAIN_PARAMS__` / `__GRAIN_SAMPLE__`). There is no
+  bundler in this repo; the params and sample are plain fetched assets.
+- **SIDD camera codes are expanded** in the picker (`CAM_NAMES`) — nobody reads "N6" as a phone.
+- **The grain-control sliders are gone**, along with everything that only served them: upstream's
+  strength / colour-noise / grain-size / shadow-lift / monochrome controls, `channelGain()`,
+  `shapedCurve()`, the `mono` branch in `synthesize()`, the Gaussian-blur branch of
+  `effectiveKernel()`, the slider readouts (`SLIDER_FMT` / `syncOutputs` / `bindOutputs`) and the
+  Reset button. They made a nice toy but turned the page into a grain *tool*, at which point
+  nothing on screen is a measurement of anything. **The preset is now reproduced as measured or
+  not at all** — `readControls()` returns `{camera, iso, seed}` and nothing else scales the curve.
+  Restoring any of them means restoring its arithmetic too; upstream still has all of it.
+- **The explanation cards under *The model* are gone.** The published numbers are already
+  generous; the calibration recipe (how the network is probed, why the whitening step comes
+  first) is not something this page needs to hand out. What is left is the equation and the two
+  chart captions, which describe the data that ships anyway. Do not re-add the method write-up.
+
+**Only summary statistics are published, and it must stay that way.** `assets/grain_params.json`
+(~180 KB, 70 presets = 5 SIDD cameras × 14 ISO levels) carries per-channel σ over 17 intensity
+knots, a 9×9 correlation kernel per channel, and a 3×3 Cholesky factor for the RGB correlation —
+the same quantities the paper plots. **No weights, no architecture, and nothing from which
+either could be recovered.** The checkpoints themselves are unpublishable; do not add them, and
+do not "upgrade" this page to run the real network (the ONNX path in `~/tempformer/web/` exists,
+but shipping it here would publish the generator).
+
+Three invariants in the synthesis math, all load-bearing:
+
+- **`Σk² = 1` after any kernel edit.** `effectiveKernel()` renormalises the tap list, which is
+  what makes the convolution preserve exactly the variance the σ curve asked for. Drop it and the
+  kernel silently becomes a strength control.
+- **σ is evaluated at the *clean* intensity**, and the kernel is applied *after* the scaling.
+  Swapping the order correlates the magnitude map instead of the noise.
+- **The curve is a 17-knot LUT, not `σ² = aI + b`.** In sRGB it peaks near `I ≈ 0.25` and falls
+  toward the highlights; the kernel likewise has negative lobes at distance 2 (an ISP sharpening
+  signature). Both are the point of the page, and both are visible in the two charts.
+
+**The busy indicator is not decoration — it is the only thing standing between the visitor and a
+page that looks hung.** `synthesize()` is a few hundred ms of straight-line arithmetic on the main
+thread, so nothing script-driven can animate through it and nothing painted in the same task ever
+reaches the screen. Hence `render()` is `async`: it sets the state, `await nextPaint()`s a
+*double* rAF (one only schedules the callback; the paint lands after it), and only then blocks.
+The sweep and the pulse are CSS animations for the same reason — the compositor keeps them running
+while JS is frozen. Two consequences to preserve: the busy guard now coalesces via `state.dirty`
+and re-runs once at the end, because the await window is long enough for a preset change to be
+dropped otherwise; and both animations need a static fallback in the `prefers-reduced-motion`
+block, which they have.
+
+**Regenerating the parameters** needs the unpublished model, so it happens in the TempFormer
+repo and the result is copied here:
+
+```bash
+cd ~/tempformer && conda run -n TempFormer python -m noise_synthesizer.calibrate_grain \
+  --samples 64 --out playground/assets/grain_params.json
+cp playground/assets/grain_params.json ~/mingyang-song.github.io/projects/grain/assets/
+```
+
+The sample image is a crop of Kodak *kodim16*; it and the landing-page teaser
+(`assets/grain_teaser.png`, a clean · G4 ISO 800 · G4 ISO 1600 strip built from
+`~/tempformer/assets/kodim16_crop*.png`) are the only imagery, and both are credited in the
+page's **Datasets** section alongside SIDD.
 
 ## Git LFS (read before touching scenes)
 
