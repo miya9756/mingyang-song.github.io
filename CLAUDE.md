@@ -367,6 +367,14 @@ and re-runs once at the end, because the await window is long enough for a prese
 dropped otherwise; and both animations need a static fallback in the `prefers-reduced-motion`
 block, which they have.
 
+**`resize` must never reach `render()`.** The image canvases are CSS-scaled and the noise field is
+tied to the working resolution, not the viewport, so re-synthesising on resize costs a few hundred
+ms to reproduce the identical pixels. Only the two chart canvases genuinely need repainting, and
+they repaint from `chartArgs` (the last curves/taps drawn) rather than from a fresh synthesis. The
+symptom that found this: **entering or leaving fullscreen visibly recomputed the grain** — a
+fullscreen toggle fires `resize` without changing the layout behind it, so the handler now also
+drops any event that left the chart width unchanged.
+
 **Regenerating the parameters** needs the unpublished model, so it happens in the TempFormer
 repo and the result is copied here:
 

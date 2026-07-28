@@ -623,8 +623,12 @@ function renderTable(el,header,rows){
   el.innerHTML=`<thead><tr>${header.map(h=>`<th>${h}</th>`).join('')}</tr></thead>`+
     `<tbody>${rows.map(r=>`<tr>${r.map(v=>`<td>${v}</td>`).join('')}</tr>`).join('')}</tbody>`;
 }
+/* The canvases size themselves from CSS, so a width change means a redraw — but redrawing must
+   never mean re-synthesising. What was drawn is kept here so a resize can repaint from it. */
+let chartArgs=null, chartW=0;
 function updateCharts(curves,taps){
   const knots=state.params.knots, colors=SERIES.map(s=>css(s.varName));
+  chartArgs=[curves,taps]; chartW=$('chart-sigma').clientWidth;
 
   const sSeries=SERIES.map((s,c)=>({key:s.key,label:`${s.key} channel`,color:colors[c],
     points:curves[c].map((v,i)=>[knots[i],v*255])}));
@@ -817,10 +821,20 @@ document.querySelectorAll('.seg-btn').forEach(b=>b.addEventListener('click',()=>
   });
 })();
 
-/* The charts are canvas, so they carry no layout of their own — a resize leaves them stretched
-   until something redraws them. Only re-render once an image exists; before that init() has
-   already drawn them at the right width. */
-window.addEventListener('resize',()=>{ if(state.grainy) scheduleRender(200); });
+/* A resize only ever needs the charts repainted — the image canvases are CSS-scaled and the noise
+   field is tied to the working resolution, not to the viewport, so re-synthesising would burn
+   several hundred ms to produce the identical result. This used to call scheduleRender(), which is
+   why toggling fullscreen on the viewer visibly recomputed the grain: going fullscreen fires
+   `resize` without changing any layout behind it, so the width check below now drops that event
+   entirely and the charts are only repainted when they actually changed width. */
+let chartTimer=null;
+window.addEventListener('resize',()=>{
+  clearTimeout(chartTimer);
+  chartTimer=setTimeout(()=>{
+    if(!chartArgs||$('chart-sigma').clientWidth===chartW) return;
+    updateCharts(chartArgs[0],chartArgs[1]);
+  },200);
+});
 
 document.querySelectorAll('.copybtn').forEach(b=>b.onclick=()=>{
   const el=document.getElementById(b.dataset.target);
