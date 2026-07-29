@@ -324,14 +324,18 @@ by hand rather than copied. What changed in the port, and why:
 - **Bundle hooks removed** (`window.__GRAIN_PARAMS__` / `__GRAIN_SAMPLE__`). There is no
   bundler in this repo; the params and sample are plain fetched assets.
 - **SIDD camera codes are expanded** in the picker (`CAM_NAMES`) — nobody reads "N6" as a phone.
-- **The grain-control sliders are gone**, along with everything that only served them: upstream's
-  strength / colour-noise / grain-size / shadow-lift / monochrome controls, `channelGain()`,
-  `shapedCurve()`, the `mono` branch in `synthesize()`, the Gaussian-blur branch of
-  `effectiveKernel()`, the slider readouts (`SLIDER_FMT` / `syncOutputs` / `bindOutputs`) and the
-  Reset button. They made a nice toy but turned the page into a grain *tool*, at which point
-  nothing on screen is a measurement of anything. **The preset is now reproduced as measured or
-  not at all** — `readControls()` returns `{camera, iso, seed}` and nothing else scales the curve.
-  Restoring any of them means restoring its arithmetic too; upstream still has all of it.
+- **Exactly one grain control, and the distinction is the point.** Upstream's colour-noise /
+  grain-size / shadow-lift / monochrome sliders are gone, along with everything that only served
+  them: `channelGain()`, `shapedCurve()`, the `mono` branch in `synthesize()`, the Gaussian-blur
+  branch of `effectiveKernel()`, the `SLIDER_FMT` / `syncOutputs` / `bindOutputs` readouts and the
+  Reset button. Those *reshape* the measured curve, and once reshaped nothing on screen is a
+  measurement of anything. What is kept is a scalar **strength** on the finished field
+  (`clean + strength × noise`, folded into the curve once by `scaledCurves()`): it leaves the
+  intensity response, the channel balance and the spatial correlation exactly as measured, so
+  **1.00× is still a real reading** — hence the `<datalist>` tick and the "as measured" readout at
+  that point, and the `_x1.50` in the download filename when it is not. `readControls()` returns
+  `{camera, iso, strength, seed}`. Adding a control that reshapes rather than scales puts the page
+  back where it started; upstream still has the arithmetic if you ever want it.
 - **The explanation cards under *The model* are gone.** The published numbers are already
   generous; the calibration recipe (how the network is probed, why the whitening step comes
   first) is not something this page needs to hand out. What is left is the equation and the two
@@ -357,15 +361,39 @@ Three invariants in the synthesis math, all load-bearing:
   signature). Both are the point of the page, and both are visible in the two charts.
 
 **The busy indicator is not decoration — it is the only thing standing between the visitor and a
-page that looks hung.** `synthesize()` is a few hundred ms of straight-line arithmetic on the main
-thread, so nothing script-driven can animate through it and nothing painted in the same task ever
-reaches the screen. Hence `render()` is `async`: it sets the state, `await nextPaint()`s a
-*double* rAF (one only schedules the callback; the paint lands after it), and only then blocks.
-The sweep and the pulse are CSS animations for the same reason — the compositor keeps them running
-while JS is frozen. Two consequences to preserve: the busy guard now coalesces via `state.dirty`
-and re-runs once at the end, because the await window is long enough for a preset change to be
-dropped otherwise; and both animations need a static fallback in the `prefers-reduced-motion`
-block, which they have.
+page that looks hung**, and it has two modes for two different situations.
+
+*Indeterminate* (image decode) is a CSS sweep: the browser gives no progress from a fetch/decode,
+and a script-driven animation would freeze the moment synthesis began. *Determinate* (synthesis)
+is a real bar, and it only works because **`synthesize()` is `async` and walks the image in row
+bands**, yielding whenever it has held the thread for more than `SLICE` ms. A single blocking call
+can paint one frame before it starts and nothing after, however the bar is styled — so the
+chunking is what makes the progress bar possible, not an optimisation on top of it. `.stage.pct`
+switches modes; the fill is a `scaleX` transform so each update stays on the compositor.
+
+Four things to preserve:
+
+- `render()` still `await nextPaint()`s a *double* rAF before starting (one rAF only schedules the
+  callback; the paint lands after it), or the bar appears after the work it measures.
+- The yield is `yieldFrame()`, which **races rAF against a timer**. rAF does not fire in a
+  backgrounded tab, so yielding on rAF alone strands the loop the moment the visitor switches away.
+- The timing readout subtracts the time parked in yields (`waited`), or chunking would look like
+  it made synthesis slower.
+- `state.dirty` coalesces: the await window is long enough to drop a preset change otherwise. The
+  strength slider listens on `input` for its readout but renders through the debounce, so dragging
+  the range queues one synthesis rather than sixty.
+
+Both animations need a static fallback in the `prefers-reduced-motion` block, which they have.
+
+**`state.run` is a generation counter, and every async path must respect it.** Once synthesis
+yields, *Clear* can land in the middle of one — and the run would then finish and draw its frame
+onto a canvas the visitor had just emptied. Same for a decode still in flight. So `clearAll()`
+bumps `run`, and `render()`, `handleFile()` and the *Sample* handler each capture it and drop
+their result (and their error, and their progress updates) if it has moved on. Any new await in
+this file needs the same check. `clearAll()` deliberately leaves the controls and the charts
+alone: camera / ISO / strength / seed are a setup worth carrying to the next image, and the
+charts describe the preset rather than the picture — the same reasoning as `syncViewOptions()`
+on the SMV side.
 
 **`resize` must never reach `render()`.** The image canvases are CSS-scaled and the noise field is
 tied to the working resolution, not the viewport, so re-synthesising on resize costs a few hundred

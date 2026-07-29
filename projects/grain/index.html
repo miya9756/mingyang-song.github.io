@@ -89,10 +89,13 @@
   .field{display:flex;flex-direction:column;gap:5px;min-width:0}
   .field>label{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
                display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  output{font-family:var(--mono);font-size:.74rem;font-variant-numeric:tabular-nums;color:var(--ink);
+         text-transform:none;letter-spacing:0;font-weight:400}
   .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .row.tight{grid-template-columns:1fr auto;gap:8px;align-items:end}
   select,input[type=number]{width:100%;padding:7px 9px;background:var(--panel-2);color:var(--ink);
                             border:1px solid var(--line);border-radius:7px;font:inherit}
+  input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0}
   button{font:inherit;border-radius:7px;cursor:pointer;border:1px solid var(--line);
          transition:color .14s,border-color .14s,background-color .14s}
   button:disabled{opacity:.45;cursor:not-allowed}
@@ -130,10 +133,13 @@
   .ptag-l{left:10px} .ptag-r{right:10px}
   .fs{position:absolute;right:8px;bottom:8px;width:30px;height:30px;padding:0;border:none;border-radius:6px;
       background:rgba(0,0,0,.55);color:#fff;font-size:15px}
-  /* Busy state. The synthesis loop blocks the main thread, so this cannot be a spinner that keeps
-     spinning — it is painted once, before the loop starts, and taken down after. That is why the
-     bar sweeps on a CSS animation (the compositor keeps it moving while JS is busy) rather than on
-     anything driven from script, which would freeze on the first frame. */
+  /* Busy state, in two modes.
+     INDETERMINATE (image decode) is a CSS sweep: the browser is inside a fetch/decode we get no
+     progress from, and a script-driven animation would freeze the instant synthesis started.
+     DETERMINATE (synthesis) is a real bar. It only works because synthesize() now runs in row
+     bands and yields the thread between them — a single blocking call can paint one frame at the
+     start and nothing after it, however the bar is styled. `.stage.pct` switches between the two,
+     and the fill is a transform so each update stays on the compositor. */
   .busybar{position:absolute;top:0;left:0;right:0;height:2px;overflow:hidden;z-index:4;
            opacity:0;transition:opacity .18s;pointer-events:none}
   .stage.busy .busybar{opacity:1}
@@ -141,10 +147,17 @@
                   background:linear-gradient(90deg,transparent,var(--accent),transparent);
                   animation:sweep 1.05s ease-in-out infinite}
   @keyframes sweep{to{left:100%}}
+  .busybar i{position:absolute;inset:0;display:none;background:var(--accent);
+             transform:scaleX(var(--p,0));transform-origin:left;
+             transition:transform .09s linear}
+  .stage.pct .busybar i{display:block}
+  .stage.pct .busybar::after{display:none}          /* one mode at a time, never both */
   .working{position:absolute;left:10px;bottom:10px;z-index:4;margin:0;display:none;
            align-items:center;gap:7px;padding:5px 11px 5px 9px;border-radius:999px;
            background:rgba(8,10,12,.66);color:#fff;font:600 11.5px/1 Inter,system-ui,sans-serif;
            letter-spacing:.01em;pointer-events:none;backdrop-filter:blur(2px)}
+  /* tabular-nums so the pill does not twitch wider as the digits change */
+  .working .pct{font-variant-numeric:tabular-nums;opacity:.72;min-width:2.6em}
   .stage.busy .working{display:inline-flex}
   .working::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);
                    flex:none;animation:throb 1.05s ease-in-out infinite}
@@ -265,10 +278,22 @@
           </div>
         </fieldset>
 
-        <!-- No free grain controls here, deliberately. Upstream has strength / colour / size /
-             shadow-lift / monochrome sliders, which are a nice toy but turn the page into a grain
-             tool: what is on screen is then no longer a measurement of anything. This page shows
-             the pattern instead — a preset is reproduced as measured, or not at all. -->
+        <!-- Exactly one free control, deliberately. Upstream also has colour-noise, grain-size,
+             shadow-lift and monochrome sliders, which reshape the measured curve until what is on
+             screen is no longer a measurement of anything. A scalar on the whole noise field does
+             not reshape it — the colour balance, the intensity response and the spatial
+             correlation all stay as measured — so 1.00x remains a real reading and the slider
+             reads as an exposure control rather than a grain designer. Keep it that way. -->
+        <fieldset>
+          <legend>Overlay strength</legend>
+          <div class="field">
+            <label for="strength">Noise &times; <output id="strength-v" for="strength">1.00× · as measured</output></label>
+            <input type="range" id="strength" min="0" max="3" step="0.05" value="1" list="strengthTicks">
+            <!-- the tick marks the one setting that is a measurement rather than a preference -->
+            <datalist id="strengthTicks"><option value="1"></option></datalist>
+            <p class="note">clean + strength × noise. Everything else about the preset is unchanged.</p>
+          </div>
+        </fieldset>
 
         <div class="row tight">
           <div class="field">
@@ -288,7 +313,10 @@
           </select>
         </div>
 
-        <button type="button" id="download" class="ghost" disabled>Download</button>
+        <div class="row">
+          <button type="button" id="clear" class="ghost" disabled>Clear</button>
+          <button type="button" id="download" class="ghost" disabled>Download</button>
+        </div>
 
         <p id="status" class="status">Loading parameters…</p>
       </div>
@@ -306,8 +334,11 @@
           </div>
           <!-- Busy state. Both of these live in the stage rather than in the status line because
                the wait they cover is the wait for *this* box to change. -->
-          <div class="busybar" aria-hidden="true"></div>
-          <p class="working" id="working" role="status">Synthesising grain…</p>
+          <div class="busybar" id="busybar" aria-hidden="true"><i></i></div>
+          <!-- The percentage is a separate, aria-hidden span: this is a live region, and updating
+               it twenty times a second would make a screen reader read the whole line each time.
+               The label alone is announced, once. -->
+          <p class="working" id="working" role="status"><span id="workingLabel">Synthesising grain…</span><span class="pct" id="workingPct" aria-hidden="true"></span></p>
         </div>
         <div class="viewer-bar">
           <div class="seg" role="group" aria-label="Right-hand view">
@@ -320,7 +351,7 @@
       </div>
     </div>
 
-    <p class="hint">Every preset is reproduced exactly as measured — there is nothing here to dial in, so what you see is the model’s own answer for that camera at that ISO. <em>Grain ×4</em> shows the noise field on its own, amplified four times about mid-grey; <em>Seed</em> draws a different realisation of the same distribution.</p>
+    <p class="hint">At <em>1.00×</em> the preset is reproduced exactly as measured, so what you see is the model’s own answer for that camera at that ISO; the slider scales the finished noise field without reshaping any of it, which is how you can push past a real ISO and still be looking at the right <em>kind</em> of grain. <em>Grain ×4</em> shows the noise field on its own, amplified four times about mid-grey; <em>Seed</em> draws a different realisation of the same distribution.</p>
     <p class="hint"><em>Sample</em> loads <a href="https://www.pixiv.net/artworks/142575987" target="_blank" rel="noopener">one of my own illustrations</a> — drawn rather than photographed, so it starts with no sensor noise at all and every grain you see afterwards came from the model.</p>
   </section>
 
@@ -425,7 +456,8 @@
  * sigma_c is a per-channel LUT over clean intensity; k_c is a symmetric kernel carrying the
  * spatial correlation; w is unit Gaussian noise, correlated across channels by a 3x3 Cholesky
  * factor. The presets in assets/grain_params.json were measured from the generative noise model;
- * the sliders modify them freely. Ported from the tempformer repo's playground/ — see CLAUDE.md.
+ * the only free control is a scalar on the finished field. Ported from the tempformer repo's
+ * playground/ — see CLAUDE.md.
  */
 'use strict';
 const $=(id)=>document.getElementById(id);
@@ -438,25 +470,47 @@ const CAM_NAMES={G4:'LG G4',GP:'Google Pixel',IP:'iPhone 7',N6:'Nexus 6',S6:'Gal
 
 const els={
   file:$('file'),pick:$('pick'),sample:$('sample'),drop:$('drop'),
-  camera:$('camera'),iso:$('iso'),seed:$('seed'),reseed:$('reseed'),
-  maxdim:$('maxdim'),maxdimNote:$('maxdim-note'),
-  download:$('download'),status:$('status'),timing:$('timing'),working:$('working'),
+  camera:$('camera'),iso:$('iso'),seed:$('seed'),reseed:$('reseed'),strength:$('strength'),
+  strengthV:$('strength-v'),maxdim:$('maxdim'),maxdimNote:$('maxdim-note'),
+  clear:$('clear'),download:$('download'),status:$('status'),timing:$('timing'),
+  working:$('working'),workingLabel:$('workingLabel'),workingPct:$('workingPct'),busybar:$('busybar'),
   stage:$('stage'),wipe:$('wipe'),a:$('canvas-a'),b:$('canvas-b'),
   bar:document.querySelector('.wipe-bar'),fs:$('fs'),tagR:$('tag-r'),
 };
 // `dirty` exists because render() now awaits a paint before its blocking loop: a preset change
 // during that window used to be dropped by the busy guard, leaving the canvas showing the
 // previous ISO. It is re-run once instead of queued, since only the latest selection matters.
+// `run` is a generation counter. Loading and synthesis both span awaits, so work started before
+// a Clear is still in flight when the canvas empties and would otherwise draw itself back in.
+// Every async path tags itself with the current run and drops its result if that has moved on.
 const state={params:null,source:null,clean:null,grainy:null,grainVis:null,view:'grainy',
-             busy:false,dirty:false};
+             busy:false,dirty:false,run:0};
 
 /* Paint the busy state before blocking on it. One rAF only schedules the callback for the next
    frame; the paint happens after it, so a single rAF still hands control back to synthesis
    before anything reaches the screen. The second one lands after that paint. */
 const nextPaint=()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+/* One frame, but never fewer than zero: rAF does not fire at all in a backgrounded tab, so a
+   loop that yields on rAF alone stops dead the moment the visitor switches away and never
+   resumes. Racing a timer against it keeps the work finishing either way — the same fix the
+   SpDef host needed for its decode loop. */
+const yieldFrame=()=>new Promise(r=>{
+  let done=false;
+  const go=()=>{ if(!done){ done=true; r(); } };
+  requestAnimationFrame(go); setTimeout(go,60);
+});
 function setBusy(on,label){
-  if(label) els.working.textContent=label;
+  if(label) els.workingLabel.textContent=label;
   els.stage.classList.toggle('busy',on);
+  if(!on){ els.stage.classList.remove('pct'); els.workingPct.textContent=''; }
+}
+/* p in [0,1], or null for "no progress to report" (a decode, where the browser tells us nothing).
+   The bar is a scaleX transform rather than a width so each update stays on the compositor. */
+function setProgress(p){
+  if(p==null){ els.stage.classList.remove('pct'); els.workingPct.textContent=''; return; }
+  els.stage.classList.add('pct');
+  els.busybar.style.setProperty('--p',p.toFixed(3));
+  els.workingPct.textContent=`${Math.round(p*100)}%`;
 }
 
 /* ── seeded RNG ────────────────────────────────────────────────── */
@@ -520,19 +574,31 @@ function sigmaAt(curve,knots,t){
   const i=Math.min(knots.length-2,Math.floor(x)), f=x-i;
   return curve[i]*(1-f)+curve[i+1]*f;
 }
-/* Everything the renderer is allowed to vary. The preset itself is never scaled or reshaped:
-   only which preset, and which realisation of it. */
+/* Everything the renderer is allowed to vary: which preset, which realisation of it, and one
+   scalar on the finished noise field. `strength` multiplies the whole field — it never reshapes
+   the curve, the channel balance or the kernel, so 1.00 is still exactly the measurement. */
 function readControls(){
   return {camera:els.camera.value,iso:els.iso.value,
+          strength:parseFloat(els.strength.value),
           seed:Math.abs(parseInt(els.seed.value,10)||0)>>>0};
 }
+/* The strength is folded into the curve once here rather than multiplied per pixel, so the inner
+   loop is untouched and the charts plot exactly what was applied. */
+const scaledCurves=(entry,o)=>entry.sigma.map(c=>o.strength===1?c:c.map(v=>v*o.strength));
 
 /* ── synthesis ─────────────────────────────────────────────────── */
-function synthesize(clean,o){
+/* Async and chunked. The convolution is the expensive part — three channels x H rows x ~45 taps —
+   and run as one blocking call it freezes the tab for a few hundred ms with no way to show
+   progress: anything painted in the same task never reaches the screen. So it walks the image in
+   row bands and yields the thread whenever it has held it for more than a frame's worth of work.
+   BAND is deliberately small relative to H; the time check, not the band size, decides how often
+   we actually yield, which keeps the cost the same on a fast machine and the page responsive on
+   a slow one. */
+async function synthesize(clean,o,onProgress){
   const {width:W,height:H,data:src}=clean, px=W*H, p=state.params;
   const entry=p.params[`${o.camera}|${o.iso}`];
   if(!entry) throw new Error(`no preset for ${o.camera} ISO ${o.iso}`);
-  const knots=p.knots, curves=entry.sigma;
+  const knots=p.knots, curves=scaledCurves(entry,o);
   const taps=[0,1,2].map(c=>effectiveKernel(entry.kernel[c],p.kernel_size));
   const L=entry.mix;
 
@@ -547,26 +613,45 @@ function synthesize(clean,o){
   }
   const grainy=new Uint8ClampedArray(px*4), vis=new Uint8ClampedArray(px*4),
         scaled=new Float32Array(px);
+  const BAND=Math.max(8,H>>5), SLICE=28;          // ms of work before handing the thread back
+  // The readout is meant to say how long the arithmetic took, so the time parked in yields is
+  // measured and subtracted — otherwise chunking would appear to have made synthesis slower.
+  const t0=performance.now();
+  let rows=0, last=t0, waited=0;
+  onProgress&&onProgress(0);
   for(let c=0;c<3;c++){
     const curve=curves[c];
     for(let i=0;i<px;i++) scaled[i]=sigmaAt(curve,knots,src[i*4+c]/255)*w[c][i];
     const tp=taps[c];
-    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
-      let acc=0;
-      for(let t=0;t<tp.length;t++){
-        const ty=tp[t][0], tx=tp[t][1];
-        let yy=y+ty, xx=x+tx;                     // reflect at the border
-        if(yy<0) yy=-yy; else if(yy>=H) yy=2*H-2-yy;
-        if(xx<0) xx=-xx; else if(xx>=W) xx=2*W-2-xx;
-        acc+=tp[t][2]*scaled[yy*W+xx];
+    for(let y0=0;y0<H;y0+=BAND){
+      const yEnd=Math.min(H,y0+BAND);
+      for(let y=y0;y<yEnd;y++) for(let x=0;x<W;x++){
+        let acc=0;
+        for(let t=0;t<tp.length;t++){
+          const ty=tp[t][0], tx=tp[t][1];
+          let yy=y+ty, xx=x+tx;                     // reflect at the border
+          if(yy<0) yy=-yy; else if(yy>=H) yy=2*H-2-yy;
+          if(xx<0) xx=-xx; else if(xx>=W) xx=2*W-2-xx;
+          acc+=tp[t][2]*scaled[yy*W+xx];
+        }
+        const j=(y*W+x)*4+c;
+        grainy[j]=(src[j]/255+acc)*255;
+        vis[j]=128+acc*4*255;
       }
-      const j=(y*W+x)*4+c;
-      grainy[j]=(src[j]/255+acc)*255;
-      vis[j]=128+acc*4*255;
+      rows+=yEnd-y0;
+      const now=performance.now();
+      if(now-last>SLICE){
+        onProgress&&onProgress(rows/(3*H));
+        await yieldFrame();
+        last=performance.now();
+        waited+=last-now;
+      }
     }
   }
   for(let i=3;i<px*4;i+=4){ grainy[i]=255; vis[i]=255; }
-  return {grainy:new ImageData(grainy,W,H),vis:new ImageData(vis,W,H),curves,taps};
+  onProgress&&onProgress(1);
+  return {grainy:new ImageData(grainy,W,H),vis:new ImageData(vis,W,H),curves,taps,
+          ms:performance.now()-t0-waited};
 }
 
 /* ── charts ────────────────────────────────────────────────────── */
@@ -678,16 +763,20 @@ function drawTo(canvas,imageData){
 let renderTimer=null;
 function scheduleRender(delay=110){ clearTimeout(renderTimer); renderTimer=setTimeout(render,delay); }
 
-/* Synthesis is a few hundred milliseconds of straight-line arithmetic on the main thread — long
-   enough to look like a hang, and impossible to animate through. So the busy state is put up and
-   allowed to paint *before* the loop starts, and everything after the await re-reads the controls
-   in case the selection moved in the meantime. */
+/* Synthesis is a few hundred milliseconds of arithmetic on the main thread — long enough to look
+   like a hang. The busy state is put up and allowed to paint *before* the work starts, and
+   everything after the await re-reads the controls in case the selection moved meanwhile.
+   synthesize() then reports progress as it goes; the first paint is still needed, or the bar
+   would appear only once the work it is measuring had already finished. */
 async function render(){
   if(!state.source||!state.params){ setBusy(false); return; }   // clear a decode indicator we can't use
   if(state.busy){ state.dirty=true; return; }
   state.busy=true;
+  const run=state.run;
   setBusy(true,'Synthesising grain…');
+  setProgress(0);
   await nextPaint();
+  if(run!==state.run){ state.busy=false; return; }   // cleared before the work even began
   const o=readControls();
   const [w,h]=targetSize(state.source.width,state.source.height,parseInt(els.maxdim.value,10));
   els.maxdimNote.textContent=`→ ${w}×${h}`;
@@ -696,9 +785,11 @@ async function render(){
       state.clean=rasterize(state.source,w,h);
       drawTo(els.a,state.clean);
     }
-    const t0=performance.now();
-    const out=synthesize(state.clean,o);
-    const ms=performance.now()-t0;
+    const out=await synthesize(state.clean,o,p=>{ if(run===state.run) setProgress(p); });
+    // synthesize() yields, so a Clear can land in the middle of it. Committing here would draw
+    // the finished frame onto a canvas the visitor already emptied.
+    if(run!==state.run) return;
+    const ms=out.ms;
     state.grainy=out.grainy; state.grainVis=out.vis;
     showView(state.view);
     updateCharts(out.curves,out.taps);
@@ -707,8 +798,10 @@ async function render(){
     els.status.textContent='Ready.';
     els.status.className='status';
   }catch(err){
-    els.status.textContent=String(err.message||err);
-    els.status.className='status err';
+    if(run===state.run){                  // a superseded run must not paint an error on a clean page
+      els.status.textContent=String(err.message||err);
+      els.status.className='status err';
+    }
   }finally{
     state.busy=false;
     setBusy(false);
@@ -732,7 +825,29 @@ async function setSource(img){
   state.source=img; state.clean=null;
   els.stage.classList.remove('empty');
   els.wipe.hidden=false;
+  els.clear.disabled=false;
   return render();
+}
+const readyMsg=()=>`Ready — ${Object.keys(state.params.params).length} measured presets.`;
+/* Back to the empty stage. The view options are deliberately left alone — camera, ISO, strength
+   and seed are a setup you may want to carry to the next image, exactly as the SMV viewer keeps
+   its view options across a scene load. The charts stay up too: they describe the preset, not the
+   picture. Bumping `run` is what stops an in-flight decode or synthesis from repainting the
+   canvas a moment after it was emptied. */
+function clearAll(){
+  state.run++;
+  state.dirty=false;
+  clearTimeout(renderTimer);
+  state.source=null; state.clean=null; state.grainy=null; state.grainVis=null;
+  els.stage.classList.add('empty');
+  els.wipe.hidden=true;
+  els.file.value='';                       // so picking the same file again still fires `change`
+  els.clear.disabled=true; els.download.disabled=true;
+  els.timing.textContent=''; els.maxdimNote.textContent='';
+  setBusy(false);
+  els.status.textContent=readyMsg();
+  els.status.className='status';
+  els.pick.focus();                        // the button just went disabled; don't drop focus to body
 }
 function loadFailed(err){
   setBusy(false);
@@ -743,10 +858,13 @@ function loadFailed(err){
    look at — so the indicator goes up here rather than in render(), and stays up through both. */
 async function handleFile(f){
   if(!f||!f.type.startsWith('image/')) return;
-  const url=URL.createObjectURL(f);
+  const url=URL.createObjectURL(f), run=state.run;
   setBusy(true,'Decoding image…');
-  try{ await setSource(await loadImage(url)); }
-  catch(err){ loadFailed(err); }
+  try{
+    const img=await loadImage(url);
+    if(run!==state.run) return;            // cleared while the decode was running
+    await setSource(img);
+  }catch(err){ if(run===state.run) loadFailed(err); }
   finally{ URL.revokeObjectURL(url); }
 }
 
@@ -761,10 +879,15 @@ function populate(){
 els.pick.addEventListener('click',()=>els.file.click());
 els.file.addEventListener('change',(e)=>handleFile(e.target.files[0]));
 els.sample.addEventListener('click',async()=>{
+  const run=state.run;
   setBusy(true,'Fetching sample…');
-  try{ await setSource(await loadImage(SAMPLE_URL)); }
-  catch{ loadFailed(new Error(`sample image not found at ${SAMPLE_URL}`)); }
+  try{
+    const img=await loadImage(SAMPLE_URL);
+    if(run!==state.run) return;
+    await setSource(img);
+  }catch{ if(run===state.run) loadFailed(new Error(`sample image not found at ${SAMPLE_URL}`)); }
 });
+els.clear.addEventListener('click',clearAll);
 ['dragenter','dragover'].forEach(t=>els.drop.addEventListener(t,(e)=>{e.preventDefault();els.drop.classList.add('over');}));
 ['dragleave','drop'].forEach(t=>els.drop.addEventListener(t,(e)=>{e.preventDefault();els.drop.classList.remove('over');}));
 els.drop.addEventListener('drop',(e)=>handleFile(e.dataTransfer.files[0]));
@@ -773,17 +896,26 @@ window.addEventListener('paste',(e)=>{
   if(it) handleFile(it.getAsFile());
 });
 
-/* Draw the selected preset's curves whether or not an image is loaded — before one is, and after
-   the sliders were dropped, the charts are the only thing on the page that answers a preset
-   change, and render() bails out with no source to work on. */
+/* Draw the selected preset's curves whether or not an image is loaded — before one is, the charts
+   are the only thing on the page that answers a control at all, and render() bails out with no
+   source to work on. They plot the curve *after* strength, so they always describe what was
+   actually applied rather than the untouched preset. */
 function chartsForPreset(){
   const o=readControls(), e=state.params&&state.params.params[`${o.camera}|${o.iso}`];
-  if(e) updateCharts(e.sigma,[0,1,2].map(c=>effectiveKernel(e.kernel[c],state.params.kernel_size)));
+  if(e) updateCharts(scaledCurves(e,o),
+                     [0,1,2].map(c=>effectiveKernel(e.kernel[c],state.params.kernel_size)));
 }
-[els.camera,els.iso].forEach(el=>el.addEventListener('change',()=>{
+const presetChanged=()=>{ if(!state.source) chartsForPreset(); scheduleRender(0); };
+[els.camera,els.iso].forEach(el=>el.addEventListener('change',presetChanged));
+/* `input`, not `change`: the readout has to track the thumb while it is being dragged. The render
+   itself is still debounced by scheduleRender's timer, so a drag across the range queues one
+   synthesis at the end rather than sixty. */
+els.strength.addEventListener('input',()=>{
+  const v=parseFloat(els.strength.value);
+  els.strengthV.textContent=v===1?'1.00× · as measured':`${v.toFixed(2)}×`;
   if(!state.source) chartsForPreset();
-  scheduleRender(0);
-}));
+  scheduleRender();
+});
 els.seed.addEventListener('change',()=>scheduleRender(0));
 els.maxdim.addEventListener('change',()=>{ state.clean=null; scheduleRender(0); });
 els.reseed.addEventListener('click',()=>{
@@ -797,7 +929,11 @@ els.download.addEventListener('click',()=>{
   c.width=d.width; c.height=d.height;
   c.getContext('2d').putImageData(d,0,0);
   const a=document.createElement('a');
-  a.download=`grain_${els.camera.value}_${els.iso.value}_seed${els.seed.value}.png`;
+  // the strength lands in the filename only when it is not the measured 1.00x, so a downloaded
+  // file always says whether it is a measurement or a preference
+  const s=parseFloat(els.strength.value);
+  a.download=`grain_${els.camera.value}_${els.iso.value}`+
+             (s===1?'':`_x${s.toFixed(2)}`)+`_seed${els.seed.value}.png`;
   a.href=c.toDataURL('image/png'); a.click();
 });
 document.querySelectorAll('.seg-btn').forEach(b=>b.addEventListener('click',()=>{
@@ -857,7 +993,7 @@ document.querySelectorAll('.copybtn').forEach(b=>b.onclick=()=>{
     if(!r.ok) throw new Error(`${PARAMS_URL} → HTTP ${r.status}`);
     state.params=await r.json();
     populate();
-    els.status.textContent=`Ready — ${Object.keys(state.params.params).length} measured presets.`;
+    els.status.textContent=readyMsg();
     chartsForPreset();
   }catch(err){
     els.status.textContent=`Could not load parameters: ${err.message}`;
