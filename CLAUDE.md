@@ -384,10 +384,18 @@ cd ~/tempformer && conda run -n TempFormer python -m noise_synthesizer.calibrate
 cp playground/assets/grain_params.json ~/mingyang-song.github.io/projects/grain/assets/
 ```
 
-The sample image is a crop of Kodak *kodim16*; it and the landing-page teaser
-(`assets/grain_teaser.png`, a clean · G4 ISO 800 · G4 ISO 1600 strip built from
-`~/tempformer/assets/kodim16_crop*.png`) are the only imagery, and both are credited in the
-page's **Datasets** section alongside SIDD.
+**Two different pictures, on purpose.** The *Sample* button loads `assets/grain_example.jpg` — one
+of Mingyang's own illustrations ([pixiv](https://www.pixiv.net/artworks/142575987)) — because a
+drawing carries no sensor noise of its own, so the whole before/after is the model's doing and
+nothing is being piled on top of grain that was already there. The landing-page teaser
+(`assets/grain_teaser.png`, a clean · G4 ISO 800 · G4 ISO 1600 strip) is still built from Kodak
+*kodim16* via `~/tempformer/assets/kodim16_crop*.png`. **So the Kodak credit has to stay** as long
+as that teaser does — it now names the teaser rather than the sample. Both, plus SIDD, are in the
+page's **Datasets & credits** section.
+
+Note that `SAMPLE_URL` / `PARAMS_URL` are consumed through variables, so no `src=` or `fetch('…')`
+literal ever names them; `verify.py`'s `local_refs()` grew a `_URL = '…'` pattern so a moved or
+renamed asset still fails the check instead of only failing in the browser.
 
 ## Git LFS (read before touching scenes)
 

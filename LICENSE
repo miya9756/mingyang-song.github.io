@@ -1,0 +1,41 @@
+Copyright (c) 2026 Mingyang Song. All rights reserved.
+
+This repository is the source of a personal website. Everything in it that is Mingyang
+Song's own work -- the page text, the site's HTML, CSS and JavaScript, the photographs,
+the illustrations and the figures -- is published so that it can be read and used on the
+web, and for no other purpose. No permission is granted to copy, redistribute, modify,
+or reuse it, in whole or in part.
+
+Viewing the site, and the copying a browser performs in order to display it, is of
+course fine. So is ordinary academic citation of the papers the project pages describe:
+each of those pages carries its own citation block, which is the preferred way to refer
+to this work. For anything else, please ask -- misong9756@gmail.com.
+
+
+THIRD-PARTY MATERIAL -- NOT COVERED BY THE ABOVE
+
+Parts of this repository are not Mingyang Song's work. They remain under the licences of
+their original authors, and nothing in this file grants, restricts or restates any right
+in them.
+
+  projects/smv/vendor/ffmpeg/, projects/smv/vendor/core/, projects/smv/vendor/util/
+      ffmpeg.wasm and the FFmpeg core it embeds.
+      https://github.com/ffmpegwasm/ffmpeg.wasm -- https://ffmpeg.org/
+
+  projects/smv/vendor/fflate.js
+      fflate, MIT. https://github.com/101arrowz/fflate
+
+  the WebGL2 splat rasterizer inside projects/smv/index.html
+      after antimatter15's `splat`. https://github.com/antimatter15/splat
+
+  projects/smv/scenes/, projects/spdef/scenes/
+      reconstructions of scenes from the D-NeRF, HyperNeRF and NeRF-DS datasets.
+
+  projects/grain/assets/grain_params.json
+      summary statistics measured from a model trained on SIDD.
+
+  assets/grain_teaser.png
+      built from "kodim16" of the Kodak Lossless True Color Image Suite.
+
+The "Built with", "Datasets" and "Datasets & credits" sections of the project pages carry
+the full attributions and the papers to cite.

@@ -321,6 +321,7 @@
     </div>
 
     <p class="hint">Every preset is reproduced exactly as measured — there is nothing here to dial in, so what you see is the model’s own answer for that camera at that ISO. <em>Grain ×4</em> shows the noise field on its own, amplified four times about mid-grey; <em>Seed</em> draws a different realisation of the same distribution.</p>
+    <p class="hint"><em>Sample</em> loads <a href="https://www.pixiv.net/artworks/142575987" target="_blank" rel="noopener">one of my own illustrations</a> — drawn rather than photographed, so it starts with no sensor noise at all and every grain you see afterwards came from the model.</p>
   </section>
 
   <section>
@@ -399,18 +400,21 @@
   </section>
 
   <section>
-    <h2>Datasets</h2>
-    <p class="ack">The noise model behind the presets was trained on an open-source smartphone-noise dataset, and the sample photograph comes from a standard test suite. Please cite the original authors:</p>
+    <h2>Datasets &amp; credits</h2>
+    <p class="ack">The noise model behind the presets was trained on an open-source smartphone-noise dataset; the imagery on and around this page is credited alongside it.</p>
     <div class="datacard">
       <p class="ref"><strong><a href="https://abdokamel.github.io/sidd/" target="_blank" rel="noopener">SIDD</a></strong> — real clean/noisy smartphone pairs; the source of every preset above (G4, GP, IP, N6 and S6 are its five cameras).<br>
       Abdelrahman Abdelhamed, Stephen Lin, and Michael S. Brown. 2018. A High-Quality Denoising Dataset for Smartphone Cameras. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR).</p>
-      <p class="ref"><strong><a href="https://r0k.us/graphics/kodak/" target="_blank" rel="noopener">Kodak Lossless True Color Image Suite</a></strong> — the <em>Sample</em> image is a crop of <em>kodim16</em>, long used as a reference image for image-processing work.</p>
+      <p class="ref"><strong>Sample image</strong> — <em><a href="https://www.pixiv.net/artworks/142575987" target="_blank" rel="noopener">my own illustration</a></em>, used here because a drawing carries no sensor noise of its own. &copy; 2026 Mingyang Song, all rights reserved; regraining it in your browser does not make it yours to republish.</p>
+      <p class="ref"><strong><a href="https://r0k.us/graphics/kodak/" target="_blank" rel="noopener">Kodak Lossless True Color Image Suite</a></strong> — <em>kodim16</em>, long a reference image for image-processing work, is the crop in the teaser strip on the landing page.</p>
     </div>
   </section>
 </main>
 
 <footer>
-  <div class="inner">&copy; 2026 Mingyang Song</div>
+  <!-- The reserved-rights claim covers Mingyang's own text, figures, illustration and code only;
+       SIDD, the Kodak crop and the measured parameters keep their own terms, hence the clause. -->
+  <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved. Third-party code and datasets remain under their own licences.</div>
 </footer>
 
 <script>
@@ -425,7 +429,10 @@
  */
 'use strict';
 const $=(id)=>document.getElementById(id);
-const PARAMS_URL='./assets/grain_params.json', SAMPLE_URL='./assets/sample.png';
+// The Sample is a drawn illustration rather than a photograph, deliberately: it carries no sensor
+// noise of its own, so everything visible after regraining came from the model and nothing is
+// being added on top of grain that was already there. It sits in the site's shared assets/.
+const PARAMS_URL='./assets/grain_params.json', SAMPLE_URL='../../assets/grain_example.jpg';
 /* SIDD ships its cameras as two-letter codes; nobody reads "N6" as a phone. */
 const CAM_NAMES={G4:'LG G4',GP:'Google Pixel',IP:'iPhone 7',N6:'Nexus 6',S6:'Galaxy S6 Edge'};
 

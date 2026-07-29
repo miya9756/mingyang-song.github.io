@@ -162,7 +162,13 @@ fails the build on root-absolute paths.
 - **GitHub link was removed** — source cannot be published. Don't re-add it.
 - **Blend is `n/a` on all shipped scenes** (`overlap_frames = 0`); an overlapped scene is
   planned, which will light it up on its own.
-- **`© 2026 Mingyang Song` footer** is back, using the `footer{…}` rule that was left in
-  place. It covers Mingyang's own text, artwork and code only — the viewer page carries
-  separate *Built with* (third-party libraries) and *Datasets* (D-NeRF / HyperNeRF /
-  NeRF-DS) attribution, and those must stay.
+- **Every page ends `© 2026 Mingyang Song · All rights reserved.`** — landing, SMV, SpDef and
+  Grain, using each page's own `footer{…}` rule. Nothing on this site is offered under an open
+  licence, and a public repo that says nothing is routinely read as an invitation; `/LICENSE`
+  at the repo root carries the scope. **The claim covers Mingyang's own text, artwork and code
+  only**, so the three project pages add "Third-party code and datasets remain under their own
+  licences" and keep their *Built with* (ffmpeg.wasm, fflate, antimatter15's `splat`) and
+  *Datasets* / *Datasets & credits* (D-NeRF / HyperNeRF / NeRF-DS / SIDD / Kodak) blocks. Those
+  attributions are load-bearing — the reserved-rights line is only honest next to them.
+  (The SMV viewer page had no copyright line at all until 2026-07-29, despite this note
+  previously claiming otherwise. It has one now.)

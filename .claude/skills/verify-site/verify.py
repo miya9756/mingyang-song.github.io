@@ -208,6 +208,9 @@ def local_refs(src):
                 r"import\(\s*['\"](\.{1,2}/[^'\"]+)['\"]",
                 r"new\s+URL\(\s*['\"](\.{1,2}/[^'\"]+)['\"]",
                 r"fetch\(\s*['\"]([^'\"`]+)['\"]",          # scenes.json
+                # assets named only by a JS constant and fetched through the variable, so no
+                # fetch()/src= literal ever mentions them (the grain page's params and sample)
+                r"_URL\s*=\s*['\"]([^'\"]+)['\"]",
                 r"\.register\(\s*['\"]([^'\"]+)['\"]"):     # sw.js
         out |= set(re.findall(pat, src))
     keep = set()
