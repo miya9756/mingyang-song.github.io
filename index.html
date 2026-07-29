@@ -34,7 +34,34 @@
      paints the overscroll area Safari rubber-bands into. */
   html{background:var(--bg)}
   body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:760px;margin:0 auto;padding:12vh 24px 12vh}
+  /* Backdrop drawing, pinned to the viewport's bottom-right corner.
+     It is line art on a transparent ground, so it composites straight onto --bg and needs no
+     inversion between themes: the dark warm ink reads as pencil on the light paper, and — once
+     brightened, because at rest it is barely lighter than #0e1014 — as embers on the dark one.
+     Hence the two vars; per the token rule, both themes define both or neither.
+     Fixed rather than scrolled: the page is only a screen or two, and a fixed corner never
+     collides with the middle of a longer one. It bleeds off the right and bottom edges of the
+     viewport, so only its top and left edges are ever cut, and both have to dissolve to nothing.
+     THE FADE IS BAKED INTO THE PNG'S ALPHA — do not "restore" a CSS mask here. A single
+     linear-gradient mask cannot be zero along two perpendicular edges: with
+     `linear-gradient(to bottom right, …)` the top-right corner lands mid-ramp, so the drawing met
+     the top edge at ~50-67% opacity and left a visible horizontal seam. The fade has to be the
+     *product* of two axis-aligned ramps, one per cut edge, which CSS can only express through
+     mask-composite — patchy support, and it falls back to union (worse, not gracefully) where it
+     is missing. Baked, it is exact, needs no vendor prefixes, and compresses better because
+     55% of the image is now empty. The ramps are smoothstep, not linear: a linear fade has a kink
+     where it reaches full opacity and the kink itself reads as a faint line.
+     Regenerate with tools/bake_web_bg.py if the artwork changes; re-exporting from the original
+     without it puts the seam straight back. */
+  :root{--art-op:.75;--art-filter:brightness(2.2)}
+  @media(prefers-color-scheme:light){:root{--art-op:.65;--art-filter:none}}
+  body::after{content:"";position:fixed;right:0;bottom:0;z-index:0;pointer-events:none;
+        width:min(64vw,800px);aspect-ratio:8/5;
+        background:url(assets/web_bg.png) right bottom/cover no-repeat;
+        opacity:var(--art-op);filter:var(--art-filter)}
+  /* body::after is positioned, so it would paint over the in-flow content; lifting .wrap into
+     the same layer at a higher z-index is what keeps the drawing behind the text. */
+  .wrap{position:relative;z-index:1;max-width:760px;margin:0 auto;padding:12vh 24px 12vh}
   h1{font-size:clamp(2rem,6vw,3rem);line-height:1.1;margin:0 0 .3em;letter-spacing:-.02em}
   .role{color:var(--dim);margin:0 0 2.5em;font-size:1.05rem}
   /* Header. The photo is 3:4 portrait (0.74:1) and carries real scenery, so it keeps its native
@@ -53,6 +80,9 @@
   @media(max-width:620px){
     .hero{grid-template-columns:1fr;gap:20px;justify-items:start}
     .photo{width:130px;margin-top:0}
+    /* On a phone the column fills the width, so the drawing sits behind the footer instead of in
+       an empty gutter. Wider but fainter: the corner still reads, the dim footer text stays clean. */
+    body::after{width:72vw;opacity:calc(var(--art-op)*.55)}
   }
   h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);font-weight:600;margin:3em 0 1em;padding-bottom:.6em;border-bottom:1px solid var(--line)}
   a{color:var(--accent);text-decoration:none}
@@ -209,7 +239,7 @@
          alt="The same photographic crop three times: clean, then regrained as an LG G4 at ISO 800 and at ISO 1600, the noise visibly coarser and more coloured at the higher setting.">
     <div class="featbody">
       <h3>Digital Camera Noise Synthesis</h3>
-      <p>A generative model for real sensor noise, distilled down to two measured ingredients — an intensity-to-variance curve and a spatial correlation kernel. Regrain your own photographs as five smartphones across fourteen ISO levels, live, on your own CPU.</p>
+      <p>A generative model for real sensor noise, distilled down to two measured ingredients — an intensity-to-variance curve and a spatial correlation kernel. Regrain your own photographs as five smartphones across fourteen ISO levels.</p>
       <span class="cardfoot">
         <span class="tag"><span class="live" aria-hidden="true"></span>arXiv ’23 · Preprint</span>
         <span class="cta">Playground <span class="arrow" aria-hidden="true">→</span></span>

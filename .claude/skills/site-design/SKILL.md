@@ -123,6 +123,34 @@ To promote a slot to a real project: swap `<div class="card slot">` for
 teaser `<img class="teaser">` above it with the file's real pixel `width`/`height` and real
 `alt` text. The inline comment in `index.html` says the same thing at the call site.
 
+### Backdrop drawing (`body::after`)
+
+`assets/web_bg.png` is line art on a **transparent** ground, pinned to the viewport's
+bottom-right and dissolved by a diagonal mask. Four things are load-bearing:
+
+- **It composites onto `--bg` directly, so no inversion between themes.** The ink is dark warm
+  maroon: pencil on the light paper, embers on the dark surface once `brightness(2.2)` lifts it
+  off `#0e1014`. `--art-op` / `--art-filter` carry the per-theme values — both themes define
+  both, per the token rule.
+- **`.wrap` must keep `position:relative;z-index:1`.** `body::after` is positioned, so without
+  it the drawing paints *over* the text. This is the one place on the landing page where a
+  stacking context is deliberate.
+- **The fade is baked into the PNG's alpha — do not put a CSS mask back.** It was a CSS mask
+  first, and it left a visible seam: a single `linear-gradient(to bottom right, …)` puts the
+  top-right corner *halfway* along the ramp, so the drawing met the top edge at ~50–67 % opacity
+  and got cut off in a straight horizontal line. A corner fade has to be the **product of two
+  axis-aligned ramps**, one per cut edge, which CSS can only express through `mask-composite` —
+  patchy support, and where it is missing multiple masks fall back to *union*, i.e. worse rather
+  than gracefully. Baked, it is exact, prefix-free, and empties 55 % of the canvas. The ramps
+  are smoothstep, not linear: a linear fade has a kink where it reaches full opacity, and the
+  kink is itself faintly visible.
+- **The asset is derived, not the master.** `tools/bake_web_bg.py --src <master>` rebuilds it:
+  2000 px / 3.4 MB down to 1600 px / 192 colours / 490 KB, which is 2× the 800 CSS px it is ever
+  painted at. Re-exporting from the artwork by hand puts the seam straight back and multiplies
+  the landing page's weight. Keep the master outside the repo. **`W, H` in that script and the
+  `width:` in the CSS are a pair** — raising the displayed size without re-baking means the
+  browser upscales line art, which is exactly the content that shows it.
+
 ### Motion
 Every transition and animation must be switched off in the existing
 `@media (prefers-reduced-motion: reduce)` block. Add new ones to it in the same edit —
