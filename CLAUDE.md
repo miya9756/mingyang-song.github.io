@@ -156,6 +156,23 @@ one wasm heap and race `disposeFFmpeg()` against a live decode. The decoder is r
 queue drains and re-acquired (warm cache) if another group is loaded later. `verify.py` reads
 `data-src` for asset checking; without that it stopped seeing `viewer.html` entirely.
 
+**Each comparison can also be given back.** `clearGroup()` is the counterpart to `startGroup()`:
+two comparisons already means five WebGL contexts, five scenes and every decoded motion array
+resident at once, and a third would be worse. It navigates each panel to **`about:blank`**, which
+*destroys* the panel document — GL context, textures, the motion it was sent, its rAF loop — and
+drops the host's own `p.scene` / `p.built` (keyframes are deliberately kept past decode to serve a
+panel that reloads, so nothing else frees them). `resetPane()` is shared with first-time init so
+the two cannot drift. It is also **Cancel**: `g.gen` is a generation counter that `loadGroup()`
+re-checks after every await, so an in-flight pass returns instead of writing into a group that no
+longer exists — it returns rather than throws, leaving pump()'s catch for genuine failures. An
+in-flight fetch is left to finish and its bytes dropped; aborting mid-stream would poison the HTTP
+cache for the reload that usually follows. Three quieting guards go with it: `stage()` no-ops when
+`!g.started` (a late fetch must not overwrite the "Not loaded" line), the message handler drops
+anything from a cleared group (a `ready` posted just before teardown would re-enable the
+transport), and pump()'s catch only reports when the group is still started. Load hides with
+**`hidden`, not `style.display`** — Clear restores it with `hidden=false`, which an inline
+`display:none` would outrank.
+
 **Each comparison is a `.subcard`** — heading, lede, panels, transport, status line and view
 options in one bordered block, so it is unambiguous which transport drives which panels. Three
 tones make the nesting read without extra rules: page `--bg`, card `#f7f9fc`, white boxes inside.

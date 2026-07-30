@@ -212,6 +212,7 @@
 
     <div class="transport">
       <button id="abLoad" class="tbtn tload">Load this comparison · 2.5 MB</button>
+      <button id="abClear" class="tbtn" hidden title="Unload this comparison — discards its scenes, WebGL contexts and decoded motion, and cancels the load if one is still running">✕ clear</button>
       <button id="abPlay" class="tbtn" disabled>▶ play</button>
       <input id="abScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
       <span id="abFrame" class="tnum">—</span>
@@ -274,6 +275,7 @@
 
     <div class="transport">
       <button id="amLoad" class="tbtn tload">Load this comparison · 8.1 MB</button>
+      <button id="amClear" class="tbtn" hidden title="Unload this comparison — discards its scenes, WebGL contexts and decoded motion, and cancels the load if one is still running">✕ clear</button>
       <button id="amPlay" class="tbtn" disabled>▶ play</button>
       <input id="amScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
       <span id="amFrame" class="tnum">—</span>
@@ -299,7 +301,7 @@
       </div>
     </div>
     </article>
-    <p class="hint">The two comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load. Once a card is loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. On a touch device an on-screen stick and up/down buttons appear on the first panel — the others follow, since the cameras are linked.</p>
+    <p class="hint">The two comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load. Each one loads only when you ask for it, and <em>clear</em> gives it back — scenes, renderers and decoded motion — if you would rather not hold both at once. Once a card is loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. On a touch device an on-screen stick and up/down buttons appear on the first panel — the others follow, since the cameras are linked.</p>
   </section>
 
   <section>
@@ -397,18 +399,27 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // and the view options — is shared. Linking the two clocks or the two cameras would be
   // meaningless: they are different scenes, different captures and different frame counts.
   const GROUPS=[
-    {key:'balls',ui:{load:'abLoad',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',touch:'abTouch',status:'abStatus',opts:'abOpts'},
+    {key:'balls',ui:{load:'abLoad',clear:'abClear',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',touch:'abTouch',status:'abStatus',opts:'abOpts'},
      panes:[{id:'reg',    frId:'paneA',url:'scenes/bouncingballs_reg/scene.json',    name:'with reg'},
             {id:'noreg',  frId:'paneB',url:'scenes/bouncingballs_noreg/scene.json',  name:'without reg'}]},
-    {key:'amer',ui:{load:'amLoad',play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',touch:'amTouch',status:'amStatus',opts:'amOpts'},
+    {key:'amer',ui:{load:'amLoad',clear:'amClear',play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',touch:'amTouch',status:'amStatus',opts:'amOpts'},
      panes:[{id:'k33',    frId:'paneC',url:'scenes/americano_knots33/scene.json',    name:'33 knots'},
             {id:'kfull',  frId:'paneD',url:'scenes/americano_full/scene.json',       name:'full knots'},
             {id:'knoreg', frId:'paneE',url:'scenes/americano_full_noreg/scene.json', name:'full knots, no reg'}]}
   ];
   const _ctl=id=>document.getElementById(id);
   const byId=new Map(), ALL=[];
+  // Everything about a pane that belongs to ONE load: delivery state, the host's own copies of its
+  // keyframes and motion, and the watchdog's counters. Shared by first-time init and clearGroup(),
+  // so the two cannot drift — a field reset in one but not the other is how a cleared comparison
+  // comes back half-alive (a pane still marked `sentKf`, say, is never sent its keyframe again).
+  function resetPane(p){
+    p.frames=0;p.buffered=0;p.splats=0;
+    p.alive=false;p.ready=false;p.failed=false;p.sentKf=false;p.kfAt=0;p.kfRetries=0;
+    p.built=null;p.scene=null;p.tries=0;p.t0=0;
+  }
   for(const g of GROUPS){
-    g.el={load:_ctl(g.ui.load),play:_ctl(g.ui.play),scrub:_ctl(g.ui.scrub),lbl:_ctl(g.ui.lbl),
+    g.el={load:_ctl(g.ui.load),clear:_ctl(g.ui.clear),play:_ctl(g.ui.play),scrub:_ctl(g.ui.scrub),lbl:_ctl(g.ui.lbl),
           reset:_ctl(g.ui.reset),touch:_ctl(g.ui.touch),status:_ctl(g.ui.status)};
     // Controls live in this group's own <div class="viewopts">, addressed by data-o because the
     // block is repeated per group and ids must stay unique. Missing one is a markup typo, and it
@@ -422,12 +433,15 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     }
     g.playing=false;g.gFrame=0;g.total=0;g.acc=0;g.lastT=0;g.loadMsg='loading…';
     g.started=false;g.loaded=false;g.lastCam=null;
+    // `gen` is bumped by Clear (and by each start) so an in-flight loadGroup pass can tell that the
+    // group it is loading has been thrown away; `loadLabel` is the button's original text, which
+    // Clear puts back after loadGroup replaced it with 'loading…'.
+    g.gen=0;g.loadLabel=g.el.load.textContent;
     for(const p of g.panes){
       // `src` is captured from the markup so the watchdog can reload a frame without duplicating
       // the query string here; `tries` bounds those reloads.
-      p.g=g;p.fr=_ctl(p.frId);p.box=p.fr.parentElement;p.frames=0;p.buffered=0;p.splats=0;
-      p.alive=false;p.ready=false;p.failed=false;p.sentKf=false;p.kfAt=0;p.kfRetries=0;p.built=null;p.scene=null;
-      p.src=p.fr.getAttribute('data-src');p.tries=0;p.t0=0;
+      p.g=g;p.fr=_ctl(p.frId);p.box=p.fr.parentElement;p.src=p.fr.getAttribute('data-src');
+      resetPane(p);
       byId.set(p.id,p);ALL.push(p);
     }
   }
@@ -494,7 +508,10 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     g.panes.forEach(p=>send(p,{type:'touch',on:p===t}));}
   for(const g of GROUPS){g.el.touch.checked=IS_TOUCH;g.el.touch.onchange=()=>pushTouch(g);}
 
-  function stage(g,label,pct){g.loadMsg=label;gsend(g,{type:'stage',label,pct});status(g);}
+  // A cleared group must stop narrating: a fetch already in flight when Clear was pressed still
+  // runs to completion (its result is dropped at the next staleness check), and without this its
+  // progress would keep overwriting the "Not loaded" line of a comparison that no longer exists.
+  function stage(g,label,pct){if(!g.started)return;g.loadMsg=label;gsend(g,{type:'stage',label,pct});status(g);}
   function status(g){
     if(!g.started){g.el.status.textContent='Not loaded — press “Load” to fetch and decode this comparison in your browser.';return;}
     const dead=g.panes.filter(p=>p.failed).map(p=>p.name);
@@ -545,6 +562,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     if(e.origin!==location.origin)return;const m=e.data;
     if(!m||m.ch!=='spdef'||m.to)return;                  // `to` means it was ours, going the other way
     const p=byId.get(m.id);if(!p)return;const g=p.g;
+    if(!g.started)return;      // cleared: a message posted just before teardown must not revive the transport
     if(m.type==='hello'){p.alive=true;flush(p);}         // panels re-announce until we answer
     else if(m.type==='stats'){p.splats=m.splats;}
     else if(m.type==='ready'){
@@ -652,11 +670,45 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
 
   function startGroup(g){
     if(g.started)return;
-    g.started=true;
+    g.gen++;g.started=true;
     g.el.load.disabled=true;g.el.load.textContent='loading\u2026';
+    g.el.clear.hidden=false;          // Clear doubles as Cancel while the load is still running
     for(const p of g.panes){p.t0=Date.now();p.box.classList.remove('idle');p.fr.src=p.src;}
     stage(g,'starting\u2026',2);
     queue.push(g);pump();
+  }
+
+  // ---- clearing -----------------------------------------------------------
+  // Two comparisons is already five WebGL contexts, five scenes and every decoded motion array
+  // held resident at once, and a third would make that worse, so a comparison you are done with
+  // has to be givable back. Nothing here is a hint to the browser: navigating the iframe to
+  // about:blank DESTROYS the panel document, and with it the GL context, its textures, the motion
+  // it was sent and its rAF loop. The host's own copies go too: p.scene, and p.built, which holds
+  // keyframes deliberately kept past decode so a panel that reloads can still be served, and which
+  // nothing else ever frees.
+  //
+  // It also cancels a load in progress. `gen` is the generation counter loadGroup() checks after
+  // every await: the pass keeps running to its next checkpoint, then returns without touching a
+  // group that no longer exists. An in-flight fetch is left to finish and its bytes dropped;
+  // aborting mid-stream would poison the HTTP cache for the reload that usually follows.
+  function clearGroup(g){
+    g.gen++;
+    const qi=queue.indexOf(g);if(qi>=0)queue.splice(qi,1);   // queued but never started
+    g.started=false;g.loaded=false;g.playing=false;
+    g.total=0;g.gFrame=0;g.acc=0;g.lastT=0;g.lastCam=null;g.loadMsg='loading\u2026';
+    for(const p of g.panes){
+      p.fr.src='about:blank';        // discards the document: GL context, textures, motion, worker
+      p.box.classList.add('idle');
+      resetPane(p);
+    }
+    g.el.play.disabled=true;g.el.play.textContent='\u25b6 play';
+    g.el.scrub.disabled=true;g.el.scrub.max=0;g.el.scrub.value=0;
+    g.el.lbl.textContent='\u2014';
+    g.el.load.hidden=false;g.el.load.disabled=false;g.el.load.textContent=g.loadLabel;
+    g.el.clear.hidden=true;
+    status(g);
+    // If this was the group being decoded, pump() reaches an empty queue and disposeFFmpeg() hands
+    // the ~32 MB core back too; no need to force it here.
   }
 
   async function pump(){
@@ -666,8 +718,10 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
         if(queue.length){
           const g=queue.shift();
           try{await loadGroup(g);}
-          catch(e){console.error(e);g.loadMsg='\u2717 '+(e.message||e);status(g);
-                   gsend(g,{type:'error',msg:String(e.message||e)});}
+          catch(e){console.error(e);
+                   // A group cleared mid-load is not a failure to report — it has no panels left.
+                   if(g.started){g.loadMsg='\u2717 '+(e.message||e);status(g);
+                                 gsend(g,{type:'error',msg:String(e.message||e)});}}
           continue;
         }
         // Queue drained: hand the ~32 MB core back. A click landing during the await is picked up
@@ -679,6 +733,9 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   }
 
   async function loadGroup(g){
+    // Every await below is a point at which Clear may have been pressed; `stale()` is how this pass
+    // finds out. It returns rather than throws, so pump()'s catch stays for genuine load failures.
+    const gen=g.gen, stale=()=>g.gen!==gen;
     // Keyframes first for every panel — no decoder involved, so they are on screen and orbitable
     // before the core is fetched.
     //
@@ -697,6 +754,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
         return {p,shared,refs};
       }catch(e){console.error('[spdef]',p.name,e);return {p,err:e};}
     }));
+    if(stale())return;
     for(const r of got){
       if(r.err){r.p.failed=true;send(r.p,{type:'error',msg:String(r.err.message||r.err)});pushTouch(g);continue;}
       // buildKeyframe is synchronous and heavy, so it runs after the fetches, not during them
@@ -717,6 +775,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       // it — recreateFFmpeg() is what clears _loading.
       console.error('[spdef]',e);stage(g,'decoder stalled \u2014 retrying\u2026',6);
       ff=await withTimeout(recreateFFmpeg(()=>{}),150000,'decoder download');}
+    if(stale())return;
     const okPanes=g.panes.filter(p=>!p.failed);
     const maxG=okPanes.reduce((n,p)=>Math.max(n,p.scene.gops.length),0);
     const totalG=okPanes.reduce((n,p)=>n+p.scene.gops.length,0);
@@ -727,13 +786,17 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       const tag=ng>1?p.name+' \u2014 GOP '+(gi+1)+'/'+ng:p.name;
       const streams={xyz:{bytes:await grab(g,base+sg.streams.xyz.path,tag+' \u2014 motion xyz\u2026'),meta:sg.streams.xyz.meta},
                      rot:{bytes:await grab(g,base+sg.streams.rot.path,tag+' \u2014 motion rot\u2026'),meta:sg.streams.rot.meta}};
+      if(stale())return;                                 // cleared mid-fetch: drop the bytes, do not decode them
       stage(g,'decoding '+tag+'\u2026',Math.round(10+80*nDone/totalG));
       let r;
       try{r=await withTimeout(decodeMotionGopBundle(ff,streams,p.built[gi].kf),150000,'motion decode');}
-      catch(e){console.error('[spdef] decode failed for',p.name,e);
+      catch(e){if(stale())return;
+        console.error('[spdef] decode failed for',p.name,e);
         p.failed=true;send(p,{type:'error',msg:'motion decode failed'});pushTouch(g);
         ff=await recreateFFmpeg(()=>{});                 // the heap may be poisoned; start clean
+        if(stale())return;
         continue;}
+      if(stale())return;                                 // cleared mid-decode: p.built is null now, so the write below would throw
       // kf is kept, not freed: dropping it here would race a panel that says hello late and
       // still needs its keyframe sent.
       p.built[gi].motion=r.motion;p.built[gi].F=r.F;
@@ -741,11 +804,14 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       // Recycle the primary's wasm heap every 4 decodes, as the SMV loader does.
       if(++nDone%4===0&&nDone<totalG)ff=await recreateFFmpeg(()=>{});
       await yieldFrame();
+      if(stale())return;
     }
-    g.loaded=true;g.el.load.style.display='none';status(g);
+    // `hidden`, not style.display — Clear puts the button back with hidden=false, which an inline
+    // display:none would silently outrank.
+    g.loaded=true;g.el.load.hidden=true;status(g);
   }
 
-  for(const g of GROUPS){g.el.load.onclick=()=>startGroup(g);status(g);}
+  for(const g of GROUPS){g.el.load.onclick=()=>startGroup(g);g.el.clear.onclick=()=>clearGroup(g);status(g);}
 
   for(const g of GROUPS){
     g.el.play.onclick=()=>{g.playing=!g.playing;g.el.play.textContent=g.playing?'❚❚ pause':'▶ play';g.lastT=0;g.acc=0;};
