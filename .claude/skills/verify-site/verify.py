@@ -101,6 +101,44 @@ def check_css(page, src):
             print(f"  ok    css braces ({o} rules)")
 
 
+def check_css_comments(page, src):
+    """A stray '*/' in a <style> block silently eats the rule that follows it.
+
+    The rationale comments in these stylesheets are long and get extended, and appending a
+    paragraph to one whose '*/' is already there leaves prose sitting between two rules. CSS
+    then parses 'prose... */ #vctrl' as one (invalid) selector and DISCARDS the whole block it
+    introduces. That is how the SpDef movement pad shipped with no `display:none`: always on
+    screen, and its toggle apparently dead because the class it flips had nothing left to undo.
+
+    Braces stay balanced through all of that, so check_css cannot see it. Comment markers are
+    what actually moved: strip every well-formed comment and any marker still standing is one
+    someone left behind.
+    """
+    for i, css in enumerate(re.findall(r"<style[^>]*>(.*?)</style>", src, re.S)):
+        pos, open_at, bad = 0, -1, None
+        while pos < len(css):
+            if open_at < 0:
+                nxt = css.find("/*", pos)
+                stray = css.find("*/", pos)
+                if 0 <= stray < (nxt if nxt >= 0 else len(css)):
+                    bad = (stray, "unopened '*/' — the rule after it is being swallowed")
+                    break
+                if nxt < 0:
+                    break
+                open_at, pos = nxt, nxt + 2
+            else:
+                end = css.find("*/", pos)
+                if end < 0:
+                    bad = (open_at, "unterminated '/*' — everything after it is a comment")
+                    break
+                open_at, pos = -1, end + 2
+        if bad:
+            fail(page, f"<style> block {i}, line {css[:bad[0]].count(chr(10)) + 1} of the "
+                       f"block: {bad[1]}")
+        else:
+            print("  ok    css comments")
+
+
 def check_dom_ids(page, src):
     """Every id the JS reaches for must exist, or the page throws on load."""
     ids = set(re.findall(r'\bid="([A-Za-z][\w-]*)"', src))
@@ -316,6 +354,7 @@ def main():
         check_nesting(page, src)
         check_css(page, src)
         check_dom_ids(page, src)
+        check_css_comments(page, src)
         check_repeated_controls(page, src)
         check_page_chrome(page, src)
         check_assets(page, src)

@@ -48,11 +48,12 @@
        padding:20px;text-align:center;font-size:12.5px;color:var(--err)}
   /* Virtual movement pad — the SMV viewer's control, retinted for this page: that one floats over
      a dark scene on a dark page and is drawn in translucent white, which on this white panel would
-     be invisible. Ink-on-light here, with the knob in the page accent.
+     be invisible. Ink-on-light here, with the knob a light tint of the page accent.
      Shown on ONE panel per comparison and driven by the host (`touch` message): the cameras in a
      group are linked, so a pad per panel would be N controls for one camera. Sizes stay at ~46px
      touch targets even in a third-width panel; the pad is only ever up when a pointer is coarse
-     (or someone asked for it), and shrinking it to fit the box would defeat the point. */
+     (or someone asked for it), and shrinking it to fit the box would defeat the point.
+
      Holding a control is the NORMAL way to use it — you hold the stick to keep flying — and a hold
      is also what iOS reads as "select this text": long-pressing ▲ raised the selection callout and
      the magnifier over the panel. preventDefault() on pointerdown does not stop that (the callout
@@ -68,8 +69,11 @@
   #joy{position:absolute;left:12px;bottom:12px;width:88px;height:88px;border-radius:50%;
        background:rgba(20,24,29,.09);border:1px solid rgba(20,24,29,.22);backdrop-filter:blur(3px);
        pointer-events:auto;touch-action:none}
+  /* Knob in a light tint of the page accent, not the accent itself: at full strength the stick
+     read as a filled UI control competing with the scene, and it sits under your thumb anyway. */
   #joyknob{position:absolute;left:50%;top:50%;width:38px;height:38px;margin:-19px 0 0 -19px;
-           border-radius:50%;background:rgba(31,95,191,.82);box-shadow:0 2px 8px rgba(20,30,45,.3)}
+           border-radius:50%;background:rgba(139,181,235,.88);border:1px solid rgba(31,95,191,.34);
+           box-shadow:0 2px 8px rgba(20,30,45,.22)}
   #vbtns{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
   #vbtns button{width:46px;height:46px;border-radius:50%;font:inherit;font-size:15px;line-height:1;
                 color:var(--ink);background:rgba(255,255,255,.68);border:1px solid rgba(20,24,29,.22);
