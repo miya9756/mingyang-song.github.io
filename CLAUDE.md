@@ -250,6 +250,30 @@ to the camera, which is what bouncingballs (already square, 800×800) still does
   the thing it affects. Trail max differs for that reason: 150 for bouncingballs, 200 for
   americano. `flush()` re-sends `viewState(p.g)` with the keyframe so a panel that installs late
   doesn't sit at the defaults.
+- **The virtual movement pad is per group, but only ever on ONE panel of it.** Same control as the
+  SMV viewer's (`#vctrl` / `#joy` / `#vbtns`, stick → the WASD axes, ▲▼ → the Q/E axis, folded into
+  `moveCam()`), but retinted: the SMV pad is translucent white over a dark scene, which on this
+  page's white panel is invisible. The pad has to live *in* the panel — it sits over that canvas and
+  drives that renderer's camera — but **ownership is a host decision**, sent as `{type:'touch',on}`
+  to every panel in the group, `on:false` included. The cameras in a group are linked, so a pad per
+  panel would be N controls for one camera, each covering a third of the comparison. `touchPane()`
+  picks the first *live and announced* panel — leftmost in the 1×N grid, topmost once it collapses
+  to one column — and `pushTouch()` re-pushes on every hello (via `flush`), every panel failure and
+  every toggle, so ownership can move without leaving a stale pad behind. The per-group checkbox
+  (`abTouch` / `amTouch`, in the transport, id-addressed since it is not part of the repeated
+  `.viewopts` block) **defaults to `(pointer:coarse)`**: with no keyboard there is otherwise no way
+  to fly at all, only to orbit. It stays a checkbox because the detection is a guess and the pad is
+  useful with a mouse. Hiding the pad must also zero `joyX/joyY/joyUp` or the camera keeps drifting.
+  Standalone, `viewer.html` decides for itself, with `?touch=1` / `?touch=0` to force it.
+- **The pad's long-press suppression is load-bearing, in BOTH viewers.** Holding a control is the
+  normal way to use it, and a hold is also what a phone reads as *select this text* — long-pressing
+  ▲ raised iOS's selection callout and magnifier over the scene. `preventDefault()` on `pointerdown`
+  does not stop it, because the callout comes off the touch sequence rather than the pointer event.
+  What does: `-webkit-touch-callout:none` + both `user-select`s + `-webkit-tap-highlight-color` on
+  **`#vctrl` as a whole** (the stick is a hold too, and a selection started on it drags into the
+  surrounding text), plus a `contextmenu` `preventDefault()` on the same element for Android's
+  long-press menu, which the CSS does not cover. Same four declarations and same handler in
+  `projects/smv/index.html`; keep them in step.
 - **The options block is repeated per group, so its controls are addressed by `data-o`, not by
   id** — ids must stay unique in a document. That puts them outside `verify.py`'s id check, so
   `check_repeated_controls()` instead asserts every `.viewopts` block exposes the full key list

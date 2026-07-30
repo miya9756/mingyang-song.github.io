@@ -46,6 +46,35 @@
   #barfill{height:100%;width:0;background:var(--accent);transition:width .18s linear}
   #err{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
        padding:20px;text-align:center;font-size:12.5px;color:var(--err)}
+  /* Virtual movement pad — the SMV viewer's control, retinted for this page: that one floats over
+     a dark scene on a dark page and is drawn in translucent white, which on this white panel would
+     be invisible. Ink-on-light here, with the knob in the page accent.
+     Shown on ONE panel per comparison and driven by the host (`touch` message): the cameras in a
+     group are linked, so a pad per panel would be N controls for one camera. Sizes stay at ~46px
+     touch targets even in a third-width panel; the pad is only ever up when a pointer is coarse
+     (or someone asked for it), and shrinking it to fit the box would defeat the point. */
+     Holding a control is the NORMAL way to use it — you hold the stick to keep flying — and a hold
+     is also what iOS reads as "select this text": long-pressing ▲ raised the selection callout and
+     the magnifier over the panel. preventDefault() on pointerdown does not stop that (the callout
+     comes off the touch sequence, not the pointer event), so it takes all four of these, on the
+     whole pad and not just the buttons: the joystick is a hold too, and a selection started on it
+     drags into the surrounding text. -webkit-touch-callout kills the callout/magnifier, the two
+     user-selects kill the selection itself, tap-highlight kills the grey flash on the buttons. See
+     also the contextmenu handler in the script — CSS alone leaves Android's long-press menu. */
+  #vctrl{position:absolute;inset:0;z-index:6;display:none;pointer-events:none;
+         user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+         -webkit-tap-highlight-color:transparent}
+  #vctrl.on{display:block}
+  #joy{position:absolute;left:12px;bottom:12px;width:88px;height:88px;border-radius:50%;
+       background:rgba(20,24,29,.09);border:1px solid rgba(20,24,29,.22);backdrop-filter:blur(3px);
+       pointer-events:auto;touch-action:none}
+  #joyknob{position:absolute;left:50%;top:50%;width:38px;height:38px;margin:-19px 0 0 -19px;
+           border-radius:50%;background:rgba(31,95,191,.82);box-shadow:0 2px 8px rgba(20,30,45,.3)}
+  #vbtns{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+  #vbtns button{width:46px;height:46px;border-radius:50%;font:inherit;font-size:15px;line-height:1;
+                color:var(--ink);background:rgba(255,255,255,.68);border:1px solid rgba(20,24,29,.22);
+                backdrop-filter:blur(3px);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+  #vbtns button:active{background:rgba(31,95,191,.18)}
   @media(prefers-reduced-motion:reduce){#barfill{transition:none}}
 </style>
 </head>
@@ -53,6 +82,11 @@
 <div id="wrap">
   <canvas id="gl"></canvas>
   <div id="load"><span id="stage">starting…</span><div id="track"><div id="barfill"></div></div></div>
+  <!-- after #load so the pad paints over the status gradient rather than under it -->
+  <div id="vctrl">
+    <div id="joy" aria-hidden="true"><div id="joyknob"></div></div>
+    <div id="vbtns"><button id="vup" type="button" title="up" aria-label="move up">▲</button><button id="vdn" type="button" title="down" aria-label="move down">▼</button></div>
+  </div>
   <div id="err"></div>
 </div>
 
@@ -228,7 +262,7 @@ function viewMatrix(){const f=vrot(camQ,[0,0,1]),r=vrot(camQ,[1,0,0]),u=vrot(cam
  const dr=-(r[0]*camPos[0]+r[1]*camPos[1]+r[2]*camPos[2]),du=-(u[0]*camPos[0]+u[1]*camPos[1]+u[2]*camPos[2]),df=-(f[0]*camPos[0]+f[1]*camPos[1]+f[2]*camPos[2]);
  return[r[0],u[0],f[0],0,r[1],u[1],f[1],0,r[2],u[2],f[2],0,dr,du,df,1];}
 function projMatrix(w,h,fx,fy){const zn=0.2,zf=500;return[2*fx/w,0,0,0,0,-2*fy/h,0,0,0,0,zf/(zf-zn),1,0,0,-(zf*zn)/(zf-zn),0];}
-const keys=new Set();let drag=false,lx=0,ly=0,lookTouchId=null;
+const keys=new Set();let drag=false,lx=0,ly=0,lookTouchId=null,joyX=0,joyY=0,joyUp=0;
 canvas.tabIndex=0;canvas.style.outline='none';
 canvas.addEventListener('mousedown',e=>{drag=true;lx=e.clientX;ly=e.clientY;canvas.focus();});
 addEventListener('mouseup',()=>drag=false);
@@ -242,10 +276,32 @@ canvas.addEventListener('touchcancel',()=>drag=false);
 // other panel follows through the host's camera link, not through its own keyboard.
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(['w','a','s','d','q','e',' '].includes(k))e.preventDefault();keys.add(k);});
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
-addEventListener('blur',()=>{keys.clear();drag=false;});
+addEventListener('blur',()=>{keys.clear();drag=false;joyEnd();joyUp=0;});
+// Virtual pad, same control as the SMV viewer: the stick feeds the WASD axes and the two buttons
+// the Q/E axis, so touch and keyboard end up in one place in moveCam(). Host-gated (`touch`
+// message) — see setTouchUI. Pointer events, not touch events: the same pad then also works with a
+// mouse, which is what makes the host's checkbox useful on a desktop.
+const vctrl=document.getElementById('vctrl'),joy=document.getElementById('joy'),joyknob=document.getElementById('joyknob');
+let joyId=null;
+function joyMove(e){const r=joy.getBoundingClientRect(),R=r.width/2-10;let dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);const d=Math.hypot(dx,dy)||1;if(d>R){dx*=R/d;dy*=R/d;}joyX=dx/R;joyY=dy/R;joyknob.style.transform=`translate(${dx}px,${dy}px)`;}
+function joyEnd(){joyId=null;joyX=joyY=0;joyknob.style.transform='';}
+joy.addEventListener('pointerdown',e=>{e.preventDefault();joyId=e.pointerId;joy.setPointerCapture(joyId);joyMove(e);});
+joy.addEventListener('pointermove',e=>{if(e.pointerId===joyId)joyMove(e);});
+joy.addEventListener('pointerup',e=>{if(e.pointerId===joyId)joyEnd();});
+joy.addEventListener('pointercancel',e=>{if(e.pointerId===joyId)joyEnd();});
+const holdBtn=(el,v)=>{const up=()=>{joyUp=0;};el.addEventListener('pointerdown',e=>{e.preventDefault();joyUp=v;});
+  el.addEventListener('pointerup',up);el.addEventListener('pointerleave',up);el.addEventListener('pointercancel',up);};
+holdBtn(document.getElementById('vup'),1);holdBtn(document.getElementById('vdn'),-1);
+// A hold IS the gesture here, so the platform's long-press must not fire: Android raises a context
+// menu, and iOS a selection callout that the CSS above suppresses but a right-click still reaches.
+// One listener on the pad covers the stick and both buttons.
+vctrl.addEventListener('contextmenu',e=>e.preventDefault());
+// Hiding the pad must also drop whatever it was holding, or the camera keeps drifting after it goes.
+function setTouchUI(on){vctrl.classList.toggle('on',!!on);if(!on){joyEnd();joyUp=0;}}
 let lastT=null;
 function moveCam(t){if(lastT==null){lastT=t;return;}const dt=Math.min((t-lastT)/1000,0.1);lastT=t;const f=vrot(camQ,[0,0,1]),r=vrot(camQ,[1,0,0]);let mv=[0,0,0];const add=(v,s)=>{mv[0]+=v[0]*s;mv[1]+=v[1]*s;mv[2]+=v[2]*s;};
  if(keys.has('w'))add(f,1);if(keys.has('s'))add(f,-1);if(keys.has('d'))add(r,1);if(keys.has('a'))add(r,-1);if(keys.has('e')||keys.has(' '))add(worldUp,-1);if(keys.has('q')||keys.has('control'))add(worldUp,1);
+ if(joyX||joyY)add(f,-joyY),add(r,joyX);if(joyUp)add(worldUp,-joyUp);
  const len=Math.hypot(...mv);if(len>0){const s=speed*(keys.has('shift')?4:1)*dt/len;camPos=[camPos[0]+mv[0]*s,camPos[1]+mv[1]*s,camPos[2]+mv[2]*s];}}
 // Camera link. Echo suppression is by construction: applying a remote pose also updates the
 // last-sent snapshot, so the next diff finds nothing and no message bounces back.
@@ -387,6 +443,7 @@ addEventListener('message',e=>{if(e.origin!==location.origin)return;const m=e.da
    trajOn=!!m.traj;trajCount=m.trajCount;trajTrail=m.trajTrail;
    if(m.offCol!==offsetColorOn||m.offMix!==offsetColorMix)builtFrame=-1;
    offsetColorOn=!!m.offCol;offsetColorMix=m.offMix;}
+ else if(m.type==='touch')setTouchUI(m.on);                    // exactly one panel per group gets the pad
  else if(m.type==='stage')stage(m.label,m.pct);                // host narrates its own loading
  else if(m.type==='hide')loadEl.classList.add('hide');
  else if(m.type==='keyframe')installKeyframes(m);
@@ -437,7 +494,13 @@ async function loadStandalone(){
 }
 
 if(HOST){stage('waiting for host…',3);hello();}
-else loadStandalone().catch(e=>{console.error(e);showErr(e.message||e);});
+else{
+  // Standalone there is no host to decide which panel owns the pad, so this one does — same
+  // coarse-pointer test the host applies, and ?touch=1 / ?touch=0 to force it either way.
+  const t=Q.get('touch');
+  setTouchUI(t!=null?t!=='0':(matchMedia('(pointer:coarse)').matches||'ontouchstart' in window));
+  loadStandalone().catch(e=>{console.error(e);showErr(e.message||e);});
+}
 </script>
 </body>
 </html>

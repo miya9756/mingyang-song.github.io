@@ -216,6 +216,7 @@
       <input id="abScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
       <span id="abFrame" class="tnum">—</span>
       <button id="abReset" class="tbtn">reset view</button>
+      <label class="tchk" title="On-screen stick and up/down buttons for flying the camera, on the first panel. The panels share one camera, so the others follow."><input type="checkbox" id="abTouch"> Touch controls</label>
     </div>
     <p id="abStatus" class="hint">Not loaded.</p>
     <div class="viewopts" id="abOpts">
@@ -277,6 +278,7 @@
       <input id="amScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
       <span id="amFrame" class="tnum">—</span>
       <button id="amReset" class="tbtn">reset view</button>
+      <label class="tchk" title="On-screen stick and up/down buttons for flying the camera, on the first panel. The panels share one camera, so the others follow."><input type="checkbox" id="amTouch"> Touch controls</label>
     </div>
     <p id="amStatus" class="hint">Not loaded.</p>
 
@@ -297,7 +299,7 @@
       </div>
     </div>
     </article>
-    <p class="hint">The two comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load. Once a card is loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel.</p>
+    <p class="hint">The two comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load. Once a card is loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. On a touch device an on-screen stick and up/down buttons appear on the first panel — the others follow, since the cameras are linked.</p>
   </section>
 
   <section>
@@ -395,10 +397,10 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // and the view options — is shared. Linking the two clocks or the two cameras would be
   // meaningless: they are different scenes, different captures and different frame counts.
   const GROUPS=[
-    {key:'balls',ui:{load:'abLoad',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',status:'abStatus',opts:'abOpts'},
+    {key:'balls',ui:{load:'abLoad',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',touch:'abTouch',status:'abStatus',opts:'abOpts'},
      panes:[{id:'reg',    frId:'paneA',url:'scenes/bouncingballs_reg/scene.json',    name:'with reg'},
             {id:'noreg',  frId:'paneB',url:'scenes/bouncingballs_noreg/scene.json',  name:'without reg'}]},
-    {key:'amer',ui:{load:'amLoad',play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',status:'amStatus',opts:'amOpts'},
+    {key:'amer',ui:{load:'amLoad',play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',touch:'amTouch',status:'amStatus',opts:'amOpts'},
      panes:[{id:'k33',    frId:'paneC',url:'scenes/americano_knots33/scene.json',    name:'33 knots'},
             {id:'kfull',  frId:'paneD',url:'scenes/americano_full/scene.json',       name:'full knots'},
             {id:'knoreg', frId:'paneE',url:'scenes/americano_full_noreg/scene.json', name:'full knots, no reg'}]}
@@ -407,7 +409,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   const byId=new Map(), ALL=[];
   for(const g of GROUPS){
     g.el={load:_ctl(g.ui.load),play:_ctl(g.ui.play),scrub:_ctl(g.ui.scrub),lbl:_ctl(g.ui.lbl),
-          reset:_ctl(g.ui.reset),status:_ctl(g.ui.status)};
+          reset:_ctl(g.ui.reset),touch:_ctl(g.ui.touch),status:_ctl(g.ui.status)};
     // Controls live in this group's own <div class="viewopts">, addressed by data-o because the
     // block is repeated per group and ids must stay unique. Missing one is a markup typo, and it
     // would otherwise surface much later as a TypeError inside an event handler.
@@ -469,6 +471,28 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     [g.o.ellip,g.o.traj,g.o.off].forEach(c=>c.onchange=()=>pushView(g));
     [g.o.ellipR,g.o.trajN,g.o.trajL,g.o.offMix].forEach(sl=>sl.oninput=()=>pushView(g));
   }
+
+  // ---- virtual movement pad ------------------------------------------------
+  // The pad lives inside the panel (it has to sit over the canvas and drive that renderer's camera
+  // directly), but WHICH panel carries it is a host decision: the cameras in a group are linked, so
+  // a pad on every panel would be N controls for one camera, and each one would cover a third of
+  // the comparison it exists to show. So exactly one panel per group gets it — the first live one,
+  // i.e. leftmost in the 1xN grid and topmost once that grid collapses to a single column on a
+  // phone. `on:false` is sent to the others rather than nothing, so ownership can move (to the next
+  // panel when the first fails to load) without leaving a stale pad behind.
+  //
+  // Default-on for a coarse pointer: without a keyboard there is otherwise no way to fly at all,
+  // only to orbit. Still a checkbox, because the detection is a guess (a hybrid laptop reports
+  // coarse) and because it is a genuinely useful control with a mouse too.
+  const IS_TOUCH=matchMedia('(pointer:coarse)').matches||!!('ontouchstart' in window);
+  // First live panel, but skip one that has not come up at all — a pad message to a frame that
+  // never announced itself goes nowhere, and the group would then have no pad anywhere. Ownership
+  // is recomputed (and pushed) whenever a panel announces or fails, so it lands on the leftmost
+  // panel as soon as that one is actually there.
+  const touchPane=g=>{const L=livePanes(g);return L.find(p=>p.alive)||L[0]||null;};
+  function pushTouch(g){const t=g.el.touch.checked?touchPane(g):null;
+    g.panes.forEach(p=>send(p,{type:'touch',on:p===t}));}
+  for(const g of GROUPS){g.el.touch.checked=IS_TOUCH;g.el.touch.onchange=()=>pushTouch(g);}
 
   function stage(g,label,pct){g.loadMsg=label;gsend(g,{type:'stage',label,pct});status(g);}
   function status(g){
@@ -552,6 +576,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       p.sentKf=true;p.kfAt=Date.now();
       send(p,{type:'stage',label:p.g.loadMsg,pct:null});
       send(p,viewState(p.g));           // a panel installing late must not sit at the option defaults
+      pushTouch(p.g);                   // …nor without the pad if it is the one that owns it
       if(p.g.lastCam)send(p,p.g.lastCam);  // nor at the opening pose if its group has moved on
     }
     // Motion is CLONED, not transferred, and the host's copy is freed only when the panel ACKs it
@@ -673,7 +698,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       }catch(e){console.error('[spdef]',p.name,e);return {p,err:e};}
     }));
     for(const r of got){
-      if(r.err){r.p.failed=true;send(r.p,{type:'error',msg:String(r.err.message||r.err)});continue;}
+      if(r.err){r.p.failed=true;send(r.p,{type:'error',msg:String(r.err.message||r.err)});pushTouch(g);continue;}
       // buildKeyframe is synchronous and heavy, so it runs after the fetches, not during them
       r.p.built=r.p.scene.gops.map((sg,i)=>({kf:buildKeyframe(parseNpz(r.refs[i]),r.shared,sg.num_shared_statics||0),
         start:sg.start_frame,end:sg.end_frame,gop_id:sg.gop_id,motion:null,F:0,sent:false,acked:false}));
@@ -706,7 +731,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       let r;
       try{r=await withTimeout(decodeMotionGopBundle(ff,streams,p.built[gi].kf),150000,'motion decode');}
       catch(e){console.error('[spdef] decode failed for',p.name,e);
-        p.failed=true;send(p,{type:'error',msg:'motion decode failed'});
+        p.failed=true;send(p,{type:'error',msg:'motion decode failed'});pushTouch(g);
         ff=await recreateFFmpeg(()=>{});                 // the heap may be poisoned; start clean
         continue;}
       // kf is kept, not freed: dropping it here would race a panel that says hello late and
