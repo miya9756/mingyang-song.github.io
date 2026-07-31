@@ -350,7 +350,48 @@
     </div>
     </article>
 
-    <p class="hint">The two gaussian comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load; the trajectory demo needs no decoder at all and streams its knots as you scrub. Each card loads only when you ask for it, and <em>clear</em> gives it back — scenes, renderers and decoded motion — if you would rather not hold them all at once. Once a card is loaded: drag inside a panel to orbit · in the gaussian panels, scroll to change fly speed and W/A/S/D and Q/E to move the focused one; in the trajectory panel, scroll or pinch to zoom and shift-drag or two-finger drag to pan. On a touch device an on-screen stick and up/down buttons appear on the first gaussian panel — the others follow, since the cameras are linked.</p>
+    <article class="subcard">
+      <div class="subhd">
+        <h3>What the model actually stores</h3>
+        <p class="subtag">D-NeRF <em>bouncingballs</em> · 14,534 canonical gaussians · three 128&times;128&times;32 tri-planes · 1.0 MB</p>
+      </div>
+      <p class="lede">A plane at time <em>t</em> is <strong>base + &Sigma;<sub>r</sub> w<sub>r</sub>(t)&middot;res<sub>r</sub></strong> — one fixed plane plus six more, scaled by six numbers. Press play and watch what moves: the canonical cloud stays exactly where it is, and the sheets change. The plane axes are the world axes, and each sheet cell sits where the field samples it, which is why a sheet reads as the cloud’s shadow on that wall.</p>
+
+    <div class="ab ab1">
+      <figure class="pane">
+        <figcaption><span class="ptitle">Canonical cloud + the field that moves it</span><span class="ptag">one sorted splat pass · sheet cells are gaussians too</span></figcaption>
+        <div class="stagebox idle">
+          <iframe id="paneG" title="Interactive viewer: the canonical gaussians together with the deformation field's three tri-planes, in one 3D scene"
+                  data-src="field.html?scene=scenes/bouncingballs_canonical/scene.json&amp;tri=triplanes/bouncingballs/&amp;id=field"></iframe>
+          <p class="idlemsg">not loaded</p>
+        </div>
+      </figure>
+    </div>
+
+    <div class="transport">
+      <button id="fdLoad" class="tbtn tload">Load this figure · 1.0 MB</button>
+      <button id="fdClear" class="tbtn" hidden title="Unload this figure — discards the cloud, the tri-plane atlases and its WebGL context">✕ clear</button>
+      <button id="fdPlay" class="tbtn" disabled>▶ play</button>
+      <label class="vslide" title="Playback rate, relative to the sequence's own 30 fps. The planes are affine in the six weights, so any rate evaluates them exactly — nothing is repeated or dropped.">Speed <input id="fdSpeed" type="range" min="10" max="200" step="5" value="100"><output id="fdSpeedN">1.00×</output></label>
+      <input id="fdScrub" type="range" min="0" max="0" step="any" value="0" aria-label="Timeline position" disabled>
+      <span id="fdFrame" class="tnum">—</span>
+      <button id="fdReset" class="tbtn">reset view</button>
+    </div>
+    <p id="fdStatus" class="hint">Not loaded.</p>
+
+    <div class="viewopts" id="fdOpts" data-kind="field">
+      <div class="vrow" data-o="rowSheets">
+        <label class="tchk" title="The plane spanning the x and y axes, on the low-z face of the field's bounding box"><input type="checkbox" data-o="sxy" checked> xy sheet</label>
+        <label class="tchk" title="The plane spanning the x and z axes, on the high-y face"><input type="checkbox" data-o="sxz" checked> xz</label>
+        <label class="tchk" title="The plane spanning the y and z axes, on the high-x face"><input type="checkbox" data-o="syz" checked> yz</label>
+        <label class="tchk" title="The canonical gaussians — the pose the field deforms away from"><input type="checkbox" data-o="cloud" checked> Canonical cloud</label>
+        <label class="vslide" title="How strongly the sheets are drawn over the cloud">Sheet opacity <input type="range" data-o="alpha" min="0" max="100" value="85"><output data-o="alphaN">85</output></label>
+      </div>
+    </div>
+    <p class="hint">Want the planes flat, with the six weight curves and the other ways of reading them — the template, each residual on its own, and where the field does most of its work? <a href="triplanes.html">Open the tri-plane inspector</a>.</p>
+    </article>
+
+    <p class="hint">The two gaussian comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load; the trajectory demo and the tri-plane figure need no decoder at all — the first streams its knots as you scrub, the second evaluates its planes on the GPU from six numbers per frame. Each card loads only when you ask for it, and <em>clear</em> gives it back — scenes, renderers and decoded motion — if you would rather not hold them all at once. Once a card is loaded: drag inside a panel to orbit · in the gaussian panels, scroll to change fly speed and W/A/S/D and Q/E to move the focused one; in the trajectory and tri-plane panels, scroll or pinch to zoom and shift-drag or two-finger drag to pan. On a touch device an on-screen stick and up/down buttons appear on the first gaussian panel — the others follow, since the cameras are linked.</p>
   </section>
 
   <section>
@@ -458,6 +499,9 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   //            only starts it. It also carries a continuous clock (`frac`): the whole claim of that
   //            card is that time between the supervised frames is inferred, not replayed, so a
   //            whole-frame timeline would quietly hide the thing on display.
+  //   field  — field.html, the canonical cloud and the tri-planes in one scene. Loads itself like
+  //            points (no decoder), and `frac` for the same reason: the planes are affine in the
+  //            six temporal weights, so every instant between two knots is evaluated, not replayed.
   const GROUPS=[
     {key:'balls',kind:'splat',
      ui:{load:'abLoad',clear:'abClear',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',touch:'abTouch',status:'abStatus',opts:'abOpts'},
@@ -471,7 +515,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     {key:'traj',kind:'points',frac:true,
      ui:{load:'ptLoad',clear:'ptClear',play:'ptPlay',scrub:'ptScrub',lbl:'ptFrame',reset:'ptReset',status:'ptStatus',opts:'ptOpts',
          prev:'ptPrev',next:'ptNext',speed:'ptSpeed',speedN:'ptSpeedN'},
-     panes:[{id:'anime',  frId:'paneF',url:'points/astra_samba/meta.json',           name:'trajectories'}]}
+     panes:[{id:'anime',  frId:'paneF',url:'points/astra_samba/meta.json',           name:'trajectories'}]},
+    {key:'field',kind:'field',frac:true,
+     ui:{load:'fdLoad',clear:'fdClear',play:'fdPlay',scrub:'fdScrub',lbl:'fdFrame',reset:'fdReset',status:'fdStatus',opts:'fdOpts',
+         speed:'fdSpeed',speedN:'fdSpeedN'},
+     panes:[{id:'field',  frId:'paneG',url:'triplanes/bouncingballs/meta.json',      name:'the field'}]}
   ];
   // Controls each kind's view-option block must expose. They are addressed by data-o rather than by
   // id (the block is repeated per group and ids must stay unique), so a typo here is invisible to
@@ -479,7 +527,8 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   const OPT_KEYS={
     splat:['rowEllip','ellip','ellipR','ellipRN','rowTraj','traj','trajN','trajNN',
            'trajL','trajLN','rowOff','off','offMix','offMixN'],
-    points:['rowTrail','trail','trailLen','trailLenN']};
+    points:['rowTrail','trail','trailLen','trailLenN'],
+    field:['rowSheets','sxy','sxz','syz','cloud','alpha','alphaN']};
   const _ctl=id=>document.getElementById(id);
   const byId=new Map(), ALL=[];
   // Everything about a pane that belongs to ONE load: delivery state, the host's own copies of its
@@ -540,7 +589,6 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   const send=(p,m,tr)=>{const w=p.fr.contentWindow;if(!w)return false;
     try{w.postMessage(Object.assign({ch:'spdef',to:p.id},m),location.origin,tr||[]);return true;}catch(e){return false;}};
   const gsend=(g,m)=>g.panes.forEach(p=>send(p,m));
-  const everyone=m=>ALL.forEach(p=>send(p,m));
   // A panel that could not be loaded at all is excluded from the group's gating, so one dead
   // panel leaves the rest of the comparison playable instead of disabling the whole transport.
   const livePanes=g=>g.panes.filter(p=>!p.failed);
@@ -584,7 +632,14 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // cost/smoothness trade with no editorial content, so both are fixed in points.html; the
     // ground-truth overlay is gone from the bundle entirely (see the comment there).
     points:g=>({type:'view',
-      trail:g.o.trail.checked, trailLen:+g.o.trailLen.value})};
+      trail:g.o.trail.checked, trailLen:+g.o.trailLen.value}),
+    // Which sheets, how strongly, and whether the cloud is drawn. There is no view SWITCH here:
+    // the panel shows the planes themselves at t, and the other readings of them (the template,
+    // each residual alone, where the field does most of its work) live in triplanes.html — this
+    // card is the figure, not the inspector.
+    field:g=>({type:'view',
+      sheets:[g.o.sxy.checked,g.o.sxz.checked,g.o.syz.checked],
+      sheetAlpha:+g.o.alpha.value/100, cloud:g.o.cloud.checked})};
   const viewState=g=>VIEW[g.kind](g);
   // Which controls each kind wires up, and which rows dim when their toggle is off. `rowMark` is
   // deliberately absent: it holds two independent toggles and no sliders, so there is nothing for
@@ -595,7 +650,12 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
            rows:[['rowEllip','ellip'],['rowTraj','traj'],['rowOff','off']]},
     points:{chk:['trail'],slide:['trailLen'],
            num:[['trailLen','trailLenN']],
-           rows:[['rowTrail','trail']]}};
+           rows:[['rowTrail','trail']]},
+    // `rows` is empty on purpose: the row holds four independent toggles, so there is no single
+    // one whose off state should dim it.
+    field:{chk:['sxy','sxz','syz','cloud'],slide:['alpha'],
+           num:[['alpha','alphaN']],
+           rows:[]}};
   function pushView(g){
     const w=OPT_WIRING[g.kind];
     for(const[src,out,fmt]of w.num)g.o[out].textContent=fmt?fmt(+g.o[src].value):g.o[src].value;
@@ -737,7 +797,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // caught up: one that announced late, or that the watchdog restarted, would otherwise sit at
     // its built-in option defaults and at frame 0 while the controls and the scrubber say
     // otherwise. Same reason the keyframe path re-sends viewState below.
-    if(p.g.kind==='points'){
+    if(p.g.kind==='points'||p.g.kind==='field'){
       if(send(p,viewState(p.g))&&p.g.total)send(p,{type:'seek',frame:p.g.gFrame});
       return;}
     if(!p.built)return;
@@ -833,6 +893,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // narrates over `progress`; starting the frame is all there is for the host to do.
     if(g.kind==='points'){g.loaded=true;g.el.load.hidden=true;
       stage(g,'fetching the spline bundle\u2026',4);return;}
+    // Same for the field figure: no wasm, and the panel owns its own fetches (a canonical keyframe
+    // and three atlases). Queueing it behind a splat decode would make it wait ~30 s for a
+    // resource it never touches.
+    if(g.kind==='field'){g.loaded=true;g.el.load.hidden=true;
+      stage(g,'fetching the canonical cloud and the tri-planes\u2026',4);return;}
     queue.push(g);pump();
   }
 

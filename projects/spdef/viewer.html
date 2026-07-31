@@ -482,6 +482,10 @@ async function loadStandalone(){
     built.push({kf:buildKeyframe(parseNpz(await grab(base+g.reference_path,'keyframe…')),shared,g.num_shared_statics||0),
                 start:g.start_frame,end:g.end_frame,gop_id:g.gop_id});
   installKeyframes({totalFrames:scene.num_frames,camera:scene.camera,gops:built});
+  // A static scene (one frame, empty `streams` — e.g. an exported canonical cloud) has nothing to
+  // decode: the renderer already shows the keyframe, and motion stays null. Return before the
+  // decoder rather than fetch ~31 MB of wasm for a loop that would run zero times.
+  if(!scene.gops.some(g=>g.streams&&g.streams.xyz)){stage('ready',100);loadEl.classList.add('hide');return;}
   stage('loading decoder (ffmpeg.wasm, ~31 MB, one-time)…',10);
   const ff=await ffmpegReady(()=>{});
   for(let gi=0;gi<scene.gops.length;gi++){

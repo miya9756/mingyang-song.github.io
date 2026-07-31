@@ -131,7 +131,7 @@ overlap, not the viewer.
 
 ## `projects/spdef/` — the side-by-side
 
-The SpDef page hosts **three independent cards**, all driven by the one host script:
+The SpDef page hosts **four independent cards**, all driven by the one host script:
 
 1. **1×2, D-NeRF *bouncingballs*** — the same sequence trained with and without the temporal
    regularizers (`xyz/rot_velocity_div_loss`, `xyz/rot_acceleration_loss`; the two runs'
@@ -143,10 +143,15 @@ The SpDef page hosts **three independent cards**, all driven by the one host scr
    — unlike the bouncingballs pair, which zeroes both.
 3. **1×1, DeformingThings4D *astra / samba dancing*** — not a comparison: the GS-free path, the
    *fitted spline itself*, and a **different renderer**. See the `points.html` section below.
+4. **1×1, D-NeRF *bouncingballs* again — the model taken apart.** The canonical gaussians and the
+   deformation field's three tri-planes in one scene, which is what makes it the last card: the
+   three above show what the field *does*, this one shows what it *is*. A third renderer again,
+   and the entrance to `triplanes.html`, which the card links. See the `field.html` section.
 
 **`kind` is the only axis the host branches on** — `'splat'` (the first two cards, `viewer.html`
-panels the host fetches and decodes for) versus `'points'` (the third, a `points.html` panel that
-loads itself). Anything per-kind — the required view-option keys (`OPT_KEYS`), what `viewState()`
+panels the host fetches and decodes for) versus `'points'` and `'field'` (the last two, panels
+that load themselves and need no decoder, so `startGroup()` skips `pump()` and `flush()` sends
+them options and a seek rather than data). Anything per-kind — the required view-option keys (`OPT_KEYS`), what `viewState()`
 sends, which controls `pushView()` wires (`OPT_WIRING`) — is a table keyed by it, not an `if`
 scattered through the file. A group also opts into a **continuous clock** with `frac:true`, which
 changes `setFrame()`'s label and lets `tick()` advance in fractional frames.
@@ -174,8 +179,8 @@ queue drains and re-acquired (warm cache) if another group is loaded later. `ver
 `data-src` for asset checking; without that it stopped seeing `viewer.html` entirely.
 
 **Each comparison can also be given back.** `clearGroup()` is the counterpart to `startGroup()`:
-three cards already means six WebGL contexts, six scenes and every decoded motion array
-resident at once, and a fourth would be worse. It navigates each panel to **`about:blank`**, which
+four cards already means seven WebGL contexts, seven scenes and every decoded motion array
+resident at once, and a fifth would be worse. It navigates each panel to **`about:blank`**, which
 *destroys* the panel document — GL context, textures, the motion it was sent, its rAF loop — and
 drops the host's own `p.scene` / `p.built` (keyframes are deliberately kept past decode to serve a
 panel that reloads, so nothing else frees them). `resetPane()` is shared with first-time init so
@@ -214,6 +219,15 @@ to the camera, which is what bouncingballs (already square, 800×800) still does
   host page over `postMessage`. It has **no static imports** — hosted, it never fetches the
   decode path at all; the standalone `viewer.html?scene=…` fallback (kept so one panel stays
   debuggable alone) pulls it in with a dynamic `import()`.
+- **A scene with no motion renders as-is.** `num_frames: 1` and an empty `streams` (what
+  `export_canonical_scene.py` writes — see *Common tasks*) needs no new render path: `motion`
+  stays null and the renderer keeps showing the keyframe. The one thing that had to change is
+  the standalone loader, which now returns before `ffmpegReady()` rather than fetch ~31 MB of
+  wasm for a decode loop that runs zero times. `scenes/bouncingballs_canonical/` is such a scene.
+  **The host still cannot load one into a splat card** — `loadGroup()` reads `sg.streams.xyz.path`
+  unconditionally — and does not need to: the canonical cloud reaches the page through
+  `field.html`, which loads it itself. This guard is what keeps
+  `viewer.html?scene=scenes/bouncingballs_canonical/scene.json` working for inspection.
 - **One `<iframe>` per scene, deliberately.** The renderer keeps its scene in module-level
   vars (`N`, `baseCenter`, `gops`, texture handles); two panels in one document would mean
   two of every global or a refactor into a class. A document per panel also gives each its
@@ -334,6 +348,127 @@ to the camera, which is what bouncingballs (already square, 800×800) still does
   dollied in and out instead of rising and drag-yaw tumbled about a near-forward axis. Dropping
   PCA without replacing the axis is what caused it. Any future scene here needs a real camera
   in its `scene.json` for the same reason.
+
+### `triplanes.html` — the tri-plane inspector (linked from the fourth card)
+
+A lab page for the explanation card's second half: the deformation field's own storage. The
+field encodes space as three 128×128×**32** planes and time as 6 weights at 75 knots, and
+`DirectGrid4D` composes `base + Σ_r tw_r(t)·res_r`.
+
+**That is affine in the weights, and PCA is linear** — so with one fixed 3×32 basis the RGB
+image is affine in the same weights, and **7 images per plane plus the weight table reconstruct
+every knot exactly**. Hence a ~1 MB bundle and a continuous slider instead of an 11 MB 75-frame
+flipbook. Between knots the page lerps `tw`, which is `DirectGrid4D`'s own continuous-`time_step`
+path — **not** what the trained renderer does there: inference reads the field at both bracketing
+knots and cubic-Hermite interpolates the predicted *offsets*, which is what the `v_xyz` / `v_rot`
+heads exist for. Same knots, different interpolant, and the page says so. `projects/spdef/triplanes/bouncingballs/` is 6 atlas PNGs (7 tiles each,
+uint8 with per-tile per-channel min/range — costing 0.2 % of range) + `meta.json`. Built by
+`~/4d-relight/scripts/visualization/export_triplanes.py`; the page's compositing was checked
+against the checkpoint at continuous t and agrees to ≤0.35 % of range.
+
+Two things are deliberate, against the old `render_canonical_temporal_weights` this ports:
+**one basis and one display range for the whole sequence** (per-frame PCA re-derives the axes
+and their arbitrary signs every frame, so still regions churn), and **two bases to switch
+between** — `composed` fitted to the planes, `motion` fitted to their temporal deviation.
+
+**Occupancy is what makes it readable, and it is not cosmetic.** Most of a plane is cells no
+canonical gaussian ever projects into — 49 % of the xy plane, 82 % of xz. The field is
+unsupervised there, so its values are arbitrary, large and smooth, and unweighted they dominate
+both the PCA covariance and the display range: the old output was the scene as faint texture
+inside a wash. The exporter bilinearly splats the canonical cloud onto each plane (the same
+mapping the field reads it with), **fits the PCA weighted by that map, takes the display
+percentiles inside it**, and ships it as `occ_<plane>.png`; the page fades unsupervised cells to
+the card surface. Note the honest side effect: weighting *drops* explained variance from 47–70 %
+to 25–36 %, because the background was low-rank and inflated it. The supervised region genuinely
+needs more than three components — which is why the default view is not the PCA one.
+
+**Five views, two computations, and one distinction that is easy to get backwards.** `triplanes.html`
+offers: *motion at this t*, *motion overall*, *template*, *one residual plane*, *features (PCA)*.
+(`field.html` deliberately shows only the last of these — see its section.) The last three are all
+`base + Σ_r w_r·res_r`
+under different weights — `w(t)`, `⟨w⟩`, or a one-hot with the base dropped — so they are uniforms,
+not code paths. The trap: **"motion overall" is not the base.** Both magnitude modes use
+`c(t) = w(t) − ⟨w⟩`, in which the base *cancels out entirely*; overall is a summary of the
+**time-varying** part, static only because averaging over `t` leaves no `t`. The genuinely
+time-invariant plane is *template* = `base + Σ_r ⟨w_r⟩·res_r`. It is shown in the **composed**
+basis and the pages switch to it automatically, because the motion basis is centred on the template
+and renders it exactly flat — which looks like a bug and is not. A single residual gets its own
+display window from the atlas tile's quantisation bounds; it is not on the composed image's scale.
+
+**The default view is a magnitude map, and it is exact.** `‖Σ_r c_r·res_r‖` over all 32 channels
+is a quadratic form in the weight deviation `c`, so the 21 upper-triangle entries of the per-cell
+6×6 channel Gram recover the whole family: motion at time t (`c = w(t) − ⟨w⟩`), RMS over the
+sequence (`⟨c cᵀ⟩`), speed if wanted. That is one more 7-tile atlas per plane and it escapes the
+PCA's variance loss entirely. The Gram is stored **companded** as `sign(g)·√|g|` (undone as
+`v·|v|`): the form has cancelling terms, so a uniform 8-bit grid spends its whole error budget on
+the largest entries and mottles exactly the low-motion cells the map exists to distinguish — 4 %
+of display range plain, 1.6 % companded, same bytes.
+
+### `field.html` — canonical cloud + tri-planes in one 3D scene (a THIRD renderer)
+
+The fourth card's panel: both halves of the model in the coordinates they are stored in. The
+renderer core (EWA splatting, the 16-bit depth bucketing) is lifted from `viewer.html`. It is a
+third renderer **on purpose** — it carries a shader branch the comparison panels must never grow,
+and `viewer.html` is what the two published comparisons depend on.
+
+- **It is a panel, not a page.** Chrome-less, `{ch:'spdef'}` protocol, `?scene=&tri=&id=`, driven
+  by the host's transport exactly as `points.html` is — including the standalone fallback that
+  runs its own clock so one panel stays debuggable alone. The host's Load/Clear applies: nothing
+  is fetched until asked, and Clear navigates the frame to `about:blank`.
+- **Orbit, not fly, and no virtual movement pad** — the same argument `points.html` makes. One
+  object on a turntable needs orbit/pan/dolly, and unlike a fly camera that vocabulary is fully
+  reachable by touch, which is the only reason the pad exists. The opening pose is the dataset's
+  test camera converted to orbit state (the D-NeRF cameras aim at the origin, so the target is the
+  origin), raised by `?elev=` and pulled back by `?zoom=`. The renderer's basis convention is
+  `viewer.html`'s — r/u/f as the view matrix's columns with **u pointing DOWN the screen**, since
+  the projection flips Y — so `camBasis()` builds the triad directly and there is no quaternion.
+  Checked offline: handedness `cross(r,u)·f = +1`, orthonormal, and the framing matches the pose
+  the earlier quaternion camera produced.
+- **The timeline is the sequence's 150 frames**, `frac:true`, from `meta.num_frames` — which the
+  exporter recovers from the sealed `deform_config.yaml` by inverting
+  `capacity = floor(num_time_steps · knot_ratio / interval_stride)`. The panel maps a seek to
+  `t = frame/(frames-1)`. Do not hardcode a frame count in the markup; a re-export would drift.
+
+- **One texture, one sort, one draw call, split by index.** Below `u_planeStart` a gaussian is a
+  canonical one and carries its own colour (plus SH); at or above it, `cen.w` is a packed
+  `plane<<28 | cellX<<14 | cellY` and the colour is computed **in the vertex shader** from the
+  atlas textures. Sheets and cloud therefore occlude each other correctly — they are one sorted
+  splat pass, which is the reason the sheet cells are gaussians rather than textured quads.
+- **Scrubbing time costs six uniforms** (`u_w[6]`) — no texture upload, no CPU compositing. The
+  splat texture is built once. This is the whole reason for the affine-in-the-weights property; do
+  not "simplify" it into a per-frame repack.
+- **One view, on purpose: the plane at time t** (`G(t) = base + Σ_r w_r(t)·res_r`, PCA-projected in
+  the **composed** basis, `BASIS` at the top of the module). This panel is a teaching figure, not an
+  inspector — the magnitude maps, the template, the per-residual planes and the basis switch all
+  live in `triplanes.html`, and the sheets here would only invite the reader to compare readings
+  instead of watching the field move. So `field.html` fetches only the three `composed_*` atlases
+  and the occupancy maps (~470 kB, one 896×384 RGBA32F texture); the Gram and the motion basis are
+  never loaded, and the shader has no magnitude branch. The exporter still writes all of it.
+- **There is deliberately no bounding-box wireframe.** It was there to prove the sheets sit on the
+  field's own AABB; that is now settled (and checked offline), and on a teaching figure the box
+  read as scene geometry. The line program went with it — do not re-add one without a reason.
+- **Alignment is by construction and must stay that way.** Sheet cells sit on the faces of the
+  field's *own* AABB (from the checkpoint's `aabb_min/max`, which `meta.json` carries), addressed
+  by the same `lo + (hi-lo)·i/(n-1)` mapping the field reads them with — `xy` on the low-z face,
+  `xz` and `yz` on their high faces, as the original `render_gs.py` figure did. Nothing is fitted
+  or re-centred. Verified by re-rendering the scene in numpy: each sheet's occupied cells are the
+  cloud's shadow on that face.
+- **`alpha:true` + `premultipliedAlpha:true`, cleared to (0,0,0,0).** The splat blend is a
+  front-to-back `under` operator (`ONE_MINUS_DST_ALPHA, ONE`); clearing to opaque white leaves
+  `DST_ALPHA` at 1 and multiplies every splat by zero — a blank canvas. The panel's white
+  background comes from the `.stage`, through the canvas.
+- Cells below `occupancy.threshold` are **not emitted at all** (~14.5 k sheet cells survive out of
+  49 k), and the rest carry occupancy as their alpha, so the sheets fade out exactly where the
+  field stops being supervised.
+- The camera is the scene's test camera, raised by `?elev=` and **pulled back by `?zoom=`
+  (default 1.42)** — the field's box is much wider than the cloud, so the dataset framing crops
+  the sheets.
+
+**Shaders are checked, not hoped for.** `glslangValidator` from the Khronos release compiles both
+(`#version 300 es`) clean, and a deliberate typo was confirmed to fail — a shader error blanks the
+panel and nothing else on this site would catch it. The atlas→texture layout and the shader's
+`texelFetch` indexing were separately checked against the checkpoint (≤2 % of display range, i.e.
+quantisation only). Do the same after touching either.
 
 ### Shared decode path — do NOT hoist `vendor/` out of `projects/smv/`
 
@@ -640,6 +775,29 @@ conda run -n smv python ~/4d-relight/web/player_points/build_point_bundle.py \
 # and strip meta.json's source_path / model_path to their basenames: as built they are the
 # cluster's absolute paths, and this is a public site.
 ```
+
+**Export a canonical cloud** (for the explanation card — the model's *canonical* Gaussians, the
+thing the deformation field moves, as a one-frame static scene):
+
+```bash
+cd ~/4d-relight && PYTHONPATH=. conda run -n 4dre python \
+  scripts/visualization/export_canonical_scene.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/bouncingballs \
+  --out ~/mingyang-song.github.io/projects/spdef/scenes/bouncingballs_canonical \
+  --camera_from projects/spdef/scenes/bouncingballs_reg/scene.json \
+  --check /cluster/scratch/misong/4dre/dnerf/bouncingballs/bundle_1_packed/gop_0/reference.npz
+```
+
+It quantises onto the **training grid** (bit widths and `quant_scene_scale` read from the model's
+sealed `online_quantizer_config.yaml`, SH-rest committed to the trained codebook), so the cloud
+is decoded by the same path as every other scene here. `--iteration` defaults to the latest,
+which is the one the shipped bundles were compressed from — 20000 for bouncingballs, 14,534
+gaussians. Note that a **bundle's `reference.npz` is not this**: it is the deformed state at the
+GOP's start frame, sorted and padded to a square, so only the grid, the codebook and the
+time-invariant attributes are comparable — which is exactly what `--check` compares, and they
+match exactly. `--camera_from` copies the held-out test camera out of an existing `scene.json`
+rather than re-extracting it, so the canonical panel opens on the same pose as the comparisons
+above it.
 
 `traj.js` must be re-copied verbatim alongside any bundle whose format changed — `meta.version`
 is a hash of the metadata and cache-busts every binary URL, but it cannot cache-bust a decoder

@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Temporal tri-planes — Spline Deformation Field</title>
+<link rel="icon" type="image/png" sizes="64x64" href="../../assets/web_icon.png">
+<meta name="description" content="A preview of the deformation field's temporal tri-planes: the 32-channel c32 grid shown over continuous time, masked to the cells the canonical cloud actually supervises.">
+<meta name="theme-color" content="#eef1f5"><!-- must track --bg; Safari tints its chrome from this -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* SpDef's cool palette and bones — this is a lab page for one figure, so it carries the back
+     pill, the type and the surfaces, and none of the paper furniture. */
+  :root{
+    color-scheme:light;
+    --bg:#eef1f5; --surface:#ffffff; --ink:#14181d; --muted:#5f6a78; --line:#dde3ea;
+    --accent:#1f5fbf; --accent-2:#2e8b57; --shadow:rgba(20,30,45,.13);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .inner{max-width:1180px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header{background:linear-gradient(180deg,#f7f9fc,#f1f4f8);border-bottom:1px solid var(--line);padding:28px 0 22px}
+  .back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;font-size:13px;color:var(--muted);
+        padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;background:rgba(255,255,255,.6);
+        transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:#fff;text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+  h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,serif;font-weight:600;
+     font-size:clamp(26px,3.6vw,38px);line-height:1.08;letter-spacing:-.018em}
+  .subtitle{margin:8px 0 0;font-family:'Fraunces',Georgia,serif;font-style:italic;
+            font-size:clamp(14px,1.7vw,18px);opacity:.9}
+  main{padding:26px 0 40px}
+  .card{background:#f7f9fc;border:1px solid var(--line);border-radius:14px;padding:clamp(16px,2.4vw,24px);
+        box-shadow:0 1px 2px var(--shadow)}
+  .lede{margin:0 0 18px;font-size:14.5px;color:var(--muted);max-width:78ch}
+  .lede b{color:var(--ink);font-weight:600}
+
+  /* Controls: transport on its own line so the scrubber always has room, then the display
+     switches. Both rows wrap rather than shrink — a 220px-wide slider is useless. */
+  .bar{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;margin:0 0 12px}
+  .bar+.bar{margin-bottom:18px;padding-top:12px;border-top:1px solid var(--line)}
+  .bar label{font-size:12.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+  .bar label.off{opacity:.42}
+  select,button{font:inherit;font-size:13px;color:var(--ink);background:#fff;border:1px solid var(--line);
+                border-radius:8px;padding:5px 9px}
+  select:disabled{color:var(--muted);background:#f2f5f8}
+  button{cursor:pointer;transition:border-color .16s,color .16s}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  #play{min-width:96px}
+  .scrub{flex:1 1 320px;display:flex;align-items:center;gap:12px;min-width:260px}
+  input[type=range]{flex:1;accent-color:var(--accent);min-width:140px}
+  input[type=checkbox]{accent-color:var(--accent)}
+  .read{font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--muted);
+        white-space:nowrap;min-width:20ch}
+  /* Below this the slider and its readout cannot share a line without one of them overflowing;
+     the readout drops under it rather than squeezing the thing you drag. */
+  @media (max-width:520px){
+    .scrub{flex-wrap:wrap;min-width:0}
+    .read{min-width:100%}
+  }
+
+  /* the three planes */
+  .planes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  @media (max-width:820px){.planes{grid-template-columns:1fr;max-width:420px;margin:0 auto}}
+  .plane{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:10px 10px 8px}
+  .plane canvas{width:100%;aspect-ratio:1;display:block;border-radius:7px;background:var(--surface);
+                border:1px solid var(--line)}
+  .plane h3{margin:0 0 8px;font:600 13px/1.3 Inter,sans-serif;letter-spacing:.02em;
+            display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .plane h3 em{font:400 11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);font-style:normal}
+  .plane .ax{margin:6px 2px 0;font:11.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);
+             display:flex;justify-content:space-between}
+
+  /* legend for the magnitude ramp */
+  .legend{display:flex;align-items:center;gap:10px;margin:14px 0 0;font-size:12px;color:var(--muted)}
+  .legend .ramp{width:180px;height:10px;border-radius:5px;border:1px solid var(--line);
+                background:linear-gradient(90deg,#fff,var(--accent))}
+  .legend[hidden]{display:none}
+
+  /* the rank curves */
+  .curves{margin:18px 0 0;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:12px 14px 8px}
+  .curves h3{margin:0 0 2px;font:600 13px/1.3 Inter,sans-serif}
+  .curves p{margin:0 0 8px;font-size:12px;color:var(--muted);max-width:78ch}
+  .curves canvas{width:100%;height:190px;display:block}
+  .note{margin:16px 0 0;font-size:12.5px;color:var(--muted);max-width:80ch}
+  .err{margin:12px 0 0;color:#a3341f;font-size:13.5px}
+  footer{border-top:1px solid var(--line);padding:18px 0 26px;font-size:12.5px;color:var(--muted)}
+  @media (prefers-reduced-motion: reduce){
+    .back,.back .barrow,button{transition:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <a class="back" href="./"><span class="barrow">←</span> Spline Deformation Field</a>
+    <h1>Temporal tri-planes</h1>
+    <p class="subtitle">what the deformation field stores, played over continuous time</p>
+  </div>
+</header>
+
+<main>
+<div class="inner">
+  <div class="card">
+    <p class="lede">The field encodes space as three 128&times;128 planes of <b>32 channels</b> each, and time as
+      a table of <b>6 weights</b> at 75 knots. A plane at time <i>t</i> is
+      <b>base + &Sigma;<sub>r</sub> w<sub>r</sub>(t)&middot;res<sub>r</sub></b> — affine in those weights, so the
+      whole timeline reconstructs in the browser from 7 small images per plane. It is exact at every knot;
+      between them the weights are blended straight, which is the grid's own continuous-time path.
+      (The trained renderer takes a different route between knots — it reads the field at both and
+      cubic-Hermite interpolates the predicted <i>offsets</i>, which is what the velocity heads are for.)
+      Everything is <b>masked to the cells the canonical cloud actually reaches</b>:
+      the rest of the plane is never supervised, so its values are arbitrary — and large enough to dominate
+      both the projection and the display range if you let them.</p>
+
+    <div class="bar">
+      <button id="play">▶ play</button>
+      <div class="scrub">
+        <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="time">
+        <span class="read" id="read">t = 0.000</span>
+      </div>
+      <label>speed
+        <select id="rate">
+          <option value="0.1">slow</option>
+          <option value="0.25" selected>1&times;</option>
+          <option value="0.6">fast</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="bar">
+      <label>show
+        <select id="view">
+          <option value="now">motion at this t — how far from the average pose</option>
+          <option value="avg">motion overall — RMS over the sequence (static)</option>
+          <option value="tmpl">template — base + ⟨w⟩·res (static)</option>
+          <option value="res">one residual plane</option>
+          <option value="pca">features at t — 3 PCA components as RGB</option>
+        </select>
+      </label>
+      <label id="lrank">plane
+        <select id="rank">
+          <option value="0">res₁</option><option value="1">res₂</option><option value="2">res₃</option>
+          <option value="3">res₄</option><option value="4">res₅</option><option value="5">res₆</option>
+        </select>
+      </label>
+      <label id="lbasis">basis
+        <select id="basis">
+          <option value="motion">motion — fitted to what changes</option>
+          <option value="composed">composed — fitted to the planes</option>
+        </select>
+      </label>
+      <label id="lscale">scale
+        <select id="scale">
+          <option value="pc">global, per component</option>
+          <option value="sh">global, shared</option>
+          <option value="fr">per frame</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="mask" checked> mask unsupervised cells</label>
+    </div>
+
+    <div class="planes" id="planes"></div>
+
+    <div class="legend" id="legend">
+      <span>field motion</span><span class="ramp"></span>
+      <span id="legmax">0 → p99</span>
+      <span>· pale cells are unsupervised</span>
+    </div>
+
+    <div class="curves">
+      <h3>Temporal weights</h3>
+      <p>The six rank curves over the 75 knots — one small multiple each, shared scale, zero marked.
+         Everything above is these six numbers driving six fixed images.</p>
+      <canvas id="curves"></canvas>
+    </div>
+
+    <p class="note" id="note"></p>
+    <p class="err" id="err" hidden></p>
+  </div>
+</div>
+</main>
+
+<footer><div class="inner">© 2026 Mingyang Song · All rights reserved.</div></footer>
+
+<script>
+(function(){
+const BUNDLE='triplanes/bouncingballs/';
+const $=id=>document.getElementById(id);
+const SURFACE=[255,255,255],RAMP=[31,95,191];          // --surface, --accent
+const S={meta:null,view:'now',basis:'motion',rank:0,scale:'pc',mask:true,t:0,playing:false,rate:.25,
+         tex:{},dev:null,mavg:null,mean:null,last:0};
+
+const fail=m=>{const e=$('err');e.hidden=false;e.textContent='⚠ '+m;console.error('[triplanes]',m);};
+
+// ---- loading -------------------------------------------------------------
+// One atlas per (basis, plane): 1 + rank tiles side by side, each an RGB image of the three PCA
+// components with its own per-channel min/range. The gram atlas is the same shape, carrying the 21
+// upper-triangle entries of the 6×6 channel Gram packed 3 per tile. Dequantised once into float,
+// because every frame is a weighted sum over all of them.
+function atlasTiles(img,tiles,h,w){
+  const c=document.createElement('canvas');c.width=w*tiles.length;c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);
+  const d=x.getImageData(0,0,c.width,c.height).data,np=h*w,out=[];
+  for(let i=0;i<tiles.length;i++){
+    const f=new Float32Array(3*np),mn=tiles[i].min,rg=tiles[i].range;
+    for(let y=0;y<h;y++)for(let px=0;px<w;px++){
+      const s=(y*c.width+i*w+px)*4,p=y*w+px;
+      for(let ch=0;ch<3;ch++)f[ch*np+p]=d[s+ch]/255*rg[ch]+mn[ch];
+    }
+    out.push(f);
+  }
+  return out;
+}
+function grayMap(img,h,w){
+  const c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);
+  const d=x.getImageData(0,0,w,h).data,f=new Float32Array(h*w);
+  for(let i=0;i<f.length;i++)f[i]=d[i*4]/255;
+  return f;
+}
+const loadImg=url=>new Promise((res,rej)=>{const i=new Image();
+  i.onload=()=>res(i);i.onerror=()=>rej(new Error('could not load '+url));i.src=url;});
+
+async function load(){
+  const m=await (await fetch(BUNDLE+'meta.json')).json();
+  S.meta=m;
+  const K=m.capacity,R=m.rank,TW=m.temporal_weights;
+  const mean=new Float32Array(R);
+  for(const row of TW)for(let r=0;r<R;r++)mean[r]+=row[r]/K;
+  S.mean=mean;
+  // ⟨c cᵀ⟩ over the sequence — the "overall motion" quadratic form, computed here rather than
+  // shipped, since it is six numbers per knot.
+  const M=Array.from({length:R},()=>new Float64Array(R));
+  for(const row of TW)for(let i=0;i<R;i++)for(let j=0;j<R;j++)
+    M[i][j]+=(row[i]-mean[i])*(row[j]-mean[j])/K;
+  S.mavg=M;
+
+  const grid=$('planes'),lv0=m.levels[0];
+  for(const p of m.planes){
+    const box=document.createElement('div');box.className='plane';
+    box.innerHTML='<h3>'+p+' plane <em data-meta></em></h3><canvas></canvas>'
+      +'<div class="ax"><span>'+p[0]+' →</span><span>'+p[1]+' ↓</span></div>';
+    grid.appendChild(box);
+    const view=box.querySelector('canvas');
+    view.width=lv0.w*2;view.height=lv0.h*2;
+    S.tex[p]={view,vctx:view.getContext('2d'),lbl:box.querySelector('[data-meta]'),bases:{}};
+  }
+  for(const p of m.planes){
+    const T=S.tex[p],{h,w}=lv0;
+    for(const b of Object.keys(m.bases)){
+      const lv=m.bases[b].planes[p][0];
+      T.bases[b]={tiles:atlasTiles(await loadImg(BUNDLE+lv.file),lv.tiles,h,w),lv};
+    }
+    const gl=m.magnitude.planes[p][0];
+    T.gram={tiles:atlasTiles(await loadImg(BUNDLE+gl.file),gl.tiles,h,w),lv:gl};
+    T.occ=m.occupancy?grayMap(await loadImg(BUNDLE+m.occupancy.files[p+'_l'+lv0.level]),h,w)
+                     :null;
+    const off=document.createElement('canvas');off.width=w;off.height=h;
+    T.off=off;T.ctx=off.getContext('2d');T.img=T.ctx.createImageData(w,h);
+    T.buf=new Float32Array(3*h*w);T.h=h;T.w=w;
+  }
+  sizeCurves();syncControls();draw();
+}
+
+// ---- time ----------------------------------------------------------------
+// DirectGrid4D._resolve_temporal_w's continuous-time path: lerp the weights between the bracketing
+// knots. The plane is affine in them, so lerping the weights IS lerping the plane, and at a knot
+// this is exact. NOTE it is not what the trained renderer does between knots — that evaluates the
+// field at both knots and cubic-Hermite interpolates the predicted offsets (the v_* heads).
+function weightsAt(t){
+  const K=S.meta.capacity,TW=S.meta.temporal_weights;
+  const x=Math.min(Math.max(t,0),1)*(K-1),li=Math.min(Math.floor(x),K-2),f=x-li;
+  const w=new Float32Array(S.meta.rank);
+  for(let r=0;r<w.length;r++)w[r]=TW[li][r]*(1-f)+TW[li+1][r]*f;
+  return {w,li,f};
+}
+
+// ---- per-plane pixel fields ----------------------------------------------
+// The plane itself: base + Σ_r w_r·tile_{r+1}, then a per-component window. The weights decide
+// which of the three coefficient views this is — w(t) for `pca`, ⟨w⟩ for the template, a one-hot
+// (with the base dropped) for a single residual plane.
+function fieldPCA(T,w){
+  const B=T.bases[S.basis],np=T.h*T.w,buf=T.buf,t0=B.tiles[0],keepBase=S.view!=='res';
+  for(let i=0;i<3*np;i++)buf[i]=keepBase?t0[i]:0;
+  for(let r=0;r<w.length;r++){
+    const a=B.tiles[r+1],wr=w[r];
+    if(wr===0)continue;
+    for(let i=0;i<3*np;i++)buf[i]+=wr*a[i];
+  }
+  const lo=[0,0,0],hi=[0,0,0];
+  if(S.view==='res'){          // a single residual is not on the composed image's scale
+    const t=B.lv.tiles[S.rank+1];
+    for(let c=0;c<3;c++){lo[c]=t.min[c];hi[c]=t.min[c]+t.range[c];}
+  }else if(S.scale==='fr'){
+    for(let c=0;c<3;c++){let a=Infinity,b=-Infinity;
+      for(let i=c*np;i<(c+1)*np;i++){if(buf[i]<a)a=buf[i];if(buf[i]>b)b=buf[i];}
+      lo[c]=a;hi[c]=b;}
+  }else if(S.scale==='sh'){
+    const a=Math.min.apply(null,B.lv.p1),b=Math.max.apply(null,B.lv.p99);
+    for(let c=0;c<3;c++){lo[c]=a;hi[c]=b;}
+  }else for(let c=0;c<3;c++){lo[c]=B.lv.p1[c];hi[c]=B.lv.p99[c];}
+  for(let c=0;c<3;c++)if(hi[c]-lo[c]<1e-12)hi[c]=lo[c]+1e-12;
+  return {kind:'rgb',lo,hi};
+}
+
+// Magnitude view: ‖Σ_r c_r·res_r‖ over ALL 32 channels, as a quadratic form in c — which is why
+// the Gram is shipped. `now` uses c = w(t) − ⟨w⟩; `avg` uses ⟨c cᵀ⟩ and does not move.
+function fieldMag(T,w){
+  const P=S.meta.magnitude.pairs,R=S.meta.rank,np=T.h*T.w,buf=T.buf;
+  const M=Array.from({length:R},()=>new Float64Array(R));
+  if(S.view==='avg'){for(let i=0;i<R;i++)for(let j=0;j<R;j++)M[i][j]=S.mavg[i][j];}
+  else{const c=new Float64Array(R);
+    for(let r=0;r<R;r++)c[r]=w[r]-S.mean[r];
+    for(let i=0;i<R;i++)for(let j=0;j<R;j++)M[i][j]=c[i]*c[j];}
+  for(let i=0;i<np;i++)buf[i]=0;
+  for(let k=0;k<P.length;k++){
+    const i=P[k][0],j=P[k][1],co=(i===j?1:2)*M[i][j];
+    if(co===0)continue;
+    const g=T.gram.tiles[(k/3)|0],ch=k%3,base=ch*np;
+    // stored companded as sign(g)·√|g| — v·|v| is the inverse (see the exporter for why)
+    for(let px=0;px<np;px++){const v=g[base+px];buf[px]+=co*v*Math.abs(v);}
+  }
+  const ref=S.view==='avg'?T.gram.lv.p99_avg:T.gram.lv.p99_now;
+  for(let i=0;i<np;i++)buf[i]=Math.sqrt(Math.max(0,buf[i]))/ref;
+  return {kind:'mag'};
+}
+
+function paint(T,f){
+  const np=T.h*T.w,buf=T.buf,d=T.img.data,occ=T.occ;
+  for(let i=0;i<np;i++){
+    let r,g,b;
+    if(f.kind==='mag'){
+      const v=buf[i]<0?0:buf[i]>1?1:buf[i];
+      r=SURFACE[0]+(RAMP[0]-SURFACE[0])*v;g=SURFACE[1]+(RAMP[1]-SURFACE[1])*v;
+      b=SURFACE[2]+(RAMP[2]-SURFACE[2])*v;
+    }else{
+      const c=[0,0,0];
+      for(let k=0;k<3;k++){const v=(buf[k*np+i]-f.lo[k])/(f.hi[k]-f.lo[k]);
+        c[k]=(v<=0?0:v>=1?1:v)*255;}
+      r=c[0];g=c[1];b=c[2];
+    }
+    // Fade toward the card surface rather than clipping to a mask: the edge of the supervised
+    // region is itself informative, and a hard cut would read as scene geometry.
+    if(S.mask&&occ){
+      const a=Math.min(1,occ[i]/.25);
+      r=r*a+SURFACE[0]*(1-a);g=g*a+SURFACE[1]*(1-a);b=b*a+SURFACE[2]*(1-a);
+    }
+    d[i*4]=r;d[i*4+1]=g;d[i*4+2]=b;d[i*4+3]=255;
+  }
+  T.ctx.putImageData(T.img,0,0);
+  const v=T.view,vc=T.vctx;
+  vc.imageSmoothingEnabled=true;vc.clearRect(0,0,v.width,v.height);
+  vc.drawImage(T.off,0,0,v.width,v.height);
+}
+
+const MAG=new Set(['now','avg']);
+// Which weights the coefficient views run under: the clock, the mean (template), or a one-hot
+// (a single residual plane). Same two computations, three readings.
+function viewWeights(w){
+  if(S.view==='tmpl')return S.mean;
+  if(S.view==='res'){const v=new Float32Array(S.meta.rank);v[S.rank]=1;return v;}
+  return w;
+}
+function draw(){
+  if(!S.meta)return;
+  const {w,li,f}=weightsAt(S.t);
+  for(const p of S.meta.planes){
+    const T=S.tex[p];
+    paint(T,MAG.has(S.view)?fieldMag(T,w):fieldPCA(T,viewWeights(w)));
+    T.lbl.textContent=MAG.has(S.view)
+      ? 'all 32 channels'
+      : (T.bases[S.basis].lv.explained_variance.reduce((a,b)=>a+b,0)*100).toFixed(0)+'% of variance';
+  }
+  $('read').textContent='t = '+S.t.toFixed(3)+'  ·  knot '+li+'→'+(li+1);
+  drawCurves(w,li+f);
+}
+
+// ---- rank curves ---------------------------------------------------------
+// Six small multiples rather than six lines in one box: the curves cross constantly, so a shared
+// frame would need six hues to tell apart, and each panel can be direct-labelled instead.
+function sizeCurves(){
+  const c=$('curves'),dpr=Math.min(devicePixelRatio||1,2);
+  c.width=Math.max(1,c.clientWidth*dpr);c.height=Math.max(1,c.clientHeight*dpr);
+}
+function drawCurves(w,pos){
+  const c=$('curves'),g=c.getContext('2d'),W=c.width,H=c.height,k2=W/Math.max(c.clientWidth,1);
+  const TW=S.meta.temporal_weights,K=S.meta.capacity,R=S.meta.rank;
+  const padL=30*k2,rowH=H/R,x=k=>padL+(W-padL-4*k2)*(k/(K-1));
+  g.clearRect(0,0,W,H);
+  g.font=(11*k2)+'px ui-monospace,Menlo,monospace';g.textBaseline='middle';
+  for(let r=0;r<R;r++){
+    const mid=r*rowH+rowH/2,amp=rowH*.38;          // weights are scaled to [-1,1] at export
+    g.strokeStyle='#dde3ea';g.lineWidth=1*k2;
+    g.beginPath();g.moveTo(padL,mid);g.lineTo(W-4*k2,mid);g.stroke();
+    g.fillStyle='#5f6a78';g.fillText('r'+(r+1),4*k2,mid);
+    g.strokeStyle='#1f5fbf';g.lineWidth=2*k2;
+    g.beginPath();
+    for(let k=0;k<K;k++){const yy=mid-TW[k][r]*amp;k?g.lineTo(x(k),yy):g.moveTo(x(k),yy);}
+    g.stroke();
+    g.fillStyle='#2e8b57';
+    g.beginPath();g.arc(x(pos),mid-w[r]*amp,3.2*k2,0,7);g.fill();
+  }
+  g.strokeStyle='rgba(46,139,87,.55)';g.lineWidth=1*k2;
+  g.beginPath();g.moveTo(x(pos),0);g.lineTo(x(pos),H);g.stroke();
+}
+
+// ---- controls ------------------------------------------------------------
+// The PCA-only controls are disabled rather than hidden, so switching view does not reflow the row.
+const WHAT={
+  now:'‖Σ_r c_r(t)·res_r‖ with c(t) = w(t) − ⟨w⟩ — how far the field is from its average configuration '
+     +'right now. Changes as you scrub.',
+  avg:'The same magnitude, RMS over the whole sequence. This summarises the TIME-VARYING part — the base '
+     +'cancels out of c(t) — and is static because the average has no t left in it.',
+  tmpl:'The template: base + Σ_r ⟨w_r⟩·res_r, the plane the model would read if the clock never moved. '
+      +'The genuinely time-invariant half of the storage. Shown in the composed basis; in the motion '
+      +'basis it is flat by construction, since that basis is centred on it.',
+  res:'One residual plane on its own, without the base. These six, scaled by the six curves below, are '
+     +'the entire time dependence of the field.',
+  pca:'Three PCA components of the 32-channel features as RGB, at this t.'};
+function syncControls(){
+  const coef=!MAG.has(S.view),rank=S.view==='res';
+  // The template is identically zero in the motion basis; land on the one that can show it.
+  if(S.view==='tmpl'&&S.basis!=='composed'){S.basis='composed';$('basis').value='composed';}
+  $('basis').disabled=$('scale').disabled=!coef;
+  $('lbasis').classList.toggle('off',!coef);
+  $('lscale').classList.toggle('off',!coef||rank);
+  $('rank').disabled=!rank;$('lrank').classList.toggle('off',!rank);
+  $('legend').hidden=coef;
+  $('legmax').textContent=S.view==='avg'?'0 → 99th pct (RMS)':'0 → 99th pct (over the sequence)';
+  const m=S.meta;
+  $('note').textContent=WHAT[S.view]+' · '+(m.occupancy
+      ?Math.round(m.occupancy.points).toLocaleString()+' canonical gaussians define the mask · '
+      :'')
+    +m.capacity+' knots · rank '+m.rank+' · '+m.levels[0].h+'×'+m.levels[0].w
+    +' at level '+m.levels[0].level+' · '+m.scene+' @ iteration '+m.iteration;
+}
+$('rank').onchange=e=>{S.rank=+e.target.value;draw();};
+$('scrub').oninput=e=>{S.playing=false;$('play').textContent='▶ play';S.t=+e.target.value/1000;draw();};
+$('play').onclick=()=>{S.playing=!S.playing;$('play').textContent=S.playing?'❚❚ pause':'▶ play';S.last=0;};
+$('view').onchange=e=>{S.view=e.target.value;syncControls();draw();};
+$('basis').onchange=e=>{S.basis=e.target.value;draw();};
+$('scale').onchange=e=>{S.scale=e.target.value;draw();};
+$('mask').onchange=e=>{S.mask=e.target.checked;draw();};
+$('rate').onchange=e=>{S.rate=+e.target.value;};
+addEventListener('resize',()=>{if(S.meta){sizeCurves();draw();}});
+
+function tick(ts){
+  requestAnimationFrame(tick);
+  if(!S.playing||!S.meta){S.last=ts;return;}
+  S.t=(S.t+(ts-(S.last||ts))/1000*S.rate)%1;S.last=ts;
+  $('scrub').value=Math.round(S.t*1000);
+  draw();
+}
+requestAnimationFrame(tick);
+
+load().catch(e=>fail(e.message||e));
+})();
+</script>
+</body>
+</html>

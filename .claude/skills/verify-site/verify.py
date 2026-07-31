@@ -28,6 +28,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
          "projects/spdef/viewer.html", "projects/spdef/points.html",
+         "projects/spdef/triplanes.html", "projects/spdef/field.html",
          "projects/grain/index.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
