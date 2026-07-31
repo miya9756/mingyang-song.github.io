@@ -131,7 +131,7 @@ overlap, not the viewer.
 
 ## `projects/spdef/` — the side-by-side
 
-The SpDef page hosts **two independent comparisons**, both driven by the one host script:
+The SpDef page hosts **three independent cards**, all driven by the one host script:
 
 1. **1×2, D-NeRF *bouncingballs*** — the same sequence trained with and without the temporal
    regularizers (`xyz/rot_velocity_div_loss`, `xyz/rot_acceleration_loss`; the two runs'
@@ -141,13 +141,30 @@ The SpDef page hosts **two independent comparisons**, both driven by the one hos
    (`0.9` / `59`), plus full-count with `xyz/rot_velocity_div_loss` zeroed. 200 frames. Note
    the *no-reg* run here zeroes only the velocity-divergence terms, not the acceleration ones
    — unlike the bouncingballs pair, which zeroes both.
+3. **1×1, DeformingThings4D *astra / samba dancing*** — not a comparison: the GS-free path, the
+   *fitted spline itself*, and a **different renderer**. See the `points.html` section below.
 
-All five scenes are the **single-GOP** packing: one keyframe, `overlap_frames = 0`. For
+**`kind` is the only axis the host branches on** — `'splat'` (the first two cards, `viewer.html`
+panels the host fetches and decodes for) versus `'points'` (the third, a `points.html` panel that
+loads itself). Anything per-kind — the required view-option keys (`OPT_KEYS`), what `viewState()`
+sends, which controls `pushView()` wires (`OPT_WIRING`) — is a table keyed by it, not an `if`
+scattered through the file. A group also opts into a **continuous clock** with `frac:true`, which
+changes `setFrame()`'s label and lets `tick()` advance in fractional frames.
+
+Optional transport controls are **simply absent from that card's `ui`, resolved to `null`, and
+guarded at every use**: `touch` (only the splat cards have a virtual pad), `prev`/`next` and
+`speed` (only the trajectory card has supervised-frame steppers and a playback rate). Adding a
+control to one kind must not force a dummy into the others. `g.el` is built by walking `g.ui`
+rather than by naming keys, and `verify.py` reads the same `ui:{…}` blocks for its id check — so
+a new control needs no edit in either place.
+
+Both splat comparisons' five scenes are the **single-GOP** packing: one keyframe,
+`overlap_frames = 0`. For
 bouncingballs the 4-GOP packing (`bundle_4_packed`) was tried and rolled back — it demonstrates
 worse, since a GOP boundary is a hard cut between two independently-keyframed point clouds when
 overlap is 0. The loader stays multi-GOP-capable either way.
 
-**Nothing loads until its Load button is pressed.** Five panels is ~11 MB of scenes, five WebGL
+**Nothing loads until its Load button is pressed.** Six panels is ~18 MB of scenes, six WebGL
 contexts and a ~32 MB decoder — too much to spend on a visitor who came for the paper link. Until
 a group is started its iframes carry the viewer URL in **`data-src`, not `src`**, so no viewer,
 GL context or decoder exists for it. `startGroup()` assigns `src` and enqueues; groups run **one
@@ -157,8 +174,8 @@ queue drains and re-acquired (warm cache) if another group is loaded later. `ver
 `data-src` for asset checking; without that it stopped seeing `viewer.html` entirely.
 
 **Each comparison can also be given back.** `clearGroup()` is the counterpart to `startGroup()`:
-two comparisons already means five WebGL contexts, five scenes and every decoded motion array
-resident at once, and a third would be worse. It navigates each panel to **`about:blank`**, which
+three cards already means six WebGL contexts, six scenes and every decoded motion array
+resident at once, and a fourth would be worse. It navigates each panel to **`about:blank`**, which
 *destroys* the panel document — GL context, textures, the motion it was sent, its rAF loop — and
 drops the host's own `p.scene` / `p.built` (keyframes are deliberately kept past decode to serve a
 panel that reloads, so nothing else frees them). `resetPane()` is shared with first-time init so
@@ -339,6 +356,103 @@ the old document-relative form worked only for a page in that folder and 404'd f
 Keep it module-relative when syncing from `4d-relight/web/player_browser/` (which still has
 the document-relative version).
 
+### `points.html` — the point-trajectory card (a SECOND renderer)
+
+Ported on 2026-07-31 from `4d-relight/web/player_points/` (`index.html` + `traj.js`), scene
+`bundles/humanoids/astra_samba_09_u8_mesh_s4` → `projects/spdef/points/astra_samba/`. It is the
+demo for the **GS-free** path (`scripts/train/run_anime_trainer.py`): the deformation field fitted
+straight to a DeformingThings4D `.anime` vertex sequence, with no rasteriser in the loop.
+
+`points.html` and `viewer.html` share the `{ch:'spdef'}` protocol **and nothing else** — different
+shaders, different data model, no decoder. Do not try to merge them.
+
+- **What ships is the spline, not a replay.** Per-point offset + tangent at each of 105 knots;
+  `traj.js` evaluates the same cubic Hermite the field uses, so the timeline is *continuous* and
+  every frame between the supervised ticks is inferred in the browser. That is the whole claim of
+  the card, which is why the group carries `frac:true` and the frame readout says
+  `· supervised` / `· inferred`, and why ⇤/⇥ step trained frames (`train_frames`, sent by the
+  panel on `ready`) — scrubbing lands on one only by accident.
+- **`traj.js` is a VERBATIM copy of the upstream module** and mirrors `traj_codec.py` /
+  `point_deform.py`. Every bundle carries a torch-computed `parity` block; the panel refuses to
+  render if it disagrees, the same contract the splat path has with `compression/decoder.py`. Do
+  not edit the curve math here — edit it upstream and re-copy.
+- **The PANEL loads its own bundle, unlike every other panel on the page.** The host owns loading
+  for splat scenes only because a decoder per canvas is four copies of a ~32 MB ffmpeg core. There
+  is no wasm here at all, and `traj.js` already streams the two knots bracketing the playhead with
+  its own LRU cache; hoisting that into the host would mean shipping knots over `postMessage`
+  every frame. So `startGroup()` **bypasses `pump()`** for a points card — queueing it behind a
+  splat decode would make it wait ~30 s for a resource it never touches — and the host's only jobs
+  are starting the frame, relaying `progress`, and catching a late/restarted panel up in `flush()`
+  (which for this kind sends `viewState` + a `seek`, and returns before the keyframe path).
+- **The eager load is 0.21 MB** (meta.json + canonical + faces); knots are ~48 KB per pair,
+  fetched on demand, so initial load is flat in sequence length. Every fetch goes through an
+  **idle-timeout wrapper with cache-busted retries**, injected as `traj.js`'s `fetchFn` — the same
+  lesson as the host's `grab()`, and the reason `hardFetch` drains the body itself rather than
+  handing back a real `Response` (the idle clock has to cover the read, not just the headers).
+- **Z-up.** DeformingThings4D is z-up — the canonical bounds settle it (tall axis spans 1.18
+  against 0.43/0.48) — and the character faces **−Y**. The upstream player orbits about world Y,
+  which lays it on its side. Opening pose is `?yaw=`/`?pitch=` in degrees (146/10), same idea as
+  `viewer.html`'s `?elev=`.
+- **Orbit, not fly, and no virtual movement pad.** One character on a turntable needs only
+  orbit/pan/dolly, and unlike the fly camera that vocabulary is fully reachable by touch (drag,
+  two-finger pinch and pan) — which is the thing the pad exists to work around. Hence no
+  `touch:` id in this group's `ui`.
+- **Retinted for a white panel, except the surface.** Upstream is a dark standalone page, so its
+  pale cloud and pastel stripes are invisible here. The surface shading `abs(n*0.5+0.5)` off
+  screen-space derivatives is deliberately left alone: it is the same convention as
+  `utils/mesh_render.py`, so a web frame and a paper figure still look alike.
+- **The panel opens one trail-length in** (`openAt` on `ready`), because a trail covers the past
+  and frame 0 is the one state where the card's main feature has nothing to draw. It also refuses
+  to draw at all until the first successful `evaluate()` — `positions` is zero-filled before that,
+  and drawing would paint the mesh collapsed to the origin.
+- **The ground-truth overlay was dropped, data and all.** The export carries GT at every 60th
+  frame only (`--gt_stride 60`, 14 of 837), so the checkbox did nothing at 98 % of the timeline.
+  Removing it let **`arrays.gt` come out of `meta.json` and `gt.bin` off disk** — 665 KB, which
+  was 80 % of what the card fetched before you touched anything. `traj.js` fetches GT only when
+  the manifest declares it, so no code there had to change. Restoring the overlay means putting
+  the file and its meta entry back as well as the control; a checkbox alone will find no data.
+
+**What is deliberately NOT a control here** (upstream ships all three as sliders/checkboxes):
+
+- **Knot stripes are always on** (`STRIPES` in `points.html`). The colour flip *is* the knot, and
+  it is the one thing on screen that shows the spacing the paper argues about; a trail in one
+  colour says nothing the mesh did not already say. Stripe pair is **`#59B292` / `#FA6781`**.
+- **Sample density is fixed at `DETAIL = 5`.** It trades a cost nobody can see against smoothness
+  everybody can. Note the *peak* cost is set by `MAX_TRAIL_SAMPLES = 256`, not by DETAIL: the cap
+  binds from length ≈ 51 upward, so raising DETAIL from 3 to 5 moved the *low* end of the slider
+  up (6.1 → 10.4 MB per rebuild) and left the ceiling at ~12.9 MB. That ceiling is the number to
+  watch if `TRAIL_POINTS` (1500) or the cap is ever changed.
+- Trail alpha is **0.65**, further multiplied by `vAge` in the shader. 1500 overlapping polylines
+  at full strength wash out the mesh they are drawn over.
+
+**Playback rate (`g.rate`, the Speed slider) exists only on this card, and that is the point.** A
+splat scene has exactly one decoded pose per frame, so slowing it down can only repeat them; the
+spline evaluates poses that were never stored. `tick()` uses `g.rate` for a `frac` group and the
+shared `FPS` elsewhere. It survives Clear, like the view options — a preference, not scene state.
+The slider carries **percent and the label shows a multiple** (`1.00×`); an absolute fps readout
+was tried and read as a rendering setting rather than a playback one.
+
+**The status line reports streamed bytes as a fraction, not a running total.** `bundleBytes()` in
+the panel derives the whole sequence's size from `meta.json` (`arrays[].bytes`, plus
+`num_points × 3 × CODE_BYTES[dtype]` per knot) and sends it as `totalMB` on `ready`; the panel's
+1 Hz `stats` carries `mb` and the host refreshes the status line on each. Derived rather than
+hardcoded so a re-export cannot make the page lie. A counter that only ever goes up is
+indistinguishable from one that never stops, which is the wrong impression for a page whose whole
+argument is that initial load does not grow with sequence length.
+
+**Three size figures have to agree, and one of them is manual.** `bundleBytes()` and the
+`fetchedBytes` counter both **include meta.json** — `hardFetch` counts every request and stashes
+the first one's size as `manifestBytes`, because `traj.js`'s own `bytesFetched` starts at
+`loadEager()` and misses the 46 KB manifest. The Load button, the subtag and the lede state
+**5.0 MB total / 0.2 MB up front** as literal text; nothing checks those against the bundle, so
+re-exporting means re-reading them. Current split: manifest 46 KB + canonical 47 KB + faces
+120 KB eager, 105 knot pairs × 48 KB streamed.
+
+**The mesh is decimated ≈4× and that is stated on the page** — 31,515 vertices → 7,921, via
+`--decimate_to 7879` (`cluster_decimate()` clusters and remaps faces, so a surface survives). Do
+not conflate it with `skip_step = 4`, the *temporal* subsampling that makes every 4th frame a
+supervised one: both are "×4" and they are different axes.
+
 ## `projects/grain/` — the camera-noise playground
 
 Results page for *A Generative Model for Digital Camera Noise Synthesis*
@@ -475,6 +589,13 @@ ffmpeg `*.wasm` is a plain binary git object, not LFS.
   (`.github/workflows/pages.yml` already sets `lfs: true`).
 - Pages serves the built artifact from its CDN, so visitor traffic costs no LFS
   bandwidth — only CI checkouts do.
+- **`projects/spdef/points/**/*.bin` is deliberately NOT in LFS.** LFS pays off for a few large
+  files; this bundle is 214 files averaging 23 KB (one per knot per component — see the
+  build's reasoning in `web/README.md`), and 6.7 MB total. As plain git objects that costs
+  nothing recurring; in LFS it would be 214 objects re-downloaded on every CI checkout, against
+  a monthly bandwidth quota, for no packing benefit. If a much larger point bundle is ever
+  added, revisit — but scope any rule to that path, since `*.bin` is far too generic a glob for
+  this repo.
 
 ## Common tasks
 
@@ -508,6 +629,22 @@ conda run -n 4dre python ~/4d-relight/web/player_browser/build_web_bundle.py \
 default square camera and the scene looks lost. Both SpDef scenes must carry the *same*
 camera or the side-by-side stops being a comparison.
 
+**Repackage the SpDef point bundle** (the third card) — different builder, different repo path,
+no camera to embed (it is framed from the AABB):
+
+```bash
+conda run -n smv python ~/4d-relight/web/player_points/build_point_bundle.py \
+  --model_path /cluster/scratch/misong/4dre/anime/x4/astra_SambaDancing_09 \
+  --name humanoids/astra_samba_09_u8_mesh_s4
+# then copy web/player_points/bundles/<name>/ -> projects/spdef/points/astra_samba/
+# and strip meta.json's source_path / model_path to their basenames: as built they are the
+# cluster's absolute paths, and this is a public site.
+```
+
+`traj.js` must be re-copied verbatim alongside any bundle whose format changed — `meta.version`
+is a hash of the metadata and cache-busts every binary URL, but it cannot cache-bust a decoder
+that no longer matches. The bundle's `parity` block is what catches that, on load, in the browser.
+
 **Deploy:** push to `main`.
 
 ## Conventions & cautions
@@ -525,5 +662,6 @@ camera or the side-by-side stops being a comparison.
   synthetic; `neur3d` has human faces and must never be committed.
 - Citation/paper metadata lives inline in `projects/smv/index.html` (search `citeAcm`
   / `citeBib`). The SpDef page carries its own `citeAcm`/`citeBib` plus a **Datasets**
-  section crediting D-NeRF and HyperNeRF — the two it actually uses. Those citations are
-  verbatim copies of the SMV viewer's; keep them in sync if either is corrected.
+  section crediting D-NeRF, HyperNeRF and DeformingThings4D — the three it actually uses. The
+  first two are verbatim copies of the SMV viewer's; keep them in sync if either is corrected.
+  A new card means a new entry here, not just new markup.

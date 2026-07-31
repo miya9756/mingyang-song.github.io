@@ -77,6 +77,12 @@
   @media(max-width:760px){.ab{grid-template-columns:1fr}}
   /* three square panels need more room than two before they stop being readable */
   @media(max-width:980px){.ab3{grid-template-columns:1fr}}
+  /* One panel, so nothing to line up against: left full-width it would tower over the two-panel
+     card above it. Capped and centred instead, and 5:4 rather than square because a standing
+     figure needs the height and its trails need the width. */
+  .ab1{grid-template-columns:minmax(0,1fr)}
+  .ab1 .pane{max-width:700px;margin:0 auto;width:100%}
+  .ab1 .stagebox{aspect-ratio:5/4}
   /* Each comparison is a self-contained card: its own heading, panels, transport, status line and
      view options. With two of them the section otherwise runs on, and it stops being obvious which
      transport drives which set of panels.
@@ -119,7 +125,10 @@
   .tload{background:var(--accent);border-color:var(--accent)}
   .tload:hover:not(:disabled){background:#17498f;border-color:#17498f}
   .tload:disabled{opacity:.55}
-  #abScrub,#amScrub{flex:1 1 170px;min-width:110px;accent-color:var(--accent)}
+  #abScrub,#amScrub,#ptScrub{flex:1 1 170px;min-width:110px;accent-color:var(--accent)}
+  /* Frame steppers. Narrower than a .tbtn because they carry one glyph, and monospaced so the two
+     arrows sit on the same optical baseline as the frame readout beside them. */
+  .tstep{padding:5px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   .tnum{font:12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--muted);white-space:nowrap}
   .tchk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
   .tchk input{accent-color:var(--accent)}
@@ -182,7 +191,6 @@
 <main class="inner">
   <section>
     <h2>Playground</h2>
-    <p class="lede">Two comparisons, each loaded on demand and decoded entirely in your browser. Within a comparison the panels share one camera and one clock, so any difference on screen is a difference between the models.</p>
 
     <article class="subcard">
       <div class="subhd">
@@ -220,7 +228,7 @@
       <label class="tchk" title="On-screen stick and up/down buttons for flying the camera, on the first panel. The panels share one camera, so the others follow."><input type="checkbox" id="abTouch"> Touch controls</label>
     </div>
     <p id="abStatus" class="hint">Not loaded.</p>
-    <div class="viewopts" id="abOpts">
+    <div class="viewopts" id="abOpts" data-kind="splat">
       <p class="vlead">Toggle these to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 150-frame path. Applies to both panels above.</p>
       <div class="vrow off" data-o="rowEllip">
         <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the underlying point-based representation is visible"><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
@@ -284,7 +292,7 @@
     </div>
     <p id="amStatus" class="hint">Not loaded.</p>
 
-    <div class="viewopts" id="amOpts">
+    <div class="viewopts" id="amOpts" data-kind="splat">
       <p class="vlead">Toggle these to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 200-frame path. Applies to the three panels above.</p>
       <div class="vrow off" data-o="rowEllip">
         <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the underlying point-based representation is visible"><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
@@ -301,7 +309,48 @@
       </div>
     </div>
     </article>
-    <p class="hint">The two comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load. Each one loads only when you ask for it, and <em>clear</em> gives it back — scenes, renderers and decoded motion — if you would rather not hold both at once. Once a card is loaded: drag inside a panel to orbit · scroll to change fly speed · W/A/S/D and Q/E to move the focused panel. On a touch device an on-screen stick and up/down buttons appear on the first panel — the others follow, since the cameras are linked.</p>
+
+    <article class="subcard">
+      <div class="subhd">
+        <h3>The spline itself, between the supervised frames</h3>
+        <p class="subtag">DeformingThings4D <em>astra · samba dancing</em> · 837 frames · 7,921 points · 5.0 MB for the whole sequence, 0.2 MB of it up front</p>
+      </div>
+      <p class="lede">The two cards above render gaussians. This one drops the rasterizer entirely and fits the same spline deformation field straight to a mesh’s vertices, which is how the field’s temporal quality is measured. What ships is not a replay: it is the <em>fitted spline</em>: a per-point offset and tangent at each of knots, and your browser evaluates the same cubic Hermite the field itself uses.</p>
+      <p class="lede">The mesh is <em>decimated ≈4×</em>, from the sequence’s 31,515 vertices down to 7,921 to stay light.</p>
+
+    <div class="ab ab1">
+      <figure class="pane">
+        <figcaption><span class="ptitle">Fitted trajectories</span><span class="ptag">105 knots · cubic Hermite · evaluated in your browser</span></figcaption>
+        <div class="stagebox idle">
+          <iframe id="paneF" title="Interactive viewer: a deforming mesh whose vertex trajectories are evaluated from the fitted spline"
+                  data-src="points.html?bundle=points/astra_samba/meta.json&amp;id=anime"></iframe>
+          <p class="idlemsg">not loaded</p>
+        </div>
+      </figure>
+    </div>
+
+    <div class="transport">
+      <button id="ptLoad" class="tbtn tload">Load this demo · 5.0 MB</button>
+      <button id="ptClear" class="tbtn" hidden title="Unload this demo — discards the bundle, its WebGL context and every knot fetched so far">✕ clear</button>
+      <button id="ptPlay" class="tbtn" disabled>▶ play</button>
+      <label class="vslide" title="Playback rate, relative to the sequence's own 30 fps. Below 1.00× the spline is not repeating frames — it is evaluating poses that were never stored, which is exactly what a continuous trajectory buys you.">Speed <input id="ptSpeed" type="range" min="10" max="200" step="5" value="100"><output id="ptSpeedN">1.00×</output></label>
+      <button id="ptPrev" class="tbtn tstep" disabled title="Previous supervised frame — one the field was actually trained on">⇤</button>
+      <button id="ptNext" class="tbtn tstep" disabled title="Next supervised frame — one the field was actually trained on">⇥</button>
+      <input id="ptScrub" type="range" min="0" max="0" step="any" value="0" aria-label="Timeline position" disabled>
+      <span id="ptFrame" class="tnum">—</span>
+      <button id="ptReset" class="tbtn">reset view</button>
+    </div>
+    <p id="ptStatus" class="hint">Not loaded.</p>
+
+    <div class="viewopts" id="ptOpts" data-kind="points">
+      <div class="vrow" data-o="rowTrail">
+        <label class="tchk" title="Draw each sampled vertex's path over the preceding frames, sampled from the spline"><input type="checkbox" data-o="trail" checked> Trails</label>
+        <label class="vslide" title="How far back the trail reaches, in frames. One knot interval — one stripe — is about 8 frames.">Length <input type="range" data-o="trailLen" min="2" max="120" value="40"><output data-o="trailLenN">40</output></label>
+      </div>
+    </div>
+    </article>
+
+    <p class="hint">The two gaussian comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load; the trajectory demo needs no decoder at all and streams its knots as you scrub. Each card loads only when you ask for it, and <em>clear</em> gives it back — scenes, renderers and decoded motion — if you would rather not hold them all at once. Once a card is loaded: drag inside a panel to orbit · in the gaussian panels, scroll to change fly speed and W/A/S/D and Q/E to move the focused one; in the trajectory panel, scroll or pinch to zoom and shift-drag or two-finger drag to pan. On a touch device an on-screen stick and up/down buttons appear on the first gaussian panel — the others follow, since the cameras are linked.</p>
   </section>
 
   <section>
@@ -338,6 +387,8 @@
       Albert Pumarola, Enric Corona, Gerard Pons-Moll, and Francesc Moreno-Noguer. 2021. D-NeRF: Neural Radiance Fields for Dynamic Scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR).</p>
       <p class="ref"><strong><a href="https://hypernerf.github.io/" target="_blank" rel="noopener">HyperNeRF</a></strong> — casually captured real-world scenes; <em>americano</em> above.<br>
       Keunhong Park, Utkarsh Sinha, Peter Hedman, Jonathan T. Barron, Sofien Bouaziz, Dan B Goldman, Ricardo Martin-Brualla, and Steven M. Seitz. 2021. HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields. ACM Transactions on Graphics (Proc. SIGGRAPH Asia) 40, 6 (2021).</p>
+      <p class="ref"><strong><a href="https://github.com/rabbityl/DeformingThings4D" target="_blank" rel="noopener">DeformingThings4D</a></strong> — animated humanoid and animal mesh sequences; <em>astra · samba dancing</em> above.<br>
+      Yang Li, Hikari Takehara, Takafumi Taketomi, Bo Zheng, and Matthias Nießner. 2021. 4DComplete: Non-Rigid Motion Estimation Beyond the Observable Surface. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV).</p>
     </div>
   </section>
 </main>
@@ -358,7 +409,7 @@
 window.__spdefBooted = false;
 setTimeout(function () {
   if (window.__spdefBooted) return;
-  ['abStatus', 'amStatus'].forEach(function (id, i) {
+  ['abStatus', 'amStatus', 'ptStatus'].forEach(function (id, i) {
     var el = document.getElementById(id);
     if (!el) return;
     el.textContent = '✗ The viewer failed to start — a script did not load. ';
@@ -368,7 +419,7 @@ setTimeout(function () {
     b.onclick = function () { location.reload(); };
     el.appendChild(b);
   });
-  ['abLoad', 'amLoad'].forEach(function (id) {
+  ['abLoad', 'amLoad', 'ptLoad'].forEach(function (id) {
     var b = document.getElementById(id);
     if (b) { b.disabled = true; b.textContent = 'unavailable'; }
   });
@@ -394,45 +445,83 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
 
 (function(){
   // ---- comparisons on this page -------------------------------------------
-  // Two independent groups. Everything that must agree WITHIN a comparison — the clock and the
-  // camera — is per group; everything that must agree across the whole page — the single decoder
-  // and the view options — is shared. Linking the two clocks or the two cameras would be
-  // meaningless: they are different scenes, different captures and different frame counts.
+  // Three independent groups. Everything that must agree WITHIN a card — the clock and the camera —
+  // is per group; everything that must agree across the whole page — the single decoder and the
+  // view options — is shared. Linking the clocks or the cameras would be meaningless: they are
+  // different scenes, different captures and different frame counts.
+  //
+  // `kind` is what a group renders, and it is the only axis this host branches on:
+  //   splat  — viewer.html panels. The HOST fetches and decodes, because a decoder per canvas is
+  //            four copies of a ~32 MB ffmpeg.wasm core.
+  //   points — points.html panels. No wasm anywhere, and traj.js already streams the two knots
+  //            bracketing the playhead with its own cache, so the PANEL loads itself and the host
+  //            only starts it. It also carries a continuous clock (`frac`): the whole claim of that
+  //            card is that time between the supervised frames is inferred, not replayed, so a
+  //            whole-frame timeline would quietly hide the thing on display.
   const GROUPS=[
-    {key:'balls',ui:{load:'abLoad',clear:'abClear',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',touch:'abTouch',status:'abStatus',opts:'abOpts'},
+    {key:'balls',kind:'splat',
+     ui:{load:'abLoad',clear:'abClear',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',touch:'abTouch',status:'abStatus',opts:'abOpts'},
      panes:[{id:'reg',    frId:'paneA',url:'scenes/bouncingballs_reg/scene.json',    name:'with reg'},
             {id:'noreg',  frId:'paneB',url:'scenes/bouncingballs_noreg/scene.json',  name:'without reg'}]},
-    {key:'amer',ui:{load:'amLoad',clear:'amClear',play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',touch:'amTouch',status:'amStatus',opts:'amOpts'},
+    {key:'amer',kind:'splat',
+     ui:{load:'amLoad',clear:'amClear',play:'amPlay',scrub:'amScrub',lbl:'amFrame',reset:'amReset',touch:'amTouch',status:'amStatus',opts:'amOpts'},
      panes:[{id:'k33',    frId:'paneC',url:'scenes/americano_knots33/scene.json',    name:'33 knots'},
             {id:'kfull',  frId:'paneD',url:'scenes/americano_full/scene.json',       name:'full knots'},
-            {id:'knoreg', frId:'paneE',url:'scenes/americano_full_noreg/scene.json', name:'full knots, no reg'}]}
+            {id:'knoreg', frId:'paneE',url:'scenes/americano_full_noreg/scene.json', name:'full knots, no reg'}]},
+    {key:'traj',kind:'points',frac:true,
+     ui:{load:'ptLoad',clear:'ptClear',play:'ptPlay',scrub:'ptScrub',lbl:'ptFrame',reset:'ptReset',status:'ptStatus',opts:'ptOpts',
+         prev:'ptPrev',next:'ptNext',speed:'ptSpeed',speedN:'ptSpeedN'},
+     panes:[{id:'anime',  frId:'paneF',url:'points/astra_samba/meta.json',           name:'trajectories'}]}
   ];
+  // Controls each kind's view-option block must expose. They are addressed by data-o rather than by
+  // id (the block is repeated per group and ids must stay unique), so a typo here is invisible to
+  // the page's id check — verify.py asserts each block against the list for its data-kind.
+  const OPT_KEYS={
+    splat:['rowEllip','ellip','ellipR','ellipRN','rowTraj','traj','trajN','trajNN',
+           'trajL','trajLN','rowOff','off','offMix','offMixN'],
+    points:['rowTrail','trail','trailLen','trailLenN']};
   const _ctl=id=>document.getElementById(id);
   const byId=new Map(), ALL=[];
   // Everything about a pane that belongs to ONE load: delivery state, the host's own copies of its
   // keyframes and motion, and the watchdog's counters. Shared by first-time init and clearGroup(),
   // so the two cannot drift — a field reset in one but not the other is how a cleared comparison
   // comes back half-alive (a pane still marked `sentKf`, say, is never sent its keyframe again).
+  // Frames of the source sequence per second, and the default for every card's `rate`. Declared
+  // before the init loop below, which reads it.
+  const FPS=30;
   function resetPane(p){
-    p.frames=0;p.buffered=0;p.splats=0;
+    p.frames=0;p.buffered=0;p.splats=0;p.note='';p.mb=0;p.totalMB=0;
     p.alive=false;p.ready=false;p.failed=false;p.sentKf=false;p.kfAt=0;p.kfRetries=0;
     p.built=null;p.scene=null;p.tries=0;p.t0=0;
   }
   for(const g of GROUPS){
-    g.el={load:_ctl(g.ui.load),clear:_ctl(g.ui.clear),play:_ctl(g.ui.play),scrub:_ctl(g.ui.scrub),lbl:_ctl(g.ui.lbl),
-          reset:_ctl(g.ui.reset),touch:_ctl(g.ui.touch),status:_ctl(g.ui.status)};
+    // touch / prev / next / speed are per kind: only the splat cards have a virtual movement pad
+    // (their camera flies; the trajectory panel orbits, which touch already reaches), and only the
+    // trajectory card has supervised-frame steppers and a playback rate. Rather than list which,
+    // every id in `ui` is resolved and anything absent is simply null — every use is guarded.
+    g.el={};for(const k in g.ui)g.el[k]=_ctl(g.ui[k]);
     // Controls live in this group's own <div class="viewopts">, addressed by data-o because the
     // block is repeated per group and ids must stay unique. Missing one is a markup typo, and it
     // would otherwise surface much later as a TypeError inside an event handler.
     g.opts=_ctl(g.ui.opts);g.o={};
-    for(const k of ['rowEllip','ellip','ellipR','ellipRN','rowTraj','traj','trajN','trajNN',
-                    'trajL','trajLN','rowOff','off','offMix','offMixN']){
+    for(const k of OPT_KEYS[g.kind]){
       const el=g.opts&&g.opts.querySelector('[data-o="'+k+'"]');
       if(!el)throw new Error('view option "'+k+'" missing from #'+g.ui.opts);
       g.o[k]=el;
     }
     g.playing=false;g.gFrame=0;g.total=0;g.acc=0;g.lastT=0;g.loadMsg='loading…';
-    g.started=false;g.loaded=false;g.lastCam=null;
+    g.started=false;g.loaded=false;g.lastCam=null;g.train=null;g.trainSorted=null;
+    // Playback rate, frames of the source sequence per second. Only a continuous-clock card can
+    // honour a rate below the source's own: a splat scene has one decoded pose per frame, so
+    // slowing it down can only repeat them, while the spline evaluates poses that were never
+    // stored. That is the whole reason this control exists, and why it is on that card alone.
+    // Survives Clear, like the view options — it is a preference, not scene state.
+    // Shown as a MULTIPLE of the sequence's own rate rather than as an absolute fps, which read as
+    // a rendering setting rather than as a playback one. The slider carries percent; the label is
+    // the only place the ratio is spelt out.
+    g.rate=FPS;
+    if(g.el.speed)g.el.speed.oninput=()=>{const pc=+g.el.speed.value;
+      g.rate=FPS*pc/100;g.el.speedN.textContent=(pc/100).toFixed(2)+'×';};
     // `gen` is bumped by Clear (and by each start) so an in-flight loadGroup pass can tell that the
     // group it is loading has been thrown away; `loadLabel` is the button's original text, which
     // Clear puts back after loadGroup replaced it with 'loading…'.
@@ -445,7 +534,6 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       byId.set(p.id,p);ALL.push(p);
     }
   }
-  const FPS=30;
 
   // Reports whether the message actually went out, so delivery state is only advanced on success
   // rather than optimistically — a silently swallowed send used to mark the payload as delivered.
@@ -460,30 +548,64 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     return L.length?L.reduce((n,p)=>Math.min(n,p.buffered),Infinity):0;};
 
   function setFrame(g,f){if(!g.total)return;g.gFrame=((f%g.total)+g.total)%g.total;
-    g.el.scrub.value=g.gFrame;g.el.lbl.textContent='frame '+g.gFrame+' / '+(g.total-1);
+    g.el.scrub.value=g.gFrame;g.el.lbl.textContent=g.frac?fracLabel(g):'frame '+g.gFrame+' / '+(g.total-1);
     gsend(g,{type:'seek',frame:g.gFrame});}
+  // A frame is SUPERVISED only if it is exactly one the field was trained on. Every fractional
+  // position, and the three whole frames between each trained pair, is the spline's own inference —
+  // which is the entire claim of the trajectory card, so the readout has to say which one you are
+  // looking at rather than leaving every frame looking equally real.
+  function fracLabel(g){
+    const r=Math.round(g.gFrame),sup=g.train&&g.train.has(r)&&Math.abs(g.gFrame-r)<1e-6;
+    return 'frame '+g.gFrame.toFixed(2)+' / '+(g.total-1)+(g.train?(sup?' · supervised':' · inferred'):'');}
+  // Nearest trained frame either side, and the reason the steppers exist: scrubbing lands on a
+  // supervised frame only by accident, so without them you can never see the two ends of what the
+  // spline is interpolating between.
+  function stepTrain(g,dir){
+    const F=g.trainSorted;if(!F||!F.length)return;
+    let best=null;
+    for(const f of F){
+      if(dir>0){if(f>g.gFrame+1e-6){best=f;break;}}
+      else if(f<g.gFrame-1e-6)best=f;
+    }
+    if(best==null)return;
+    g.playing=false;g.el.play.textContent='▶ play';g.lastT=0;g.acc=0;setFrame(g,best);}
 
-  // View options are host-owned and broadcast to every panel IN THEIR GROUP. Within a comparison
-  // they must agree — two scenes under different render settings would be meaningless — but the
-  // two comparisons are independent, so each carries its own panel next to the thing it affects.
-  // (Trail max differs for that reason: 150 frames for bouncingballs, 200 for americano.)
-  const viewState=g=>({type:'view',
-    ellip:g.o.ellip.checked, ellipR:+g.o.ellipR.value/100,
-    traj:g.o.traj.checked,   trajCount:+g.o.trajN.value, trajTrail:+g.o.trajL.value,
-    offCol:g.o.off.checked,  offMix:+g.o.offMix.value/100});
+  // View options are host-owned and broadcast to every panel IN THEIR GROUP. Within a card they
+  // must agree — two scenes under different render settings would be meaningless — but the cards
+  // are independent, so each carries its own panel next to the thing it affects. (Trail max differs
+  // for that reason: 150 frames for bouncingballs, 200 for americano, 120 for the trajectories.)
+  const VIEW={
+    splat:g=>({type:'view',
+      ellip:g.o.ellip.checked, ellipR:+g.o.ellipR.value/100,
+      traj:g.o.traj.checked,   trajCount:+g.o.trajN.value, trajTrail:+g.o.trajL.value,
+      offCol:g.o.off.checked,  offMix:+g.o.offMix.value/100}),
+    // One toggle and one slider, deliberately. The knot stripes ARE the point of that card (a
+    // one-colour trail says nothing the mesh did not already say) and sample density is a
+    // cost/smoothness trade with no editorial content, so both are fixed in points.html; the
+    // ground-truth overlay is gone from the bundle entirely (see the comment there).
+    points:g=>({type:'view',
+      trail:g.o.trail.checked, trailLen:+g.o.trailLen.value})};
+  const viewState=g=>VIEW[g.kind](g);
+  // Which controls each kind wires up, and which rows dim when their toggle is off. `rowMark` is
+  // deliberately absent: it holds two independent toggles and no sliders, so there is nothing for
+  // an off state to dim.
+  const OPT_WIRING={
+    splat:{chk:['ellip','traj','off'],slide:['ellipR','trajN','trajL','offMix'],
+           num:[['ellipR','ellipRN',v=>(v/100).toFixed(2)],['trajN','trajNN'],['trajL','trajLN'],['offMix','offMixN']],
+           rows:[['rowEllip','ellip'],['rowTraj','traj'],['rowOff','off']]},
+    points:{chk:['trail'],slide:['trailLen'],
+           num:[['trailLen','trailLenN']],
+           rows:[['rowTrail','trail']]}};
   function pushView(g){
-    g.o.ellipRN.textContent=(+g.o.ellipR.value/100).toFixed(2);
-    g.o.trajNN.textContent=g.o.trajN.value;
-    g.o.trajLN.textContent=g.o.trajL.value;
-    g.o.offMixN.textContent=g.o.offMix.value;
-    g.o.rowEllip.classList.toggle('off',!g.o.ellip.checked);
-    g.o.rowTraj.classList.toggle('off',!g.o.traj.checked);
-    g.o.rowOff.classList.toggle('off',!g.o.off.checked);
+    const w=OPT_WIRING[g.kind];
+    for(const[src,out,fmt]of w.num)g.o[out].textContent=fmt?fmt(+g.o[src].value):g.o[src].value;
+    for(const[row,tog]of w.rows)g.o[row].classList.toggle('off',!g.o[tog].checked);
     gsend(g,viewState(g));
   }
   for(const g of GROUPS){
-    [g.o.ellip,g.o.traj,g.o.off].forEach(c=>c.onchange=()=>pushView(g));
-    [g.o.ellipR,g.o.trajN,g.o.trajL,g.o.offMix].forEach(sl=>sl.oninput=()=>pushView(g));
+    const w=OPT_WIRING[g.kind];
+    w.chk.forEach(k=>g.o[k].onchange=()=>pushView(g));
+    w.slide.forEach(k=>g.o[k].oninput=()=>pushView(g));
   }
 
   // ---- virtual movement pad ------------------------------------------------
@@ -504,9 +626,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // is recomputed (and pushed) whenever a panel announces or fails, so it lands on the leftmost
   // panel as soon as that one is actually there.
   const touchPane=g=>{const L=livePanes(g);return L.find(p=>p.alive)||L[0]||null;};
-  function pushTouch(g){const t=g.el.touch.checked?touchPane(g):null;
+  // No-op for a group with no pad (the trajectory card orbits, which touch reaches unaided), so
+  // every caller — flush(), a panel failure, the toggle — can stay unconditional.
+  function pushTouch(g){if(!g.el.touch)return;const t=g.el.touch.checked?touchPane(g):null;
     g.panes.forEach(p=>send(p,{type:'touch',on:p===t}));}
-  for(const g of GROUPS){g.el.touch.checked=IS_TOUCH;g.el.touch.onchange=()=>pushTouch(g);}
+  for(const g of GROUPS){if(!g.el.touch)continue;g.el.touch.checked=IS_TOUCH;g.el.touch.onchange=()=>pushTouch(g);}
 
   // A cleared group must stop narrating: a fetch already in flight when Clear was pressed still
   // runs to completion (its result is dropped at the next staleness check), and without this its
@@ -515,8 +639,17 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   function status(g){
     if(!g.started){g.el.status.textContent='Not loaded — press “Load” to fetch and decode this comparison in your browser.';return;}
     const dead=g.panes.filter(p=>p.failed).map(p=>p.name);
-    if(g.loaded&&livePanes(g).every(p=>p.ready)){const s=g.panes.reduce((a,p)=>Math.max(a,p.splats),0);
-      g.el.status.textContent=g.total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.'
+    if(g.loaded&&livePanes(g).every(p=>p.ready)){
+      // A points panel sends its own one-line summary (point count, interval count, parity margin):
+      // the host never opened the bundle, so it has nothing else to say about it. The streamed
+      // figure is appended live — as a fraction of the whole sequence, because a counter that only
+      // goes up is indistinguishable from one that never stops.
+      const noted=g.panes.find(p=>p.note);
+      const s=g.panes.reduce((a,p)=>Math.max(a,p.splats),0);
+      g.el.status.textContent=(noted
+          ? g.total+' frames · '+noted.note+' · evaluated in your browser'
+            +(noted.totalMB?' · '+noted.mb.toFixed(2)+' of '+noted.totalMB.toFixed(2)+' MB streamed so far.':'.')
+          : g.total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.')
         +(dead.length?'  ·  ✗ '+dead.join(', ')+' failed to load — reload the page to retry.':'');
       return;}
     // Name a panel that has not come up. Silence here is what made the CDN failures look like
@@ -564,13 +697,25 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     const p=byId.get(m.id);if(!p)return;const g=p.g;
     if(!g.started)return;      // cleared: a message posted just before teardown must not revive the transport
     if(m.type==='hello'){p.alive=true;flush(p);}         // panels re-announce until we answer
-    else if(m.type==='stats'){p.splats=m.splats;}
+    // A points panel streams knots for as long as you keep scrubbing, so how much of the sequence
+    // has actually come down is live state, not a load-time fact — hence a status refresh on every
+    // stats tick (1 Hz) rather than only on the load milestones.
+    else if(m.type==='stats'){p.splats=m.splats;if(m.mb!=null&&p.mb!==m.mb){p.mb=m.mb;status(g);}}
+    // A points panel loads itself, so it — not the host — is the one narrating the fetch.
+    else if(m.type==='progress'){g.loadMsg=m.label;status(g);}
     else if(m.type==='ready'){
-      p.frames=m.frames;p.splats=m.splats;p.ready=true;
+      p.frames=m.frames;p.splats=m.splats;p.ready=true;p.note=m.note||'';p.totalMB=m.totalMB||0;
+      // The trained frames, so the readout can tell supervised from inferred and the steppers can
+      // land on one. Only a points panel sends them; without them fracLabel() stays silent.
+      if(m.train){g.train=new Set(m.train);g.trainSorted=m.train.slice().sort((a,b)=>a-b);}
       // Same sequence across a group; if they ever aren't, the shortest bounds that timeline.
       const L=livePanes(g);
       if(L.length&&L.every(q=>q.frames>0)){g.total=L.reduce((n,q)=>Math.min(n,q.frames),Infinity);
-        g.el.scrub.max=g.total-1;g.el.scrub.disabled=false;setFrame(g,0);}
+        // A trail covers the past, so a trails-first panel asks to open one trail-length in rather
+        // than at frame 0, where its main feature has nothing to draw.
+        g.el.scrub.max=g.total-1;g.el.scrub.disabled=false;
+        if(g.el.prev){g.el.prev.disabled=g.el.next.disabled=!g.trainSorted;}
+        setFrame(g,m.openAt||0);}
       status(g);
     }
     else if(m.type==='buffered'){p.buffered=m.end;
@@ -587,7 +732,15 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // A panel may say hello before or after its data is ready, so anything already decoded is
   // (re)sent the moment it announces itself.
   function flush(p){
-    if(!p.alive||!p.built)return;
+    if(!p.alive)return;
+    // A points panel is sent no data at all — it loads its own bundle — but it still has to be
+    // caught up: one that announced late, or that the watchdog restarted, would otherwise sit at
+    // its built-in option defaults and at frame 0 while the controls and the scrubber say
+    // otherwise. Same reason the keyframe path re-sends viewState below.
+    if(p.g.kind==='points'){
+      if(send(p,viewState(p.g))&&p.g.total)send(p,{type:'seek',frame:p.g.gFrame});
+      return;}
+    if(!p.built)return;
     if(!p.sentKf){
       if(!send(p,{type:'keyframe',totalFrames:p.scene.num_frames,camera:p.scene.camera,
                   gops:p.built.map(b=>({kf:b.kf,start:b.start,end:b.end,gop_id:b.gop_id}))}))return;
@@ -675,6 +828,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     g.el.clear.hidden=false;          // Clear doubles as Cancel while the load is still running
     for(const p of g.panes){p.t0=Date.now();p.box.classList.remove('idle');p.fr.src=p.src;}
     stage(g,'starting\u2026',2);
+    // A points card shares no decoder with anything, so queueing it behind a splat card's decode
+    // would make it wait ~30 s for a resource it never touches. It loads its own bundle and
+    // narrates over `progress`; starting the frame is all there is for the host to do.
+    if(g.kind==='points'){g.loaded=true;g.el.load.hidden=true;
+      stage(g,'fetching the spline bundle\u2026',4);return;}
     queue.push(g);pump();
   }
 
@@ -696,6 +854,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     const qi=queue.indexOf(g);if(qi>=0)queue.splice(qi,1);   // queued but never started
     g.started=false;g.loaded=false;g.playing=false;
     g.total=0;g.gFrame=0;g.acc=0;g.lastT=0;g.lastCam=null;g.loadMsg='loading\u2026';
+    g.train=null;g.trainSorted=null;
     for(const p of g.panes){
       p.fr.src='about:blank';        // discards the document: GL context, textures, motion, worker
       p.box.classList.add('idle');
@@ -703,6 +862,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     }
     g.el.play.disabled=true;g.el.play.textContent='\u25b6 play';
     g.el.scrub.disabled=true;g.el.scrub.max=0;g.el.scrub.value=0;
+    if(g.el.prev){g.el.prev.disabled=true;g.el.next.disabled=true;}
     g.el.lbl.textContent='\u2014';
     g.el.load.hidden=false;g.el.load.disabled=false;g.el.load.textContent=g.loadLabel;
     g.el.clear.hidden=true;
@@ -817,11 +977,17 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     g.el.play.onclick=()=>{g.playing=!g.playing;g.el.play.textContent=g.playing?'❚❚ pause':'▶ play';g.lastT=0;g.acc=0;};
     g.el.scrub.oninput=()=>{g.playing=false;g.el.play.textContent='▶ play';setFrame(g,+g.el.scrub.value);};
     g.el.reset.onclick=()=>gsend(g,{type:'resetView'});
+    if(g.el.prev)g.el.prev.onclick=()=>stepTrain(g,-1);
+    if(g.el.next)g.el.next.onclick=()=>stepTrain(g,1);
   }
 
   function tick(t){requestAnimationFrame(tick);
     for(const g of GROUPS){
       if(!g.total||!g.playing){g.lastT=t;continue;}
+      // A continuous clock, and nothing to hold it back: the panel evaluates the spline at whatever
+      // time it is handed, and knots stream inside it, so there is no decode frontier here. Playing
+      // in whole frames would also be a lie about what this card shows.
+      if(g.frac){setFrame(g,g.gFrame+(t-(g.lastT||t))/1000*g.rate);g.lastT=t;continue;}
       // Hold at the slowest panel's decode frontier rather than advancing into undecoded motion,
       // which would just freeze that panel on its keyframe and desync the comparison.
       const de=minBuffered(g);

@@ -27,11 +27,13 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))))
 PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
-         "projects/spdef/viewer.html", "projects/grain/index.html"]
+         "projects/spdef/viewer.html", "projects/spdef/points.html",
+         "projects/grain/index.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
-           "projects/smv/dequant_worker.js", "projects/smv/sw.js"]
+           "projects/smv/dequant_worker.js", "projects/smv/sw.js",
+           "projects/spdef/traj.js"]
 
 VOID = {"br", "img", "input", "meta", "link", "hr", "source", "area", "base",
         "col", "embed", "param", "track", "wbr"}
@@ -150,9 +152,14 @@ def check_dom_ids(page, src):
                 # the grain page's `$` is getElementById under a shorter name; without this its
                 # ~30 element lookups are invisible here and a deleted element throws on load
                 r"\$\(\s*['\"]([A-Za-z][\w-]*)['\"]\s*\)",
-                # ids named in the SpDef host's GROUPS config rather than passed to _ctl() directly
-                r"(?:load|play|scrub|lbl|reset|status|frId)\s*:\s*['\"]([A-Za-z][\w-]*)['\"]"):
+                # a pane's iframe id, named in the SpDef host's GROUPS config, not passed to _ctl()
+                r"frId\s*:\s*['\"]([A-Za-z][\w-]*)['\"]"):
         refs |= set(re.findall(pat, src))
+    # …and every id in a GROUPS entry's `ui:{…}`, which that host resolves wholesale
+    # (`for(const k in g.ui) g.el[k]=_ctl(g.ui[k])`). Listing the key names here instead would go
+    # stale the moment a card gains a control the others do not have.
+    for block in re.findall(r"ui\s*:\s*\{(.*?)\}", src, re.S):
+        refs |= set(re.findall(r":\s*['\"]([A-Za-z][\w-]*)['\"]", block))
     missing = sorted(refs - ids)
     if missing:
         fail(page, f"JS references ids with no element: {', '.join(missing)}")
@@ -161,26 +168,39 @@ def check_dom_ids(page, src):
 
 
 def check_repeated_controls(page, src):
-    """Every .viewopts block must expose the data-o controls the host looks up.
+    """Every .viewopts block must expose the data-o controls its kind's host code looks up.
 
-    That block is duplicated once per comparison, so its controls are addressed by data-o rather
-    than by id — ids have to stay unique in a document. A typo or a missing control in one copy is
+    That block is repeated once per card, so its controls are addressed by data-o rather than by
+    id — ids have to stay unique in a document. A typo or a missing control in one copy is
     therefore invisible to the id check above, and would only surface as a TypeError inside an
     event handler once someone clicked that group's toggle.
+
+    Which controls are required depends on what the card renders: a splat comparison and the
+    point-trajectory demo share the block's markup and none of its options. `data-kind` on the
+    block is what says which list applies, and it is matched against the host's own OPT_KEYS — so
+    adding a control to one and not the other is caught here rather than in a browser.
     """
-    keys = re.search(r"for\s*\(\s*const k of \[([^\]]+)\]", src)
-    blocks = re.findall(r'<div class="viewopts"[^>]*id="([^"]+)"(.*?)\n    </div>', src, re.S)
-    if not keys or not blocks:
+    decl = re.search(r"const OPT_KEYS\s*=\s*\{(.*?)\};", src, re.S)
+    blocks = re.findall(r'<div class="viewopts"([^>]*)>(.*?)\n    </div>', src, re.S)
+    if not decl or not blocks:
         return
-    want = set(re.findall(r"'([^']+)'", keys.group(1)))
+    want = {kind: set(re.findall(r"'([^']+)'", body))
+            for kind, body in re.findall(r"(\w+)\s*:\s*\[([^\]]*)\]", decl.group(1), re.S)}
     bad = False
-    for bid, body in blocks:
-        missing = sorted(want - set(re.findall(r'data-o="([^"]+)"', body)))
+    for attrs, body in blocks:
+        bid = (re.search(r'id="([^"]+)"', attrs) or [None, "?"])[1]
+        kind = re.search(r'data-kind="(\w+)"', attrs)
+        if not kind or kind.group(1) not in want:
+            bad = True
+            fail(page, f'#{bid} has no data-kind matching an OPT_KEYS entry '
+                       f'({", ".join(sorted(want))})')
+            continue
+        missing = sorted(want[kind.group(1)] - set(re.findall(r'data-o="([^"]+)"', body)))
         if missing:
             bad = True
-            fail(page, f'#{bid} is missing view controls: {", ".join(missing)}')
+            fail(page, f'#{bid} ({kind.group(1)}) is missing view controls: {", ".join(missing)}')
     if not bad:
-        print(f"  ok    view controls ({len(blocks)} panels x {len(want)} each)")
+        print(f"  ok    view controls ({len(blocks)} blocks over {len(want)} kinds)")
 
 
 def check_page_chrome(page, src):
@@ -246,6 +266,12 @@ def local_refs(src):
                 r"import\(\s*['\"](\.{1,2}/[^'\"]+)['\"]",
                 r"new\s+URL\(\s*['\"](\.{1,2}/[^'\"]+)['\"]",
                 r"fetch\(\s*['\"]([^'\"`]+)['\"]",          # scenes.json
+                # A panel iframe names its data file in the QUERY STRING
+                # (viewer.html?scene=… / points.html?bundle=…), which the generic src/href pattern
+                # above drops along with the rest of the query. Without this a renamed scene or
+                # bundle folder fails only once someone opens the page. Anchored on the manifest's
+                # `.json`, so the `?scene=…` in a prose comment is not mistaken for a path.
+                r'[?&](?:scene|bundle)=([\w./-]+\.json)',
                 # assets named only by a JS constant and fetched through the variable, so no
                 # fetch()/src= literal ever mentions them (the grain page's params and sample)
                 r"_URL\s*=\s*['\"]([^'\"]+)['\"]",

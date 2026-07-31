@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpDef trajectory panel</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#ffffff"><!-- must track --panel; this page is also openable standalone -->
+<!--
+  The point-trajectory panel of the SpDef page. A SECOND renderer, not a variant of viewer.html:
+  that one rasterises gaussians from decoded HEVC motion, this one draws a deforming mesh whose
+  vertex positions are evaluated from the fitted spline itself. They share the host protocol and
+  nothing else — no shaders, no data model, no decoder.
+
+  Ported from 4d-relight/web/player_points/index.html. What changed, and why:
+
+  - The panel LOADS ITS OWN BUNDLE. Everywhere else on this page the host owns loading, because
+    decoding a splat scene means instantiating ffmpeg.wasm and a decoder per canvas is four copies
+    of a ~32 MB core. There is no wasm here at all: traj.js is plain fetch + typed-array math, and
+    it already streams the two knots bracketing the playhead on demand with its own LRU cache.
+    Hoisting that into the host would mean shipping knots over postMessage every frame, which is
+    strictly worse. The host only presses start and relays what this panel reports.
+  - Z-UP. DeformingThings4D sequences are z-up (see utils/mesh_render.py upstream, and the
+    canonical bounds: the tall axis spans 1.18 against 0.43/0.48). The upstream player orbits about
+    world Y, which lays the character on its side; this one orbits about world Z.
+  - Light palette. Upstream is a dark standalone page; this sits in a white panel next to four
+    others, so the point cloud, the ground truth and the knot stripes are all retinted for a light
+    background. The SURFACE shading is deliberately NOT retinted: abs(n*0.5+0.5) off screen-space
+    derivatives is the same convention as the offline renderer, so a web frame and a paper figure
+    still look alike.
+  - Orbit, not fly, and no virtual movement pad. The scene is one character on a turntable, so
+    orbit/pan/dolly is the whole vocabulary — and unlike the fly camera it is fully reachable by
+    touch (drag, two-finger pinch and pan), which is what the pad exists to work around.
+  - Every fetch goes through an IDLE-timeout wrapper with cache-busted retries, injected into
+    traj.js as its `fetchFn`. Same lesson as the host's grab(): a CDN request that hangs rather
+    than fails leaves the await pending for ever, and the panel is then blank with nothing to
+    recover it.
+
+  traj.js is a verbatim copy of the upstream module and MIRRORS traj_codec.py / point_deform.py.
+  Every bundle carries a torch-computed `parity` block; this panel refuses to render if it
+  disagrees, exactly as the splat path refuses a bundle whose decode diverges. Do not edit the
+  curve math here — edit it upstream and re-copy.
+
+  Query: ?bundle=<meta.json, relative to this file>&id=<name echoed back in every message>
+         [&yaw=<deg>&pitch=<deg>]   opening turntable pose; the character faces -Y
+-->
+<style>
+  :root{color-scheme:light;
+        --panel:#ffffff; --ink:#14181d; --muted:#5f6a78; --line:#dde3ea; --accent:#1f5fbf; --err:#b4331f}
+  *{box-sizing:border-box}
+  /* background on html too, not just body — this page is standalone-openable and Safari
+     rubber-bands into html's background, not body's. Same rule as every other page here. */
+  html{background:var(--panel)}
+  body{margin:0;background:var(--panel);color:var(--ink);overflow:hidden;
+       font:13px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  #wrap{position:fixed;inset:0}
+  /* touch-action:none so a one-finger orbit and a two-finger pinch reach the canvas instead of
+     scrolling the host page out from under them */
+  #gl{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  #gl:active{cursor:grabbing}
+  #load{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;
+        background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.92) 40%);
+        font-size:11.5px;color:var(--muted);pointer-events:none}
+  #load.hide{display:none}
+  #stage{display:block;margin:0 0 5px}
+  #track{height:3px;border-radius:2px;background:var(--line);overflow:hidden}
+  #barfill{height:100%;width:0;background:var(--accent);transition:width .18s linear}
+  /* Knots stream while you scrub, so a frame whose bracketing pair has not landed shows the
+     previous pose. Without a word on screen that reads as a stutter in the renderer rather than
+     as a fetch still in flight — which is the one thing this demo most needs understood. */
+  #note{position:absolute;left:10px;bottom:9px;margin:0;padding:3px 8px;border-radius:7px;
+        background:rgba(255,255,255,.86);border:1px solid var(--line);
+        font-size:11px;color:var(--muted);pointer-events:none;display:none}
+  #note.on{display:block}
+  #err{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+       padding:20px;text-align:center;font-size:12.5px;color:var(--err)}
+  @media(prefers-reduced-motion:reduce){#barfill{transition:none}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="gl"></canvas>
+  <div id="load"><span id="stage">starting…</span><div id="track"><div id="barfill"></div></div></div>
+  <p id="note">streaming knots…</p>
+  <div id="err"></div>
+</div>
+
+<script type="module">
+import { TrajectoryBundle, evaluate, evaluateSubset, intervalOf, trailSampleFrames } from './traj.js';
+
+const Q=new URLSearchParams(location.search),BUNDLE=Q.get('bundle')||'',ID=Q.get('id')||'points';
+// Opening turntable pose, in degrees, so it can be retuned without touching code. The character
+// faces -Y, so yaw 180 is dead front; 146 is a three-quarter view off its left shoulder.
+const rad=(k,d)=>{const v=parseFloat(Q.get(k));return (Number.isFinite(v)?v:d)*Math.PI/180;};
+const YAW0=rad('yaw',146),PITCH0=rad('pitch',10);
+
+const canvas=document.getElementById('gl'),wrap=document.getElementById('wrap');
+const loadEl=document.getElementById('load'),stageEl=document.getElementById('stage'),
+      barEl=document.getElementById('barfill'),errEl=document.getElementById('err'),
+      noteEl=document.getElementById('note');
+
+// ===== host protocol =====
+// Same {ch:'spdef'} envelope as viewer.html — `id` panel->host, `to` host->panel — so the host
+// drives all six panels on the page through one listener.
+const HOST=parent!==window;
+function post(m){if(HOST)parent.postMessage(Object.assign({ch:'spdef',id:ID},m),location.origin);}
+function stage(label,pct){stageEl.textContent=label;if(pct!=null)barEl.style.width=Math.max(0,Math.min(100,pct))+'%';
+  post({type:'progress',label,pct});}
+function showErr(m){errEl.textContent='✗ '+m;errEl.style.display='flex';loadEl.classList.add('hide');
+  post({type:'error',msg:String(m)});}
+
+const gl=canvas.getContext('webgl2',{antialias:true,alpha:false});
+if(!gl){showErr('WebGL2 unavailable');throw 0;}
+
+// ===== shaders (verbatim from web/player_points) =====
+// Surface: face normal from screen-space derivatives, coloured abs(n*0.5+0.5) — the same
+// convention as utils/mesh_render.py, and it needs no normal buffer (the mesh deforms every
+// frame, so per-frame normals would be pure overhead).
+const VS=`#version 300 es
+layout(location=0) in vec3 pos;
+uniform mat4 uProj,uView;uniform float uPointSize;
+out vec3 vView;
+void main(){vec4 v=uView*vec4(pos,1.0);vView=v.xyz;gl_Position=uProj*v;gl_PointSize=uPointSize;}`;
+const FS_SURFACE=`#version 300 es
+precision highp float;
+in vec3 vView;out vec4 frag;
+void main(){vec3 n=normalize(cross(dFdx(vView),dFdy(vView)));frag=vec4(abs(n*0.5+0.5),1.0);}`;
+const FS_FLAT=`#version 300 es
+precision highp float;
+out vec4 frag;uniform vec3 uTint;uniform float uAlpha;
+void main(){frag=vec4(uTint,uAlpha);}`;
+// Age (0 at the tail, 1 at the playhead) rides along as a per-vertex attribute rather than being
+// derived from gl_VertexID — the one part of the pipeline no headless test can check.
+const VS_TRAIL=`#version 300 es
+layout(location=0) in vec3 pos;layout(location=1) in float age;
+uniform mat4 uProj,uView;out float vAge;
+void main(){vAge=age;gl_Position=uProj*uView*vec4(pos,1.0);}`;
+const FS_TRAIL=`#version 300 es
+precision highp float;
+in float vAge;out vec4 frag;uniform float uAlpha;uniform vec3 uTint;
+void main(){frag=vec4(uTint,uAlpha*vAge);}`;
+
+function compile(vsSrc,fsSrc){
+  const make=(type,src)=>{const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));return s;};
+  const p=gl.createProgram();
+  gl.attachShader(p,make(gl.VERTEX_SHADER,vsSrc));gl.attachShader(p,make(gl.FRAGMENT_SHADER,fsSrc));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
+  const u={};for(const n of ['uProj','uView','uTint','uAlpha','uPointSize'])u[n]=gl.getUniformLocation(p,n);
+  return {program:p,u};
+}
+const progSurface=compile(VS,FS_SURFACE),progFlat=compile(VS,FS_FLAT),progTrail=compile(VS_TRAIL,FS_TRAIL);
+
+// ===== gl objects =====
+const posBuf=gl.createBuffer(),idxBuf=gl.createBuffer(),trailBuf=gl.createBuffer();
+const vaoPos=gl.createVertexArray(),vaoTrail=gl.createVertexArray();
+function bindPositions(vao,buf){gl.bindVertexArray(vao);gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);gl.bindVertexArray(null);}
+bindPositions(vaoPos,posBuf);
+// Trail vertices are xyz + age (16 bytes), so they need their own attribute layout.
+gl.bindVertexArray(vaoTrail);gl.bindBuffer(gl.ARRAY_BUFFER,trailBuf);
+gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,16,0);
+gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,1,gl.FLOAT,false,16,12);
+gl.bindVertexArray(null);
+gl.enable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+// Opaque white rather than an alpha canvas: the overlays blend at partial alpha, and compositing
+// those onto a transparent buffer through the page would need premultiplied output to be right.
+gl.clearColor(1,1,1,1);
+
+// Retinted for a white panel. Upstream draws the cloud in pale blue and the stripes in pastel
+// green/violet over a near-black page; at those values on white nothing but the mesh is legible.
+// The stripes (#59B292 / #FA6781) are far enough apart in hue that a colour change reads as a knot
+// boundary at a glance, and neither can be confused with the cloud's blue.
+//
+// Upstream also overlays the dataset's ground-truth vertices in orange. NOT ported: the export
+// carries GT at every 60th frame only, so the control did nothing at 98 % of the timeline — and
+// dropping it let `arrays.gt` come out of the bundle, which was 665 KB of a 835 KB up-front load.
+// Restoring it means re-copying gt.bin AND its meta.json entry, not just a checkbox.
+const CLOUD=[0.12,0.37,0.75];
+const TRAIL_COLORS=[[0.349,0.698,0.573],[0.980,0.404,0.506]];
+
+// ===== orbit camera (world Z up) =====
+// The scene is one character on a turntable, so orbit/pan/dolly is the whole vocabulary. UP is
+// world Z: DeformingThings4D is z-up, and orbiting about Y (as the upstream player does) lays the
+// character on its side.
+const UP=[0,0,1];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const norm=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l];};
+const cam={yaw:YAW0,pitch:PITCH0,dist:3,target:[0,0,0]};
+let home={yaw:YAW0,pitch:PITCH0,dist:3,target:[0,0,0]};
+function camBasis(){
+  const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch),cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+  const eye=[cam.target[0]+cam.dist*cp*sy,cam.target[1]+cam.dist*cp*cy,cam.target[2]+cam.dist*sp];
+  const f=norm([cam.target[0]-eye[0],cam.target[1]-eye[1],cam.target[2]-eye[2]]);
+  const r=norm(cross(f,UP));
+  return {eye,f,r,u:cross(r,f)};
+}
+function viewMatrix(){const{eye,f,r,u}=camBasis();
+  return [r[0],u[0],-f[0],0, r[1],u[1],-f[1],0, r[2],u[2],-f[2],0,
+          -dot(r,eye),-dot(u,eye),dot(f,eye),1];}
+function projMatrix(aspect){
+  const fov=0.9,near=Math.max(cam.dist*0.002,1e-3),far=cam.dist*20+100,f=1/Math.tan(fov/2);
+  return [f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)/(near-far),-1, 0,0,(2*far*near)/(near-far),0];}
+
+// Pointer events, one code path for mouse and touch: one pointer orbits (shift or right button
+// pans), two pinch to dolly and drag to pan. The pitch clamp keeps the view off the poles, where
+// cross(f,UP) degenerates.
+const ptrs=new Map();let mode=null,lastX=0,lastY=0,pinch0=0,dist0=0;
+const mid=()=>{const v=[...ptrs.values()];return [(v[0].x+v[1].x)/2,(v[0].y+v[1].y)/2];};
+const spread=()=>{const v=[...ptrs.values()];return Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y)||1;};
+function panBy(dx,dy){const{r,u}=camBasis(),s=cam.dist*0.0015;
+  for(let c=0;c<3;c++)cam.target[c]+=-r[c]*dx*s+u[c]*dy*s;}
+canvas.addEventListener('pointerdown',e=>{
+  canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1){mode=(e.shiftKey||e.button===2)?'pan':'orbit';lastX=e.clientX;lastY=e.clientY;}
+  else if(ptrs.size===2){mode='pinch';pinch0=spread();dist0=cam.dist;[lastX,lastY]=mid();}
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!ptrs.has(e.pointerId))return;
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(mode==='pinch'&&ptrs.size>=2){
+    cam.dist=Math.max(1e-3,dist0*pinch0/spread());
+    const[mx,my]=mid();panBy(mx-lastX,my-lastY);lastX=mx;lastY=my;return;}
+  if(ptrs.size!==1)return;
+  const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;
+  if(mode==='pan')panBy(dx,dy);
+  else{cam.yaw+=dx*0.006;cam.pitch=Math.max(-1.45,Math.min(1.45,cam.pitch+dy*0.006));}
+});
+const drop=e=>{ptrs.delete(e.pointerId);
+  if(ptrs.size===1){mode='orbit';const v=[...ptrs.values()][0];lastX=v.x;lastY=v.y;}
+  else if(!ptrs.size)mode=null;};
+canvas.addEventListener('pointerup',drop);canvas.addEventListener('pointercancel',drop);
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('wheel',e=>{e.preventDefault();cam.dist*=Math.exp(e.deltaY*0.001);},{passive:false});
+
+// ===== state =====
+let bundle=null,positions=null,frame=0,lastEval=-1,everEval=false,resident=true;
+let trailArray=null,trailVerts=0,trailRuns=[];
+let kept=null,trailSamples=null,noteMsg='';
+// View options, host-driven (see the `view` message).
+let trailsOn=true,trailLen=40;
+const TRAIL_POINTS=1500;
+// Polyline samples per frame of trail. Fixed, not a control: it trades a cost nobody can see
+// against smoothness everybody can, and 5 is where a fast limb stops looking faceted at the top of
+// the length slider. Samples scale with the window length x DETAIL, so the polyline DENSITY stays
+// constant as the trail grows; MAX bounds the buffers and the per-frame upload (at length 120 the
+// cap binds, which is the intended ceiling rather than a bug).
+const DETAIL=5,MAX_TRAIL_SAMPLES=256;
+// Knot stripes are not optional. The colour flip IS the knot, and it is the one thing on screen
+// that shows the spacing the paper argues about; a trail drawn in one colour says nothing the
+// mesh did not already say. Exact knot times are always inserted into the sample set too, so the
+// boundary lands on the knot rather than on the nearest sample.
+const STRIPES=true;
+// One trail vertex per kept point.
+function keptIndices(n){const stride=Math.max(1,Math.floor(n/TRAIL_POINTS)),out=[];
+  for(let i=0;i<n;i+=stride)out.push(i);return out;}
+
+// ===== hardened fetch =====
+// Injected into traj.js as its fetchFn. Same reasoning as the host's grab(): a CDN request that
+// hangs rather than failing leaves the await pending for ever, and this panel would then sit blank
+// with nothing able to recover it. The timeout is on NO PROGRESS, not on total duration, so a slow
+// connection is fine and a stalled one is aborted and retried against a cache-busted URL.
+// The body is drained here, under the same idle clock, and handed back through a Response-shaped
+// object — traj.js only ever touches .ok, .status, .arrayBuffer() and .json().
+const FETCH_IDLE_MS=20000,FETCH_TRIES=3;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+// Counted here rather than read off traj.js's own `bytesFetched`, which starts at loadEager() and
+// so misses meta.json — a 46 KB gap that would make the "0.21 of 4.97 MB" readout disagree with
+// the number on the Load button. The first successful fetch IS the manifest: TrajectoryBundle.load
+// fetches it before anything else exists.
+let fetchedBytes=0,manifestBytes=0;
+async function hardFetch(url){
+  let lastErr;
+  for(let attempt=1;attempt<=FETCH_TRIES;attempt++){
+    const ac=new AbortController();let timer=0;
+    const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>ac.abort(),FETCH_IDLE_MS);};
+    const u=attempt>1?url+(url.indexOf('?')<0?'?':'&')+'retry='+attempt:url;
+    try{
+      arm();
+      const r=await fetch(u,{signal:ac.signal,cache:attempt>1?'reload':'default'});
+      if(!r.ok){clearTimeout(timer);return {ok:false,status:r.status,
+        arrayBuffer:async()=>{throw new Error('HTTP '+r.status);},json:async()=>{throw new Error('HTTP '+r.status);}};}
+      const rd=r.body.getReader(),chunks=[];let recv=0;
+      for(;;){const{done,value}=await rd.read();if(done)break;arm();chunks.push(value);recv+=value.length;}
+      clearTimeout(timer);
+      const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}
+      fetchedBytes+=recv;if(!manifestBytes)manifestBytes=recv;
+      return {ok:true,status:200,arrayBuffer:async()=>out.buffer,
+              json:async()=>JSON.parse(new TextDecoder().decode(out))};
+    }catch(e){clearTimeout(timer);lastErr=e;if(attempt<FETCH_TRIES)await sleep(400*attempt);}
+  }
+  throw new Error((lastErr&&lastErr.message||lastErr)+' — '+url);
+}
+
+// What the whole sequence weighs, so the status line can read `1.24 / 5.60 MB` rather than a
+// running counter with no end in sight — the visitor is watching a page fetch on demand, and a
+// number that only ever goes up is indistinguishable from one that never stops. Derived from
+// meta.json rather than hardcoded, so a re-export cannot make the page lie: `arrays` carry their
+// own `bytes`, and a knot is exactly num_points x 3 codes of its component's dtype.
+const CODE_BYTES={u8:1,u16:2,u32:4,f16:2};
+function bundleBytes(meta){
+  let n=manifestBytes;                                  // meta.json is a real fetch too
+  for(const a of Object.values(meta.arrays))n+=a.bytes||0;
+  for(const c of Object.values(meta.components))
+    n+=meta.num_points*3*CODE_BYTES[c.dtype]*Object.keys(c.knots).length;
+  return n;
+}
+
+// ===== load =====
+async function loadBundle(url){
+  stage('fetching the spline bundle…',6);
+  const b=await TrajectoryBundle.load(url,hardFetch);
+  const meta=b.meta;
+  positions=new Float32Array(meta.num_points*3);
+  kept=keptIndices(meta.num_points);
+  // +knots: the exact knot times are inserted into the uniform sample set, so a stripe boundary
+  // lands exactly on the knot rather than on the nearest sample.
+  trailSamples=new Float32Array((MAX_TRAIL_SAMPLES+64)*kept.length*3);
+  trailArray=new Float32Array((MAX_TRAIL_SAMPLES+63)*kept.length*2*4);
+
+  stage('checking spline parity…',70);
+  b.prefetch(meta.frame_start,meta.frame_start,3);
+  const parity=await b.checkParity();
+  if(!parity.ok){
+    // Same contract the splat path has with compression/decoder.py: if the JS curve has drifted
+    // from the torch one, the geometry on screen is not the model's, so do not show it.
+    showErr(parity.skipped
+      ? `spline parity INCOMPLETE — ${parity.skipped} of ${meta.parity.frames.length} check frames `
+        +`could not be evaluated (a knot failed to load)`
+      : `spline parity FAILED — max |js − torch| = ${parity.maxError.toExponential(2)} > ${parity.tolerance}`);
+    return;
+  }
+
+  if(b.faces){gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,idxBuf);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,b.faces,gl.STATIC_DRAW);}
+
+  // Frame the turntable from the bundle's AABB — the motion envelope, so the character never
+  // walks out of frame mid-sequence.
+  const lo=meta.aabb.min,hi=meta.aabb.max;
+  cam.target=[0,1,2].map(c=>(lo[c]+hi[c])/2);
+  cam.dist=Math.hypot(hi[0]-lo[0],hi[1]-lo[1],hi[2]-lo[2])*1.1;
+  home={yaw:YAW0,pitch:PITCH0,dist:cam.dist,target:cam.target.slice()};
+
+  bundle=b;lastEval=-1;
+  resize();requestAnimationFrame(render);
+  stage('ready',100);loadEl.classList.add('hide');
+  post({type:'ready',frames:meta.frame_end,splats:meta.num_points,
+        train:meta.train_frames,knotSpacing:meta.timestep_denominator/meta.num_intervals,
+        // A trail covers the PAST, so at frame 0 there is nothing for it to draw and the panel
+        // would open on the one state where its main feature is invisible. Ask the host to open
+        // one trail-length in instead.
+        openAt:Math.min(trailLen,meta.frame_end-1),
+        totalMB:bundleBytes(meta)/1048576,
+        note:`${meta.num_points.toLocaleString()} points · ${meta.num_intervals} spline intervals · `
+            +`supervised every ${meta.skip_step} frames · parity ✓ (${parity.maxError.toExponential(1)})`});
+  // Nothing to buffer: knots stream on demand, so the whole timeline is scrubbable immediately.
+  post({type:'buffered',end:meta.frame_end});
+}
+
+// ===== trails =====
+// Sampled from the SPLINE, not from rendered frames: the curve you see is the one the field
+// fitted. Segments are coloured by their knot interval, so a colour change IS a knot boundary and
+// one stripe IS the knot spacing.
+function buildTrails(now){
+  trailVerts=0;trailRuns.length=0;
+  if(!trailsOn||!bundle)return;
+  const meta=bundle.meta,from=Math.max(meta.frame_start,now-trailLen),win=now-from;
+  if(win<1e-3)return;
+  const times=trailSampleFrames(bundle,from,now,DETAIL,STRIPES,MAX_TRAIL_SAMPLES);
+  // Evaluate into slot s so indices stay aligned with `times`: a sample whose knots are not
+  // resident yet is simply marked absent. Bailing out on the first miss (the OLDEST sample, i.e.
+  // the one furthest from the prefetch centre) emptied the whole trail.
+  const width=kept.length*3,ok=[];
+  for(let s=0;s<times.length;s++)
+    ok.push(evaluateSubset(bundle,bundle.timestep(times[s]),kept,trailSamples,s*width));
+
+  let o=0,emitted=0;
+  for(let s=0;s+1<times.length;s++){
+    if(!ok[s]||!ok[s+1])continue;                        // gap: skip this segment only
+    const aB=s*width,bB=(s+1)*width;
+    // Age from time, not from segment index, so it stays right across gaps.
+    const ageA=(times[s]-from)/win,ageB=(times[s+1]-from)/win;
+    for(let k=0;k<kept.length;k++){
+      const a=aB+k*3,b=bB+k*3;
+      trailArray[o++]=trailSamples[a];trailArray[o++]=trailSamples[a+1];trailArray[o++]=trailSamples[a+2];trailArray[o++]=ageA;
+      trailArray[o++]=trailSamples[b];trailArray[o++]=trailSamples[b+1];trailArray[o++]=trailSamples[b+2];trailArray[o++]=ageB;}
+    // Segments are time-ordered, so an interval owns a contiguous run of EMITTED ones.
+    const interval=intervalOf(bundle,times[s]),run=trailRuns[trailRuns.length-1];
+    if(run&&run.interval===interval&&run.first+run.count===emitted)run.count++;
+    else trailRuns.push({interval,first:emitted,count:1});
+    emitted++;
+  }
+  trailVerts=o/4;
+  if(trailVerts){gl.bindBuffer(gl.ARRAY_BUFFER,trailBuf);
+    gl.bufferData(gl.ARRAY_BUFFER,trailArray.subarray(0,o),gl.DYNAMIC_DRAW);}
+}
+
+// ===== draw =====
+function setCamera(prog,proj,view){gl.useProgram(prog.program);
+  gl.uniformMatrix4fv(prog.u.uProj,false,proj);gl.uniformMatrix4fv(prog.u.uView,false,view);}
+function resize(){const dpr=Math.min(devicePixelRatio||1,2);
+  canvas.width=Math.max(1,Math.floor(wrap.clientWidth*dpr));
+  canvas.height=Math.max(1,Math.floor(wrap.clientHeight*dpr));}
+addEventListener('resize',resize);
+
+let fpsN=0,fpsT=0;
+function render(t){
+  requestAnimationFrame(render);
+  const dpr=Math.min(devicePixelRatio||1,2);
+  const w=Math.max(1,canvas.clientWidth*dpr|0),h=Math.max(1,canvas.clientHeight*dpr|0);
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+  gl.viewport(0,0,w,h);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  if(!bundle)return;
+  const meta=bundle.meta;
+
+  // Keep every knot the VISIBLE WINDOW needs resident — the playhead plus however far back the
+  // trail reaches. Prefetching only around the playhead left the oldest trail samples
+  // unevaluatable, and the trail is built from the oldest sample forward.
+  const trailFrom=Math.max(meta.frame_start,frame-(trailsOn?trailLen:0));
+  bundle.prefetch(trailFrom,frame,3);
+  resident=evaluate(bundle,bundle.timestep(frame),positions);
+  if(resident&&frame!==lastEval){
+    gl.bindBuffer(gl.ARRAY_BUFFER,posBuf);gl.bufferData(gl.ARRAY_BUFFER,positions,gl.DYNAMIC_DRAW);
+    buildTrails(frame);lastEval=frame;everEval=true;}
+  // Only when the pose on screen is actually stale. `bundle.loading>0` is true for most of a scrub
+  // (the prefetch runs ahead by design) and would leave the badge permanently lit. Written only on
+  // change, or this is a DOM write every frame for a string that almost never differs.
+  const msg=bundle.lastError?'⚠ '+bundle.lastError:(resident?'':'streaming knots…');
+  if(msg!==noteMsg){noteMsg=msg;noteEl.textContent=msg;noteEl.classList.toggle('on',!!msg);}
+  // Before the geometry guard below: the bytes-fetched counter drives the host's streaming
+  // readout, and it is at its most interesting exactly while there is nothing to draw yet.
+  fpsN++;if(t-fpsT>1000){
+    post({type:'stats',fps:Math.round(fpsN*1000/(t-fpsT)),splats:meta.num_points,
+          mb:fetchedBytes/1048576,stripes:trailRuns.length});
+    fpsN=0;fpsT=t;}
+  // `positions` is zero-filled until the first successful evaluation, so drawing before one lands
+  // paints the whole mesh collapsed to the origin. An empty panel and the "streaming knots" badge
+  // say the true thing; a black blob at the origin does not.
+  if(!everEval)return;
+
+  const proj=projMatrix(w/h),view=viewMatrix();
+
+  // Surface + cloud, always: the points carry the point-set reading, the surface gives the normals
+  // that make the motion legible. One style, nothing to pick.
+  if(bundle.faces){
+    setCamera(progSurface,proj,view);
+    gl.bindVertexArray(vaoPos);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,idxBuf);
+    const type=bundle.faces instanceof Uint16Array?gl.UNSIGNED_SHORT:gl.UNSIGNED_INT;
+    gl.drawElements(gl.TRIANGLES,bundle.faces.length,type,0);}
+  setCamera(progFlat,proj,view);
+  gl.uniform3f(progFlat.u.uTint,...CLOUD);
+  gl.uniform1f(progFlat.u.uAlpha,bundle.faces?0.7:1.0);
+  gl.uniform1f(progFlat.u.uPointSize,2.0*dpr);
+  gl.bindVertexArray(vaoPos);gl.drawArrays(gl.POINTS,0,meta.num_points);
+
+  if(trailVerts){
+    setCamera(progTrail,proj,view);
+    // Multiplied by vAge in the shader, so the tail is fainter still. 1500 overlapping polylines
+    // at full strength read as a wash that buries the mesh underneath; the stripe boundaries are
+    // what has to stay legible, not any individual path.
+    gl.uniform1f(progTrail.u.uAlpha,0.65);
+    gl.bindVertexArray(vaoTrail);
+    const perVertex=2*kept.length;              // vertices per segment, across all kept points
+    for(const run of trailRuns){
+      gl.uniform3f(progTrail.u.uTint,...TRAIL_COLORS[run.interval%TRAIL_COLORS.length]);
+      gl.drawArrays(gl.LINES,run.first*perVertex,run.count*perVertex);}}
+  gl.bindVertexArray(null);
+}
+
+// ===== host messages =====
+// Announce until the host answers: this module could in principle run before the host page has
+// attached its listener, and a single dropped hello would strand the panel.
+let _hello=0;
+function hello(){post({type:'hello',bundle:BUNDLE});_hello=setTimeout(hello,600);}
+
+// No `cam` in either direction: this card is one panel, so there is no second camera to link.
+// Adding a second panel here means wiring the orbit state ({yaw,pitch,dist,target}) into the
+// host's relay — it is NOT the splat panels' {pos,quat,speed}.
+addEventListener('message',e=>{
+  if(e.origin!==location.origin)return;const m=e.data;
+  if(!m||m.ch!=='spdef'||m.to!==ID)return;
+  // Stop announcing. `view` and `seek` are the two things flush()/setFrame send, i.e. the only
+  // messages the host emits once it has actually registered this panel — a `stage` broadcast can
+  // reach a frame the host has never heard from, so clearing on any message at all would strand it.
+  if(m.type==='view'||m.type==='seek')clearTimeout(_hello);
+  if(m.type==='seek'){frame=m.frame;}
+  else if(m.type==='resetView'){cam.yaw=home.yaw;cam.pitch=home.pitch;cam.dist=home.dist;
+    cam.target=home.target.slice();}
+  else if(m.type==='view'){
+    // Host sends the whole option set every time, so this stays idempotent. lastEval is the cache
+    // of the built trail as well as of the uploaded positions, so every option that changes what a
+    // trail looks like has to invalidate it — the same trap syncViewOptions() documents.
+    trailsOn=!!m.trail;trailLen=m.trailLen;lastEval=-1;}
+  else if(m.type==='error')showErr(m.msg);
+});
+
+if(!BUNDLE)showErr('no ?bundle= given');
+else{
+  if(HOST)hello();
+  // Standalone (the same fallback viewer.html keeps): run the clock here so one panel stays
+  // debuggable on its own. Hosted, the host owns the clock and this loop never starts.
+  loadBundle(BUNDLE).then(()=>{
+    if(HOST||!bundle)return;
+    frame=Math.min(trailLen,bundle.meta.frame_end-1);
+    let t0=null;const FPS=30;
+    requestAnimationFrame(function play(t){requestAnimationFrame(play);
+      if(t0===null){t0=t;return;}
+      frame=(frame+(t-t0)/1000*FPS)%bundle.meta.frame_end;t0=t;});
+  }).catch(e=>{console.error(e);showErr(e.message||e);});
+}
+</script>
+</body>
+</html>
