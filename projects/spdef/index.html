@@ -355,7 +355,7 @@
         <h3>What the model actually stores</h3>
         <p class="subtag">D-NeRF <em>bouncingballs</em> · 14,534 canonical gaussians · three 128&times;128&times;32 tri-planes · 1.0 MB</p>
       </div>
-      <p class="lede">A plane at time <em>t</em> is <strong>base + &Sigma;<sub>r</sub> w<sub>r</sub>(t)&middot;res<sub>r</sub></strong> — one fixed plane plus six more, scaled by six numbers. Press play and watch what moves: the canonical cloud stays exactly where it is, and the sheets change. The plane axes are the world axes, and each sheet cell sits where the field samples it, which is why a sheet reads as the cloud’s shadow on that wall.</p>
+      <p class="lede">A plane at time <em>t</em> is <strong>base + &Sigma;<sub>r</sub> w<sub>r</sub>(t)&middot;res<sub>r</sub></strong> — one fixed plane plus six more, scaled by six numbers. Press play and watch what moves: the canonical cloud stays exactly where it is, and the sheets change. The plane axes are the world axes, and each sheet cell sits where the field samples it, which is why a sheet reads as the cloud’s shadow on that wall. Switch on <em>cast to the planes</em> to draw the lookup itself: the line from a gaussian’s centre to the foot of its perpendicular on each face is the address the field is read at, and the sheet colour where it lands is the value that comes back. <em>Hard ellipsoids</em> turns the soft splats into the points they actually are — shrink the radius to pull them apart.</p>
 
     <div class="ab ab1">
       <figure class="pane">
@@ -386,6 +386,14 @@
         <label class="tchk" title="The plane spanning the y and z axes, on the high-x face"><input type="checkbox" data-o="syz" checked> yz</label>
         <label class="tchk" title="The canonical gaussians — the pose the field deforms away from"><input type="checkbox" data-o="cloud" checked> Canonical cloud</label>
         <label class="vslide" title="How strongly the sheets are drawn over the cloud">Sheet opacity <input type="range" data-o="alpha" min="0" max="100" value="85"><output data-o="alphaN">85</output></label>
+      </div>
+      <div class="vrow off" data-o="rowEllip">
+        <label class="tchk" title="Render each canonical gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the point cloud the field deforms is visible as points. The sheet cells stay soft — hard-edging them would break the feature image into a grid of discs."><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
+        <label class="vslide" title="Ellipsoid radius in standard deviations — shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
+      </div>
+      <div class="vrow off" data-o="rowCast">
+        <label class="tchk" title="Draw each sampled gaussian's perpendicular onto the three faces — the exact place the field is read for it. A line only goes to a sheet that is switched on."><input type="checkbox" data-o="cast"> Cast to the planes</label>
+        <label class="vslide" title="How many gaussians cast lines, sampled evenly through the cloud">Lines <input type="range" data-o="castN" min="20" max="3000" step="20" value="400"><output data-o="castNN">400</output></label>
       </div>
     </div>
     <p class="hint">Want the planes flat, with the six weight curves and the other ways of reading them — the template, each residual on its own, and where the field does most of its work? <a href="triplanes.html">Open the tri-plane inspector</a>.</p>
@@ -528,7 +536,8 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     splat:['rowEllip','ellip','ellipR','ellipRN','rowTraj','traj','trajN','trajNN',
            'trajL','trajLN','rowOff','off','offMix','offMixN'],
     points:['rowTrail','trail','trailLen','trailLenN'],
-    field:['rowSheets','sxy','sxz','syz','cloud','alpha','alphaN']};
+    field:['rowSheets','sxy','sxz','syz','cloud','alpha','alphaN',
+           'rowEllip','ellip','ellipR','ellipRN','rowCast','cast','castN','castNN']};
   const _ctl=id=>document.getElementById(id);
   const byId=new Map(), ALL=[];
   // Everything about a pane that belongs to ONE load: delivery state, the host's own copies of its
@@ -637,9 +646,15 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // the panel shows the planes themselves at t, and the other readings of them (the template,
     // each residual alone, where the field does most of its work) live in triplanes.html — this
     // card is the figure, not the inspector.
+    // `ellip` is the comparison cards' control under the same name and the same units, applied to
+    // the canonical cloud only; `cast` draws each sampled gaussian's perpendicular onto the three
+    // faces — the address it reads the field at. The panel gates the lines on `sheets` itself, so
+    // hiding a plane hides its lines with no second control here.
     field:g=>({type:'view',
       sheets:[g.o.sxy.checked,g.o.sxz.checked,g.o.syz.checked],
-      sheetAlpha:+g.o.alpha.value/100, cloud:g.o.cloud.checked})};
+      sheetAlpha:+g.o.alpha.value/100, cloud:g.o.cloud.checked,
+      ellip:g.o.ellip.checked,        ellipR:+g.o.ellipR.value/100,
+      cast:g.o.cast.checked,          castCount:+g.o.castN.value})};
   const viewState=g=>VIEW[g.kind](g);
   // Which controls each kind wires up, and which rows dim when their toggle is off. `rowMark` is
   // deliberately absent: it holds two independent toggles and no sliders, so there is nothing for
@@ -651,11 +666,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     points:{chk:['trail'],slide:['trailLen'],
            num:[['trailLen','trailLenN']],
            rows:[['rowTrail','trail']]},
-    // `rows` is empty on purpose: the row holds four independent toggles, so there is no single
-    // one whose off state should dim it.
-    field:{chk:['sxy','sxz','syz','cloud'],slide:['alpha'],
-           num:[['alpha','alphaN']],
-           rows:[]}};
+    // rowSheets is deliberately NOT in `rows`: it holds four independent toggles, so there is no
+    // single one whose off state should dim it. The two rows below it do have one each.
+    field:{chk:['sxy','sxz','syz','cloud','ellip','cast'],slide:['alpha','ellipR','castN'],
+           num:[['alpha','alphaN'],['ellipR','ellipRN',v=>(v/100).toFixed(2)],['castN','castNN']],
+           rows:[['rowEllip','ellip'],['rowCast','cast']]}};
   function pushView(g){
     const w=OPT_WIRING[g.kind];
     for(const[src,out,fmt]of w.num)g.o[out].textContent=fmt?fmt(+g.o[src].value):g.o[src].value;
@@ -768,6 +783,15 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       // The trained frames, so the readout can tell supervised from inferred and the steppers can
       // land on one. Only a points panel sends them; without them fracLabel() stays silent.
       if(m.train){g.train=new Set(m.train);g.trainSorted=m.train.slice().sort((a,b)=>a-b);}
+      // How many gaussians can cast a line at all — only the field panel sends it. The markup's max
+      // is an upper bound on legibility, not on the data: a gaussian outside the field's box has no
+      // foot of a perpendicular ON a sheet, so it is skipped, and without this the top of the slider
+      // would silently do nothing. Clamp the value too, or the readout can outrun what is drawn.
+      if(m.castMax!=null&&g.o.castN){
+        g.o.castN.max=Math.min(+g.o.castN.max,m.castMax);
+        g.o.castN.value=Math.min(+g.o.castN.value,+g.o.castN.max);
+        pushView(g);
+      }
       // Same sequence across a group; if they ever aren't, the shortest bounds that timeline.
       const L=livePanes(g);
       if(L.length&&L.every(q=>q.frames>0)){g.total=L.reduce((n,q)=>Math.min(n,q.frames),Infinity);

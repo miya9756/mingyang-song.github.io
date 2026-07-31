@@ -30,6 +30,17 @@
     fetched, and scrubbing time costs six uniforms — no upload, no CPU compositing.
   - Cells below the bundle's occupancy threshold are not emitted at all, and the rest carry
     occupancy as alpha: the sheets fade out exactly where the field stops being supervised.
+  - HARD ELLIPSOIDS apply to the CLOUD ONLY. The same control the two comparison cards carry, but
+    here one draw call holds both kinds of splat, so the fragment shader is told which it is by a
+    flat varying rather than by a global uniform — hard-edging the sheet cells would turn a
+    continuous feature image into a grid of discs with gaps between them.
+  - CAST LINES are the lookup itself, drawn. A canonical gaussian's feature is read at its
+    perpendicular projection onto each of the three planes, so a segment from its centre to each
+    face is exactly the address it queries; the sheet's colour where the segment lands is the value
+    it gets back. They follow the sheet toggles (a hidden plane is not queried on screen either),
+    fade out at the cloud end so they do not smother the thing they come from, and are drawn over
+    the splats as an overlay, the same convention as the trajectory overlay in viewer.html. This is
+    also the one reason a line program is back after the bounding box took the old one with it.
   - ORBIT, not fly, and no virtual movement pad — the same reasoning as points.html. One object on
     a turntable needs orbit/pan/dolly, and unlike a fly camera that vocabulary is fully reachable
     by touch, which is what the pad exists to work around.
@@ -114,7 +125,9 @@ uniform int u_shCols;uniform int u_shBands;
 uniform uint u_planeStart;uniform ivec2 u_res;
 uniform float u_w[6];
 uniform vec3 u_lo[3],u_hi[3];uniform float u_show[3],u_sheetAlpha,u_cloudAlpha;
-in vec2 a_pos;in uint a_index;out vec4 vColor;out vec2 vPos;
+uniform bool u_hard;   // hard-edged ellipsoids, CLOUD ONLY — the sheet cells stay soft, or the
+                       // feature image becomes a grid of discs with holes between them
+in vec2 a_pos;in uint a_index;out vec4 vColor;out vec2 vPos;flat out float vHard;
 vec3 shRest(vec3 d,int e){float x=d.x,y=d.y,z=d.z,xx=x*x,yy=y*y,zz=z*z,xy=x*y,yz=y*z,xz=x*z;vec3 r=vec3(0.0);
  int row=e/u_shCols, b=(e-row*u_shCols)*15;
  r+=-0.4886025119*y*texelFetch(u_sh,ivec2(b+0,row),0).rgb; r+=0.4886025119*z*texelFetch(u_sh,ivec2(b+1,row),0).rgb; r+=-0.4886025119*x*texelFetch(u_sh,ivec2(b+2,row),0).rgb;
@@ -125,7 +138,9 @@ vec3 shRest(vec3 d,int e){float x=d.x,y=d.y,z=d.z,xx=x*x,yy=y*y,zz=z*z,xy=x*y,yz
  r+=-0.5900435899*y*(3.0*xx-yy)*texelFetch(u_sh,ivec2(b+8,row),0).rgb; r+=2.8906114426*xy*z*texelFetch(u_sh,ivec2(b+9,row),0).rgb; r+=-0.4570457995*y*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+10,row),0).rgb;
  r+=0.3731763326*z*(2.0*zz-3.0*xx-3.0*yy)*texelFetch(u_sh,ivec2(b+11,row),0).rgb; r+=-0.4570457995*x*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+12,row),0).rgb; r+=1.4453057213*z*(xx-yy)*texelFetch(u_sh,ivec2(b+13,row),0).rgb; r+=-0.5900435899*x*(xx-3.0*yy)*texelFetch(u_sh,ivec2(b+14,row),0).rgb;
  return r;}
-void main(){uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10),0);vec3 wp=uintBitsToFloat(cen.xyz);
+void main(){vHard=0.0;   // written before every early return; the flat varying is what splits the
+                         // two kinds of splat inside one draw call
+ uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10),0);vec3 wp=uintBitsToFloat(cen.xyz);
  vec4 cam=u_view*vec4(wp,1.0);vec4 p=u_proj*cam;float clip=1.2*p.w;
  if(p.z<-clip||p.x<-clip||p.x>clip||p.y<-clip||p.y>clip){gl_Position=vec4(0.,0.,2.,1.);return;}
  uvec4 cov=texelFetch(u_tex,ivec2(((i&0x3ffu)<<1)|1u,i>>10),0);vec2 u1=unpackHalf2x16(cov.x),u2=unpackHalf2x16(cov.y),u3=unpackHalf2x16(cov.z);
@@ -141,6 +156,7 @@ void main(){uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10)
    base=vec3(float((cov.w)&0xffu),float((cov.w>>8)&0xffu),float((cov.w>>16)&0xffu))/255.0;
    al=float((cov.w>>24)&0xffu)/255.0*u_cloudAlpha;
    if(u_hasSH)base=clamp(base+shRest(normalize(wp-u_campos),int(cen.w)),0.0,1.0);
+   vHard=u_hard?1.0:0.0;
  }else{
    // cen.w = plane<<28 | cellX<<14 | cellY; the atlas is tiles across, planes down.
    // The plane at time t: base + Σ_r w_r(t)·res_r, already PCA-projected to three components, so
@@ -155,8 +171,27 @@ void main(){uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10)
  vColor=clamp(p.z/p.w+1.0,0.0,1.0)*vec4(base,al);
  vPos=a_pos;vec2 c=vec2(p)/p.w;gl_Position=vec4(c+a_pos.x*maj/u_viewport+a_pos.y*mn/u_viewport,0.0,1.0);}`;
 const FRAG=`#version 300 es
-precision highp float;uniform float u_opacity;in vec4 vColor;in vec2 vPos;out vec4 frag;
-void main(){float d2=dot(vPos,vPos);float A=-d2;if(A<-4.0)discard;float B=exp(A)*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);}`;
+precision highp float;uniform float u_opacity;uniform float u_hardR;in vec4 vColor;in vec2 vPos;flat in float vHard;out vec4 frag;
+void main(){float d2=dot(vPos,vPos);
+ if(vHard>0.5){ // hard-boundary ellipsoid: solid fill out to u_hardR std-devs (1px AA), exposes point-based structure
+  float d=sqrt(d2),aa=max(fwidth(d),1e-4),edge=1.0-smoothstep(u_hardR-aa,u_hardR+aa,d);
+  if(edge<=0.0)discard;float B=vColor.a*u_opacity*edge;frag=vec4(B*vColor.rgb,B);return;}
+ float A=-d2;if(A<-4.0)discard;float B=exp(A)*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);}`;
+
+// The cast-line overlay: one segment per sampled gaussian per plane, from the centre to the foot of
+// its perpendicular on that face — the address the field is queried at. `a_end` is 0 at the centre
+// and 1 at the plane, and the alpha ramps along it: the cloud end is the crowded end, and the plane
+// end is the one carrying the answer. `u_show` is the same per-plane visibility the sheets use, so a
+// hidden plane drops its lines too, and the colour is the gaussian's own (darkened, since this panel
+// composites over white) so a segment can be traced back to the ball it came from.
+const LVERT=`#version 300 es
+precision highp float;uniform mat4 u_proj,u_view;uniform float u_show[3];uniform float u_alpha;
+in vec3 a_p;in vec3 a_col;in float a_end;in float a_plane;out vec4 vC;
+void main(){vC=vec4(a_col*0.62,u_alpha*u_show[int(a_plane)]*mix(0.18,1.0,a_end));
+ gl_Position=u_proj*u_view*vec4(a_p,1.0);}`;
+const LFRAG=`#version 300 es
+precision highp float;in vec4 vC;out vec4 o;
+void main(){if(vC.a<=0.004)discard;o=vC;}`;
 
 function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);
   if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
@@ -169,7 +204,13 @@ const u_proj=U('u_proj'),u_view=U('u_view'),u_focal=U('u_focal'),u_viewport=U('u
       u_shColsL=U('u_shCols'),u_shBandsL=U('u_shBands'),u_coefL=U('u_coef'),
       u_planeStartL=U('u_planeStart'),u_resL=U('u_res'),u_wL=U('u_w[0]'),
       u_loL=U('u_lo[0]'),u_hiL=U('u_hi[0]'),
-      u_showL=U('u_show[0]'),u_sheetAlphaL=U('u_sheetAlpha'),u_cloudAlphaL=U('u_cloudAlpha');
+      u_showL=U('u_show[0]'),u_sheetAlphaL=U('u_sheetAlpha'),u_cloudAlphaL=U('u_cloudAlpha'),
+      u_hardL=U('u_hard'),u_hardRL=U('u_hardR');
+const lprog=(()=>{const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,LVERT));
+  gl.attachShader(p,sh(gl.FRAGMENT_SHADER,LFRAG));gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));return p;})();
+const lu_proj=gl.getUniformLocation(lprog,'u_proj'),lu_view=gl.getUniformLocation(lprog,'u_view'),
+      lu_show=gl.getUniformLocation(lprog,'u_show[0]'),lu_alpha=gl.getUniformLocation(lprog,'u_alpha');
 const MAX_TEX=gl.getParameter(gl.MAX_TEXTURE_SIZE);
 function mkTex(){const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
@@ -192,6 +233,14 @@ const a_pos=gl.getAttribLocation(prog,'a_pos');gl.enableVertexAttribArray(a_pos)
 const a_index=gl.getAttribLocation(prog,'a_index'),ib=gl.createBuffer();
 gl.enableVertexAttribArray(a_index);gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.vertexAttribIPointer(a_index,1,gl.UNSIGNED_INT,0,0);gl.vertexAttribDivisor(a_index,1);
 gl.bindVertexArray(null);
+// Cast lines get their own VAO: a different program means different attribute locations, and the
+// buffer is interleaved (pos, colour, end, plane) = 8 floats per vertex, written once at load.
+const lvao=gl.createVertexArray();gl.bindVertexArray(lvao);
+const lbuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,lbuf);
+[['a_p',3,0],['a_col',3,12],['a_end',1,24],['a_plane',1,28]].forEach(([n,sz,off])=>{
+  const l=gl.getAttribLocation(lprog,n);gl.enableVertexAttribArray(l);
+  gl.vertexAttribPointer(l,sz,gl.FLOAT,false,32,off);});
+gl.bindVertexArray(null);
 gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);
 gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);gl.blendEquation(gl.FUNC_ADD);
 
@@ -200,7 +249,7 @@ const _f=new Float32Array(1),_i=new Int32Array(_f.buffer);
 function toHalf(v){_f[0]=v;const x=_i[0];let b=(x>>16)&0x8000,m=(x>>12)&0x07ff,e=(x>>23)&0xff;if(e<103)return b;if(e>142){b|=0x7c00;b|=((e==255)?0:1)&&(x&0x007fffff);return b;}if(e<113){m|=0x0800;b|=(m>>(114-e))+((m>>(113-e))&1);return b;}b|=((e-112)<<10)|(m>>1);b+=m&1;return b;}
 function packHalf2(a,b){return (toHalf(a)|(toHalf(b)<<16))>>>0;}
 function quatRotMat(w,x,y,z){return[1-2*(y*y+z*z),2*(x*y-w*z),2*(x*z+w*y),2*(x*y+w*z),1-2*(x*x+z*z),2*(y*z-w*x),2*(x*z-w*y),2*(y*z+w*x),1-2*(x*x+y*y)];}
-let N=0,texW=0,texH=0,texU32=null,texF32=null,depthIndex=null,needSort=true,planeStart=0;
+let N=0,texW=0,texH=0,texU32=null,texF32=null,depthIndex=null,needSort=true,planeStart=0,castMax=0;
 function writeSplat(i,cx,cy,cz,q,sx,sy,sz,rgba,tag){const o=8*i;texF32[o]=cx;texF32[o+1]=cy;texF32[o+2]=cz;
  const R=quatRotMat(q[0],q[1],q[2],q[3]);
  const M=[R[0]*sx,R[1]*sy,R[2]*sz,R[3]*sx,R[4]*sy,R[5]*sz,R[6]*sx,R[7]*sy,R[8]*sz];
@@ -297,6 +346,7 @@ addEventListener('resize',resize);
 
 // ===== state =====
 const S={t:0,frames:1,show:new Float32Array([1,1,1]),sheetAlpha:.85,cloud:1,
+         hard:false,hardR:1,cast:false,castN:400,
          meta:null,coef:null,fps:0,fpsN:0,fpsT:0,counts:'',started:false};
 let lastView=null;
 
@@ -340,11 +390,14 @@ async function boot(){
 
   stage('building the scene…',85);
   const nCells=buildScene(kf,meta,occ);
+  buildCast(kf,meta);
   uploadAtlas();uploadSH(kf.shCodebook);
   frameScene();resize();
   loadEl.classList.add('hide');hudEl.classList.add('on');
   S.started=true;requestAnimationFrame(frame);
-  post({type:'ready',frames:S.frames,splats:N,
+  // castMax: how many gaussians actually sit inside the field's box and are opaque enough to cast.
+  // The host clamps its Lines slider to it so the top of the range cannot silently do nothing.
+  post({type:'ready',frames:S.frames,splats:N,castMax,
         note:kf.numTotal.toLocaleString()+' canonical gaussians + '+nCells.toLocaleString()
              +' tri-plane cells, all one sorted splat pass'});
   post({type:'buffered',end:S.frames});
@@ -385,6 +438,40 @@ function buildScene(kf,meta,occ){
   S.counts=NC.toLocaleString()+' canonical + '+cells.length.toLocaleString()+' sheet cells';
   return cells.length;
 }
+// One segment per sampled gaussian per plane, built once. The count slider then draws a PREFIX of
+// this buffer rather than rebuilding it — which only works because the sample order is shuffled
+// first, so any prefix is a spatially even sample of the cloud rather than whatever order the
+// exporter happened to write. Shuffled deterministically (a fixed-seed LCG) so the same gaussians
+// are picked on every load and the figure does not reshuffle under you.
+const CAST_MAX=3000;                 // ~9k segments; past this the overlay is a hairball, not a figure
+function buildCast(kf,meta){
+  const lo=meta.aabb_min,hi=meta.aabb_max,C=kf.center,COL=kf.color;
+  const ok=[];
+  for(let i=0;i<kf.numTotal;i++){
+    const x=C[3*i],y=C[3*i+1],z=C[3*i+2];
+    // Outside the field's own box there is no foot of a perpendicular ON the sheet, and clamping
+    // one onto it would draw a lookup that never happens. A near-transparent floater is skipped for
+    // the same reason it contributes nothing to the render.
+    if(x<lo[0]||x>hi[0]||y<lo[1]||y>hi[1]||z<lo[2]||z>hi[2])continue;
+    if((COL[i]>>>24)<26)continue;
+    ok.push(i);
+  }
+  let s=0x9e3779b9>>>0;const rnd=()=>((s=(Math.imul(s,1664525)+1013904223)>>>0)/4294967296);
+  for(let i=ok.length-1;i>0;i--){const j=(rnd()*(i+1))|0,t=ok[i];ok[i]=ok[j];ok[j]=t;}
+  castMax=Math.min(ok.length,CAST_MAX);
+  const V=new Float32Array(castMax*meta.planes.length*2*8);let o=0;
+  for(let k=0;k<castMax;k++){
+    const i=ok[k],x=C[3*i],y=C[3*i+1],z=C[3*i+2],c=COL[i];
+    const r=(c&0xff)/255,g=((c>>>8)&0xff)/255,b=((c>>>16)&0xff)/255;
+    meta.planes.forEach((p,pi)=>{
+      const [nax,side]=FACE[p],f=[x,y,z];f[nax]=side?hi[nax]:lo[nax];
+      V[o]=x;V[o+1]=y;V[o+2]=z;   V[o+3]=r;V[o+4]=g;V[o+5]=b;V[o+6]=0;V[o+7]=pi;o+=8;
+      V[o]=f[0];V[o+1]=f[1];V[o+2]=f[2];V[o+3]=r;V[o+4]=g;V[o+5]=b;V[o+6]=1;V[o+7]=pi;o+=8;
+    });
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,lbuf);gl.bufferData(gl.ARRAY_BUFFER,V,gl.STATIC_DRAW);
+  return castMax;
+}
 function uploadAtlas(){
   const {h,w}=S.meta.levels[0],NT=S.meta.rank+1,W=NT*w,H=S.meta.planes.length*h;
   gl.bindTexture(gl.TEXTURE_2D,coefTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,W,H,0,gl.RGBA,gl.FLOAT,S.coef);
@@ -415,6 +502,19 @@ function setStaticUniforms(){
   gl.uniform3fv(u_loL,lo);gl.uniform3fv(u_hiL,hi);
   gl.uniform1fv(u_showL,S.show);
   gl.uniform1f(u_sheetAlphaL,S.sheetAlpha);gl.uniform1f(u_cloudAlphaL,S.cloud);
+  gl.uniform1i(u_hardL,S.hard?1:0);gl.uniform1f(u_hardRL,S.hardR);
+}
+// Overlay, drawn after the splats with the ordinary source-alpha blend and then handing the
+// front-to-back `under` operator back — the same two-line dance drawTraj() does in viewer.html.
+function drawCast(proj,view){
+  const n=Math.min(S.castN,castMax);if(!n)return;
+  gl.useProgram(lprog);gl.bindVertexArray(lvao);
+  gl.uniformMatrix4fv(lu_proj,false,proj);gl.uniformMatrix4fv(lu_view,false,view);
+  gl.uniform1fv(lu_show,S.show);gl.uniform1f(lu_alpha,0.55);
+  gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  gl.drawArrays(gl.LINES,0,n*S.meta.planes.length*2);
+  gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);
+  gl.bindVertexArray(null);
 }
 function frame(t){
   requestAnimationFrame(frame);
@@ -438,7 +538,8 @@ function frame(t){
   gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,coefTex);gl.uniform1i(u_coefL,2);
   gl.uniform1i(u_hasSHL,shHas?1:0);gl.uniform1i(u_shColsL,shCols);gl.uniform1i(u_shBandsL,shBands);
   gl.uniform3fv(u_camposL,camPos);
-  gl.uniformMatrix4fv(u_proj,false,projMatrix(vw,vh,fx,fy));gl.uniformMatrix4fv(u_view,false,view);
+  const proj=projMatrix(vw,vh,fx,fy);
+  gl.uniformMatrix4fv(u_proj,false,proj);gl.uniformMatrix4fv(u_view,false,view);
   gl.uniform2f(u_focal,fx,fy);gl.uniform2f(u_viewport,vw,vh);gl.uniform1f(u_op,1.0);
   // screen-space low-pass scaled to the training resolution, as in the SMV viewer — without the
   // scale a canvas wider than the dataset camera renders every splat a fraction of a pixel wide
@@ -447,6 +548,7 @@ function frame(t){
   gl.uniform1fv(u_wL,weightsAt(S.t));      // the whole time axis, in six floats
   gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,N);
   gl.bindVertexArray(null);
+  if(S.cast)drawCast(proj,view);
 }
 
 // ===== host messages =====
@@ -467,7 +569,11 @@ addEventListener('message',e=>{
     // The host sends the whole option set every time, so this stays idempotent.
     if(m.sheets)for(let i=0;i<3;i++)S.show[i]=m.sheets[i]?1:0;
     if(m.sheetAlpha!=null)S.sheetAlpha=m.sheetAlpha;
-    if(m.cloud!=null)S.cloud=m.cloud?1:0;}
+    if(m.cloud!=null)S.cloud=m.cloud?1:0;
+    if(m.ellip!=null)S.hard=!!m.ellip;
+    if(m.ellipR!=null)S.hardR=m.ellipR;
+    if(m.cast!=null)S.cast=!!m.cast;
+    if(m.castCount!=null)S.castN=m.castCount;}
   else if(m.type==='error')showErr(m.msg);
 });
 

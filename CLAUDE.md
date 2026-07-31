@@ -444,9 +444,33 @@ and `viewer.html` is what the two published comparisons depend on.
   instead of watching the field move. So `field.html` fetches only the three `composed_*` atlases
   and the occupancy maps (~470 kB, one 896×384 RGBA32F texture); the Gram and the motion basis are
   never loaded, and the shader has no magnitude branch. The exporter still writes all of it.
-- **There is deliberately no bounding-box wireframe.** It was there to prove the sheets sit on the
-  field's own AABB; that is now settled (and checked offline), and on a teaching figure the box
-  read as scene geometry. The line program went with it — do not re-add one without a reason.
+- **Hard ellipsoids are the CLOUD ONLY, and that is why the flag is a varying.** Same control, same
+  units and the same shader branch as the two comparison cards (`ellip` / `ellipR`, radius in
+  std-devs), but here one draw call holds both kinds of splat, so the fragment shader is told which
+  it is by a `flat out float vHard` rather than by a global uniform. Hard-edging the sheet cells
+  would turn a continuous feature image into a grid of discs with gaps between them — the cells are
+  gaussians for occlusion, not because they are meant to read as points.
+- **`cast` draws the lookup itself.** One segment per sampled canonical gaussian per plane, from its
+  centre to the foot of its perpendicular on that face: that foot is the address the field is read
+  at, and the sheet's colour there is the value it gets back — which is the one thing the sheets
+  alone cannot show. Details that are load-bearing:
+  - Gaussians **outside the field's AABB are skipped, not clamped** (there is no foot on the sheet
+    to draw, and a clamped one would depict a lookup that never happens), as are near-transparent
+    floaters. That leaves fewer than the slider's nominal 3000, so the panel reports `castMax` on
+    `ready` and the host **clamps the slider to it** — a silent no-op at the top of a range is worse
+    than a shorter range.
+  - The buffer is built **once**, in a deterministic (fixed-seed LCG) shuffled order, and the count
+    slider draws a **prefix**. The shuffle is what makes a prefix an even sample of the cloud rather
+    than whatever order the exporter wrote; without it the slider would have to rebuild.
+  - Lines are gated on `u_show` **in the shader**, so hiding a sheet hides its lines with no second
+    control, and they are drawn **after** the splats with the ordinary `SRC_ALPHA` blend, handing
+    the front-to-back `under` operator back afterwards — the same two-line dance `drawTraj()` does
+    in `viewer.html`. Alpha ramps from 0.18 at the cloud end to 1.0 at the plane end: the cloud end
+    is the crowded one, the plane end is the one carrying the answer.
+- **A line program is back, and only for the above.** The old one drew a bounding-box wireframe to
+  prove the sheets sit on the field's own AABB; that is settled (and checked offline), and on a
+  teaching figure the box read as scene geometry. **Do not re-add the wireframe** — but the cast
+  lines are a different claim, not the same feature returning.
 - **Alignment is by construction and must stay that way.** Sheet cells sit on the faces of the
   field's *own* AABB (from the checkpoint's `aabb_min/max`, which `meta.json` carries), addressed
   by the same `lo + (hi-lo)·i/(n-1)` mapping the field reads them with — `xy` on the low-z face,
@@ -464,9 +488,11 @@ and `viewer.html` is what the two published comparisons depend on.
   (default 1.42)** — the field's box is much wider than the cloud, so the dataset framing crops
   the sheets.
 
-**Shaders are checked, not hoped for.** `glslangValidator` from the Khronos release compiles both
-(`#version 300 es`) clean, and a deliberate typo was confirmed to fail — a shader error blanks the
-panel and nothing else on this site would catch it. The atlas→texture layout and the shader's
+**Shaders are checked, not hoped for.** `glslangValidator` from the Khronos release compiles all
+four — the splat pair and the cast-line pair — (`#version 300 es`) clean, and a deliberate typo was
+confirmed to fail; `-l` links each pair, though note it does *not* catch an interpolation-qualifier
+mismatch across stages, so `flat` on `vHard` has to be kept in step by hand. A shader error blanks
+the panel and nothing else on this site would catch it. The atlas→texture layout and the shader's
 `texelFetch` indexing were separately checked against the checkpoint (≤2 % of display range, i.e.
 quantisation only). Do the same after touching either.
 
