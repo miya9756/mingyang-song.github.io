@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpDef knot panel</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#ffffff"><!-- must track --panel; this page is also openable standalone -->
+<!--
+  The "pushed knots" panel of the SpDef page: the teaser figure, animated. For a sample of the
+  canonical gaussians it draws, in the scene's own coordinates,
+
+      X^c            the canonical point (red)
+      X(t_k)         where the field pushes it at the knot LEFT of the playhead (blue)
+      X(t_{k+1})     …and at the knot right of it (green), with both tangents
+      the arc        the cubic Hermite the renderer actually evaluates between the two
+      X(t)           the point itself, on that arc, at the current time (dark)
+
+  so the interval the clock is inside is a thing you can see, not a number. It sits beside
+  field.html in the same card: that panel is the model's storage, this one is the model's output.
+
+  A FOURTH renderer, and a small one — no splats, no depth sort, no SH, no decoder. Points and
+  lines only, which is what the figure is; reusing the splat core would have meant carrying all of
+  it to draw 1-pixel segments.
+
+  Things that are load-bearing:
+
+  - THE INTERVAL IS TINY, AND THE FIGURE IS BUILT AROUND THAT. Consecutive knots are two frames
+    apart: the mean chord between them is 0.007 in a scene 2.6 across, i.e. a couple of pixels.
+    Drawn alone, the two knot dots would sit on top of each other. So the whole trajectory (all 75
+    knots) is drawn faintly as context and the current interval is highlighted inside it — that is
+    what makes "which interval am I in" legible, and it is why the path is on by default.
+  - TANGENTS ARE DRAWN SCALED, and the multiplier is in the HUD. The trained tangent is the
+    derivative per INTERVAL, and this field's are ~0.0007 against a 0.007 chord — true scale is
+    sub-pixel. Scaling is the only way to show the direction; hiding the factor would be a lie
+    about the magnitude, hence the readout.
+  - THE ARROWS DO NOT FOLLOW THE PATH, AND THAT IS THE MODEL. Expect to be asked about it; the
+    figure deliberately shows the stored v_xyz and nothing derived, so the answer lives here.
+    Measured on the shipped bundle: |v| is 0.10 of the interval's chord and 64° away from it (28 %
+    within 30°), and the tangent field is almost spatially constant (|mean unit vector| 0.85). That
+    is the model, not the drawing — finite-differencing the arc at the knot reproduces the arrow to
+    9e-5. With a knot every two frames the piecewise-linear part already explains the motion: the
+    tangent term moves the rendered curve by ~1 % of the chord (median 0.010, p90 0.069), which at
+    this scene's 0.007 chord is below the position quantisation the shipped bundle itself uses. So
+    the reconstruction loss has almost nothing to say about v, and `xyz_velocity_div_loss = 5000`,
+    which penalises velocity DIFFERENCES between neighbours, decides — it is minimised by one
+    spatially constant field, of any magnitude. Without the regularizer the same measurement gives
+    2.79 and 86°, i.e. long and random. What tangents this small cost: the arc is smoothstep between
+    knots, departing from the straight chord by 9.5 % of it against a pure m=0 reference of 9.62 %,
+    so the point nearly stops at every knot (0.105x the interval's mean speed) and peaks
+    mid-interval (1.49x) — a 14x speed swing every two frames, sub-pixel in position here but
+    growing with the chord wherever knots are sparser.
+    The SECANT (p1-p0) was drawn beside the tangents for a while to make that gap visible, and was
+    removed: a quantity computed in this file, next to one the model stores, reads as though the
+    model produced both. Do not re-add it — this text is the replacement.
+  - EVERY POINT SHOWN ACTUALLY MOVES. The bundle carries only gaussians whose offset varies over
+    time (see export_knots.py): the field pushes every gaussian off its canonical position, but for
+    the static half of this scene that push is constant, so their two knot dots would coincide with
+    zero-length tangents.
+  - A PREFIX IS A SAMPLE. Rows are written in a deterministic shuffled order by the exporter, so
+    the count slider draws the first N rows and still gets an even sample of the cloud — the same
+    trick field.html's cast lines use, and the reason nothing is rebuilt when it moves.
+  - PARITY IS CHECKED ON LOAD. meta.json carries torch-computed positions at eight points and six
+    times; if this page's dequantisation or its Hermite disagrees, it refuses to draw. Same
+    contract traj.js has with traj_codec.py, and the same reason: a curve that is subtly wrong
+    still looks like a curve.
+  - THE CAMERA IS LINKED to the panel beside it, so the projection here is field.html's verbatim
+    (the same eye formula from (yaw, pitch, dist, target), the same focal and the same Y-flipped
+    projection matrix). If the two disagreed, the same orbit state would frame two different views.
+
+  Query: ?bundle=<meta.json>&id=<name echoed in every message>[&elev=<deg>&zoom=<factor>]
+-->
+<style>
+  :root{color-scheme:light;
+        --panel:#ffffff; --ink:#14181d; --muted:#5f6a78; --line:#dde3ea; --accent:#1f5fbf; --err:#b4331f}
+  *{box-sizing:border-box}
+  /* background on html too, not just body — this page is standalone-openable and Safari
+     rubber-bands into html's background, not body's. Same rule as every other page here. */
+  html{background:var(--panel)}
+  body{margin:0;background:var(--panel);color:var(--ink);overflow:hidden;
+       font:13px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  #wrap{position:fixed;inset:0}
+  /* touch-action:none so a one-finger orbit and a two-finger pinch reach the canvas instead of
+     scrolling the host page out from under them */
+  #gl{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  #gl:active{cursor:grabbing}
+  #load{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;
+        background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.92) 40%);
+        font-size:11.5px;color:var(--muted);pointer-events:none}
+  #load.hide{display:none}
+  #stage{display:block;margin:0 0 5px}
+  #track{height:3px;border-radius:2px;background:var(--line);overflow:hidden}
+  #barfill{height:100%;width:0;background:var(--accent);transition:width .18s linear}
+  #hud{position:absolute;left:10px;bottom:9px;margin:0;padding:3px 8px;border-radius:7px;
+       background:rgba(255,255,255,.86);border:1px solid var(--line);
+       font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);
+       pointer-events:none;display:none}
+  #hud.on{display:block}
+  #err{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+       padding:20px;text-align:center;font-size:12.5px;color:var(--err)}
+  @media(prefers-reduced-motion:reduce){#barfill{transition:none}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="gl"></canvas>
+  <div id="load"><span id="stage">starting…</span><div id="track"><div id="barfill"></div></div></div>
+  <p id="hud"></p>
+  <div id="err"></div>
+</div>
+
+<script type="module">
+const Q=new URLSearchParams(location.search);
+const ID=Q.get('id')||'knots';
+const BUNDLE=Q.get('bundle')||'knots/bouncingballs/meta.json';
+const $=id=>document.getElementById(id);
+const canvas=$('gl'),loadEl=$('load'),stageEl=$('stage'),barEl=$('barfill'),errEl=$('err'),hudEl=$('hud');
+
+// ===== host protocol =====
+// Same {ch:'spdef'} envelope as viewer.html, points.html and field.html — `id` panel->host,
+// `to` host->panel.
+const HOST=parent!==window;
+function post(m){if(HOST)parent.postMessage(Object.assign({ch:'spdef',id:ID},m),location.origin);}
+function stage(label,pct){stageEl.textContent=label;if(pct!=null)barEl.style.width=Math.max(0,Math.min(100,pct))+'%';
+  post({type:'progress',label,pct});}
+function showErr(m){errEl.textContent='✗ '+m;errEl.style.display='flex';loadEl.classList.add('hide');
+  post({type:'error',msg:String(m)});}
+
+// Hardened fetch: an idle (no-progress) timeout with cache-busted retries, the same lesson the
+// host's grab() and points.html's hardFetch() carry. A CDN request that hangs rather than fails
+// leaves the await pending for ever, and this panel would then sit blank with nothing to recover
+// it. The clock covers the READ, not just the headers, so the body is drained here.
+const FETCH_IDLE_MS=20000,FETCH_TRIES=3;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function grab(url,label,pct){
+  let lastErr;
+  for(let a=1;a<=FETCH_TRIES;a++){
+    const ac=new AbortController();let timer=0;
+    const arm=()=>{clearTimeout(timer);timer=setTimeout(()=>ac.abort(),FETCH_IDLE_MS);};
+    const u=a>1?url+(url.indexOf('?')<0?'?':'&')+'retry='+a:url;
+    try{
+      arm();
+      const r=await fetch(u,{signal:ac.signal,cache:a>1?'reload':'default'});
+      if(!r.ok)throw new Error('HTTP '+r.status);
+      const tot=+r.headers.get('content-length')||0,rd=r.body.getReader(),parts=[];let n=0;
+      for(;;){const{done,value}=await rd.read();if(done)break;
+        arm();parts.push(value);n+=value.length;
+        if(tot)stage(label,pct[0]+(pct[1]-pct[0])*n/tot);}
+      clearTimeout(timer);
+      const out=new Uint8Array(n);let o=0;for(const p of parts){out.set(p,o);o+=p.length;}
+      return out.buffer;
+    }catch(e){clearTimeout(timer);lastErr=e;
+      if(a<FETCH_TRIES){stage(label+' — retrying…',null);await sleep(400*a);}}
+  }
+  throw new Error((lastErr&&lastErr.message||lastErr)+' — '+url);
+}
+
+const gl=canvas.getContext('webgl2',{antialias:true,alpha:false});
+if(!gl){showErr('WebGL2 unavailable');throw 0;}
+
+// ===== shaders =====
+// One program for both primitives: dots are POINTS with a round mask, everything else is LINES.
+// Size travels per vertex rather than as a uniform so one buffer can hold dots of three roles.
+const VS=`#version 300 es
+precision highp float;
+uniform mat4 u_proj,u_view;uniform float u_dpr;
+in vec3 a_p;in vec4 a_col;in float a_sz;out vec4 vC;
+void main(){vC=a_col;gl_Position=u_proj*u_view*vec4(a_p,1.0);gl_PointSize=a_sz*u_dpr;}`;
+// u_mode: 0 = line (no sprite), 1 = filled dot, 2 = ring. The ring is what the point at time t is
+// drawn as: at the default framing the whole interval is about a pixel wide, so a filled dot there
+// would cover the two knot dots the card exists to show. Hollow, it sits around them.
+const FS=`#version 300 es
+precision highp float;
+uniform int u_mode;in vec4 vC;out vec4 o;
+void main(){float a=vC.a;
+ if(u_mode>0){vec2 q=gl_PointCoord*2.0-1.0;float d=length(q);if(d>1.0)discard;
+   a*=(u_mode==2)?smoothstep(0.52,0.70,d)*(1.0-smoothstep(0.88,1.0,d))
+                 :1.0-smoothstep(0.67,1.0,d);}
+ o=vec4(vC.rgb,a);}`;
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);
+  if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+const prog=(()=>{const p=gl.createProgram();gl.attachShader(p,sh(gl.VERTEX_SHADER,VS));
+  gl.attachShader(p,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));return p;})();
+const U=n=>gl.getUniformLocation(prog,n);
+const u_proj=U('u_proj'),u_view=U('u_view'),u_dpr=U('u_dpr'),u_mode=U('u_mode');
+// pos(3) col(4) size(1) = 8 floats per vertex, one layout for every buffer here
+const STRIDE=32;
+function mkVao(buf){const v=gl.createVertexArray();gl.bindVertexArray(v);
+  gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  [['a_p',3,0],['a_col',4,12],['a_sz',1,28]].forEach(([n,sz,off])=>{
+    const l=gl.getAttribLocation(prog,n);gl.enableVertexAttribArray(l);
+    gl.vertexAttribPointer(l,sz,gl.FLOAT,false,STRIDE,off);});
+  gl.bindVertexArray(null);return v;}
+const bufLine=gl.createBuffer(),bufDot=gl.createBuffer(),bufPath=gl.createBuffer(),bufLive=gl.createBuffer();
+const vaoLine=mkVao(bufLine),vaoDot=mkVao(bufDot),vaoPath=mkVao(bufPath),vaoLive=mkVao(bufLive);
+// Opaque white, as points.html is: the overlays blend at partial alpha, and compositing those onto
+// a transparent buffer through the page would need premultiplied output to be right.
+//
+// NO DEPTH TEST, unlike points.html — there is no solid geometry here to occlude anything, and the
+// three dots of one sample sit within a pixel of each other at the default framing, so a depth test
+// would decide arbitrarily which of them survives. Painter's order does it deliberately instead:
+// context, then the interval, then the dots, then the point at t.
+gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+gl.clearColor(1,1,1,1);
+
+// Palette, in the teaser's roles: canonical red, left knot blue, right knot green, the arc between
+// them teal, and the point itself at t in the page's ink. Retinted for a white panel — the teaser's
+// pastels vanish here — but the hues are the figure's, so the panel and the paper read alike.
+const C_CANON=[0.84,0.33,0.29],C_K0=[0.24,0.51,0.82],C_K1=[0.20,0.62,0.42],
+      C_ARC=[0.09,0.64,0.72],C_NOW=[0.08,0.10,0.13],C_PATH=[0.56,0.61,0.68];
+
+// ===== orbit camera (world Z up) =====
+// field.html's camera VERBATIM — same eye formula from (yaw, pitch, dist, target), same
+// screen-down u, same Y-flipped projection. The two panels are camera-linked, so a difference here
+// would frame the same orbit state as two different views — checked offline against the projected
+// geometry: right-handed, orthonormal, and every drawn point inside the viewport at the opening pose.
+const UP=[0,0,1];      // canonical D-NeRF frame: the floor is the xy plane, z is vertical
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const norm=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];};
+const _e=parseFloat(Q.get('elev')),CAM_ELEV=(Number.isFinite(_e)?_e:18)*Math.PI/180;
+const _z=parseFloat(Q.get('zoom')),CAM_ZOOM=Number.isFinite(_z)?_z:1.42;
+const cam={yaw:0,pitch:.4,dist:6,target:[0,0,0]};
+let home={yaw:0,pitch:.4,dist:6,target:[0,0,0]},camMeta=null;
+function camBasis(){
+  const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch),cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+  const eye=[cam.target[0]+cam.dist*cp*sy,cam.target[1]+cam.dist*cp*cy,cam.target[2]+cam.dist*sp];
+  const f=norm([cam.target[0]-eye[0],cam.target[1]-eye[1],cam.target[2]-eye[2]]);
+  const u=norm([-(UP[0]-f[0]*dot(UP,f)),-(UP[1]-f[1]*dot(UP,f)),-(UP[2]-f[2]*dot(UP,f))]);
+  return {eye,f,u,r:cross(u,f)};
+}
+function viewMatrix(){const{eye,f,r,u}=camBasis();
+  return[r[0],u[0],f[0],0, r[1],u[1],f[1],0, r[2],u[2],f[2],0,
+         -dot(r,eye),-dot(u,eye),-dot(f,eye),1];}
+function projMatrix(w,h,fx,fy){const zn=Math.min(0.5,Math.max(0.02,cam.dist*0.02)),zf=cam.dist*20+100;
+  return[2*fx/w,0,0,0, 0,-2*fy/h,0,0, 0,0,zf/(zf-zn),1, 0,0,-(zf*zn)/(zf-zn),0];}
+// The same opening pose the panel beside this one computes, from the same test camera and the same
+// elev/zoom defaults, so the two agree before either has moved. A pose already adopted from that
+// panel wins, though — see applyCam().
+function frameScene(){
+  let yaw=cam.yaw,pitch=cam.pitch,dist=cam.dist;
+  if(camMeta){
+    const e=camMeta.campos.map(v=>v*CAM_ZOOM),d=Math.hypot(e[0],e[1],e[2])||1;
+    dist=d;pitch=Math.max(-1.45,Math.min(1.45,Math.asin(e[2]/d)+CAM_ELEV));
+    yaw=Math.atan2(e[0],e[1]);
+  }
+  home={yaw,pitch,dist,target:[0,0,0]};
+  if(!adopted){cam.yaw=yaw;cam.pitch=pitch;cam.dist=dist;cam.target=[0,0,0];}
+}
+const ptrs=new Map();let mode=null,lastX=0,lastY=0,pinch0=0,dist0=0;
+const mid=()=>{const v=[...ptrs.values()];return[(v[0].x+v[1].x)/2,(v[0].y+v[1].y)/2];};
+const spread=()=>{const v=[...ptrs.values()];return Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y)||1;};
+function panBy(dx,dy){const{r,u}=camBasis(),s=cam.dist*0.0015;
+  for(let c=0;c<3;c++)cam.target[c]+=-r[c]*dx*s-u[c]*dy*s;}     // u is screen-down, hence -u
+canvas.addEventListener('pointerdown',e=>{
+  canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1){mode=(e.shiftKey||e.button===2)?'pan':'orbit';lastX=e.clientX;lastY=e.clientY;}
+  else if(ptrs.size===2){mode='pinch';pinch0=spread();dist0=cam.dist;[lastX,lastY]=mid();}
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!ptrs.has(e.pointerId))return;
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(mode==='pinch'&&ptrs.size>=2){
+    cam.dist=Math.max(1e-3,dist0*pinch0/spread());
+    const[mx,my]=mid();panBy(mx-lastX,my-lastY);lastX=mx;lastY=my;return;}
+  if(ptrs.size!==1)return;
+  const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;
+  if(mode==='pan')panBy(dx,dy);
+  else{cam.yaw+=dx*0.006;cam.pitch=Math.max(-1.45,Math.min(1.45,cam.pitch-dy*0.006));}
+});
+const drop=e=>{ptrs.delete(e.pointerId);
+  if(ptrs.size===1){mode='orbit';const v=[...ptrs.values()][0];lastX=v.x;lastY=v.y;}
+  else if(!ptrs.size)mode=null;};
+canvas.addEventListener('pointerup',drop);canvas.addEventListener('pointercancel',drop);
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('wheel',e=>{e.preventDefault();cam.dist*=Math.exp(e.deltaY*0.001);},{passive:false});
+function resize(){const dpr=Math.min(devicePixelRatio||1,2);
+  canvas.width=Math.max(1,Math.floor(canvas.clientWidth*dpr));canvas.height=Math.max(1,Math.floor(canvas.clientHeight*dpr));}
+addEventListener('resize',resize);
+
+// ===== state =====
+const S={t:0,frames:1,meta:null,can:null,d:null,v:null,K:0,N:0,
+         // view options, host-driven (see the `view` message); every one of them is also the
+         // static geometry's cache key, since each changes what is in that buffer
+         count:300,links:true,tangents:true,tanScale:120,path:true,   // host overrides all of these
+         key:'',pathKey:'',nLine:0,nDot:0,nPath:0,
+         fps:0,fpsN:0,fpsT:0,started:false};
+
+// ===== the curve =====
+// FusedExplicitPolynomials.interpolate / DefGaussianExplicitSplines.get_knots_from_timestep, in
+// the browser. The bundle's parity block is what proves these two agree with torch.
+const basis=t=>{const t2=t*t,t3=t2*t;
+  return[2*t3-3*t2+1, t3-2*t2+t, -2*t3+3*t2, t3-t2];};
+function bracket(t){const ni=S.meta.num_intervals;
+  let l=Math.floor(t*ni);if(l>=ni)l=ni-1;if(l<0)l=0;return{l,r:l+1,tr:t*ni-l};}
+// World position of sample i at t_rel inside interval (l -> l+1), into out[0..2].
+function evalAt(i,l,tr,out){const b=basis(tr),o=3*i,K=S.N*3,a=l*K+o,c=(l+1)*K+o;
+  for(let k=0;k<3;k++)out[k]=S.can[o+k]+b[0]*S.d[a+k]+b[1]*S.v[a+k]+b[2]*S.d[c+k]+b[3]*S.v[c+k];}
+
+// ===== geometry =====
+// A tiny writer over an interleaved (pos, rgba, size) buffer. Everything drawn here is built on the
+// CPU and uploaded whole; the buffers are small (the default 300 samples is ~0.6 MB of lines) and
+// rebuilt only when the interval or an option changes, never per frame.
+// Buffers are reused across rebuilds rather than reallocated: the interval one is rebuilt every
+// time the playhead crosses a knot, i.e. about every other frame at 30 fps, and at the top of the
+// sample slider that is 3.5 MB of garbage per rebuild if it is freshly allocated each time.
+const _pool={};
+function scratch(name,len){const p=_pool[name];
+  if(p&&p.length>=len)return p;return(_pool[name]=new Float32Array(len));}
+function W(arr){return{a:arr,n:0,
+  v(x,y,z,c,al,sz){const o=this.n*8;this.a[o]=x;this.a[o+1]=y;this.a[o+2]=z;
+    this.a[o+3]=c[0];this.a[o+4]=c[1];this.a[o+5]=c[2];this.a[o+6]=al;this.a[o+7]=sz||0;this.n++;},
+  seg(p,q,c,al){this.v(p[0],p[1],p[2],c,al,0);this.v(q[0],q[1],q[2],c,al,0);}};}
+const DASH=6, ARC=14;                       // dashes per canonical link; segments along the arc
+// Per sample: 2 links x DASH + ARC + 2 tangents x (shaft + 4 barbs)
+const SEG_PER=2*DASH+ARC+2*5;
+function lerp3(p,q,f){return[p[0]+(q[0]-p[0])*f,p[1]+(q[1]-p[1])*f,p[2]+(q[2]-p[2])*f];}
+// Four barbs rather than two, on two perpendiculars, so the head reads from any orbit angle. The
+// perpendicular is world-derived (not view-derived) because this buffer outlives the frame.
+function arrow(w,p,dir,len,c,al){
+  const L=Math.hypot(dir[0],dir[1],dir[2]);if(L<1e-12)return;
+  const u=[dir[0]/L,dir[1]/L,dir[2]/L];
+  const tip=[p[0]+u[0]*len,p[1]+u[1]*len,p[2]+u[2]*len];
+  w.seg(p,tip,c,al);
+  let a=cross(u,UP);if(Math.hypot(a[0],a[1],a[2])<1e-6)a=cross(u,[1,0,0]);
+  a=norm(a);const b=cross(u,a);
+  const back=[tip[0]-u[0]*len*0.3,tip[1]-u[1]*len*0.3,tip[2]-u[2]*len*0.3],s=len*0.14;
+  for(const[sx,sy]of[[1,0],[-1,0],[0,1],[0,-1]])
+    w.seg(tip,[back[0]+(a[0]*sx+b[0]*sy)*s,back[1]+(a[1]*sx+b[1]*sy)*s,
+               back[2]+(a[2]*sx+b[2]*sy)*s],c,al);
+}
+// Everything that depends on WHICH interval we are in. Rebuilt when the playhead crosses a knot
+// (about every other frame at 30 fps, which is what a 75-knot spline over 150 frames means) or
+// when an option moves.
+function buildInterval(l){
+  const n=Math.min(S.count,S.N),r=l+1,K=S.N*3;
+  const line=W(scratch('line',n*SEG_PER*2*8)),dots=W(scratch('dot',n*3*8));
+  const p0=[0,0,0],p1=[0,0,0],cn=[0,0,0],t0=[0,0,0],t1=[0,0,0];
+  for(let i=0;i<n;i++){
+    const o=3*i,a=l*K+o,c=r*K+o;
+    for(let k=0;k<3;k++){
+      cn[k]=S.can[o+k];p0[k]=cn[k]+S.d[a+k];p1[k]=cn[k]+S.d[c+k];
+      t0[k]=S.v[a+k];t1[k]=S.v[c+k];
+    }
+    // Φ_θ: the canonical point and where the field puts it. Dashed, because it is a mapping and
+    // not a path the point travels along — the arc below is the path.
+    if(S.links)for(const[q,col]of[[p0,C_K0],[p1,C_K1]])
+      for(let j=0;j<DASH;j++){const f=j/DASH;
+        line.seg(lerp3(cn,q,f),lerp3(cn,q,f+0.62/DASH),col,0.3);}
+    // The arc itself, coloured from the left knot to the right one so its direction is readable
+    // even when the whole segment is a few pixels long.
+    let prev=p0.slice();
+    for(let j=1;j<=ARC;j++){const f=j/ARC,b=basis(f),q=[0,0,0];
+      for(let k=0;k<3;k++)q[k]=cn[k]+b[0]*S.d[a+k]+b[1]*S.v[a+k]+b[2]*S.d[c+k]+b[3]*S.v[c+k];
+      line.seg(prev,q,C_ARC,0.85);prev=q;}
+    // ONLY the stored tangents are drawn — v_xyz at each end of the interval, nothing derived.
+    // The secant (p1-p0, where the point actually travels) was drawn beside them for a while, since
+    // the two disagree sharply and the arrows read as broken without it; it was removed on purpose.
+    // A quantity computed here, sitting next to one the model stores, reads as though the model
+    // produced both. The disagreement is documented instead — in this file's header, in the
+    // control's tooltip and in CLAUDE.md — where it cannot be mistaken for the model's own output.
+    if(S.tangents){
+      arrow(line,p0,t0,Math.hypot(t0[0],t0[1],t0[2])*S.tanScale,C_K0,0.9);
+      arrow(line,p1,t1,Math.hypot(t1[0],t1[1],t1[2])*S.tanScale,C_K1,0.9);
+    }
+    dots.v(cn[0],cn[1],cn[2],C_CANON,0.85,3.6);
+    dots.v(p0[0],p0[1],p0[2],C_K0,0.95,4.4);
+    dots.v(p1[0],p1[1],p1[2],C_K1,0.95,4.4);
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufLine);
+  gl.bufferData(gl.ARRAY_BUFFER,line.a.subarray(0,line.n*8),gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufDot);
+  gl.bufferData(gl.ARRAY_BUFFER,dots.a.subarray(0,dots.n*8),gl.DYNAMIC_DRAW);
+  S.nLine=line.n;S.nDot=dots.n;
+}
+// The whole trajectory, knot to knot. Time-independent, so it is built once per sample count and
+// never touched by the clock. It is what makes the highlighted interval legible: one interval is
+// 1/74 of this, which alone would be a dot.
+function buildPath(){
+  const n=Math.min(S.count,S.N),K=S.N*3;
+  if(!S.path){S.nPath=0;return;}
+  const w=W(scratch('path',n*(S.K-1)*2*8)),p=[0,0,0],q=[0,0,0];
+  for(let i=0;i<n;i++){
+    const o=3*i;
+    for(let k=0;k<3;k++)p[k]=S.can[o+k]+S.d[o+k];
+    for(let j=1;j<S.K;j++){
+      for(let k=0;k<3;k++)q[k]=S.can[o+k]+S.d[j*K+o+k];
+      w.seg(p,q,C_PATH,0.22);p[0]=q[0];p[1]=q[1];p[2]=q[2];
+    }
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufPath);
+  gl.bufferData(gl.ARRAY_BUFFER,w.a.subarray(0,w.n*8),gl.DYNAMIC_DRAW);
+  S.nPath=w.n;
+}
+// The one thing that does change every frame: where the points actually are at t.
+function buildLive(l,tr){
+  const n=Math.min(S.count,S.N),a=scratch('live',n*8),w=W(a),p=[0,0,0];
+  for(let i=0;i<n;i++){evalAt(i,l,tr,p);w.v(p[0],p[1],p[2],C_NOW,0.95,9.0);}
+  gl.bindBuffer(gl.ARRAY_BUFFER,bufLive);
+  gl.bufferData(gl.ARRAY_BUFFER,a.subarray(0,n*8),gl.DYNAMIC_DRAW);
+  return n;
+}
+
+// ===== load =====
+async function boot(){
+  stage('loading the knot bundle…',5);
+  const meta=JSON.parse(new TextDecoder().decode(
+    new Uint8Array(await grab(BUNDLE,'loading the knot bundle…',[5,12]))));
+  S.meta=meta;S.frames=meta.num_frames;S.K=meta.capacity;S.N=meta.num_points;
+  camMeta=meta.camera||null;
+  if(meta.curve!=='cubic_hermite')throw new Error('unsupported curve '+meta.curve);
+
+  const base=BUNDLE.replace(/[^/]*$/,'');
+  const buf=await grab(base+meta.bin,'loading knot offsets and tangents…',[12,88]);
+  stage('checking the bundle…',90);
+  const A=meta.arrays;
+  S.can=new Float32Array(buf,A.canonical.offset,A.canonical.bytes/4);
+  S.d=deq(buf,A.d_xyz);S.v=deq(buf,A.v_xyz);
+  parity(meta.parity);
+
+  stage('building the figure…',95);
+  frameScene();resize();
+  rebuild(true);
+  loadEl.classList.add('hide');hudEl.classList.add('on');
+  hudEl.textContent='knot 0 → 1  ·  t 0.00  ·  v_xyz ×'+S.tanScale;   // the fps line takes a second
+  S.started=true;requestAnimationFrame(frame);
+  post({type:'ready',frames:S.frames,splats:S.N,sampleMax:S.N,
+        note:S.N.toLocaleString()+' moving gaussians × '+S.K+' knots'});
+  post({type:'buffered',end:S.frames});
+}
+// int16 codes on a per-component (zero, scale) grid — see export_knots.py for why not float16.
+function deq(buf,a){
+  const codes=new Int16Array(buf,a.offset,a.bytes/2),out=new Float32Array(codes.length),
+        C=a.shape[a.shape.length-1];
+  for(let i=0;i<codes.length;i++){const c=i%C;out[i]=codes[i]*a.scale[c]+a.zero[c];}
+  return out;
+}
+// The bundle carries torch-computed positions at a few (point, t) pairs. If this page's dequant or
+// its Hermite disagrees, refuse to draw rather than render a curve that is subtly not the model's —
+// the same contract traj.js has with traj_codec.py.
+function parity(p){
+  if(!p)return;
+  let worst=0;const out=[0,0,0];
+  p.t.forEach((t,ti)=>{
+    const{l,tr}=bracket(t);
+    p.points.forEach((idx,pi)=>{
+      evalAt(idx,l,tr,out);
+      for(let k=0;k<3;k++)worst=Math.max(worst,Math.abs(out[k]-p.pos[ti][pi][k]));
+    });
+  });
+  if(worst>p.tol)throw new Error('knot bundle failed its parity check ('+worst.toExponential(2)
+    +' > '+p.tol.toExponential(2)+') — the page and the exporter disagree');
+}
+
+// ===== per-frame =====
+function rebuild(force){
+  const{l}=bracket(S.t);
+  const key=[l,S.count,S.links?1:0,S.tangents?1:0,S.tanScale].join('|');
+  if(force||key!==S.key){S.key=key;buildInterval(l);}
+  const pk=[S.count,S.path?1:0].join('|');
+  if(force||pk!==S.pathKey){S.pathKey=pk;buildPath();}
+}
+function frame(t){
+  requestAnimationFrame(frame);
+  if(!S.started)return;
+  const{l,tr}=bracket(S.t);
+  rebuild(false);
+  const nLive=buildLive(l,tr);
+  S.fpsN++;if(t-S.fpsT>1000){S.fps=Math.round(S.fpsN*1000/(t-S.fpsT));S.fpsN=0;S.fpsT=t;
+    post({type:'stats',fps:S.fps,splats:Math.min(S.count,S.N)});
+    hudEl.textContent='knot '+l+' → '+(l+1)+'  ·  t '+tr.toFixed(2)
+      +'  ·  v_xyz ×'+S.tanScale+'  ·  '+S.fps+' fps';}
+  const vw=canvas.width,vh=canvas.height;
+  gl.viewport(0,0,vw,vh);gl.clear(gl.COLOR_BUFFER_BIT);   // no depth test, so nothing writes depth
+  const fov=camMeta?Math.max(camMeta.fovx,camMeta.fovy):1.1;
+  const fx=0.5*Math.min(vw,vh)/Math.tan(fov/2);
+  const view=viewMatrix(),proj=projMatrix(vw,vh,fx,fx);
+  gl.useProgram(prog);
+  gl.uniformMatrix4fv(u_proj,false,proj);gl.uniformMatrix4fv(u_view,false,view);
+  gl.uniform1f(u_dpr,Math.min(devicePixelRatio||1,2));
+  // Context first, then the interval on top of it, then the dots — the later a thing is drawn the
+  // more of it survives the blend where they overlap, and the dots are the reading.
+  gl.uniform1i(u_mode,0);
+  if(S.nPath){gl.bindVertexArray(vaoPath);gl.drawArrays(gl.LINES,0,S.nPath);}
+  if(S.nLine){gl.bindVertexArray(vaoLine);gl.drawArrays(gl.LINES,0,S.nLine);}
+  gl.uniform1i(u_mode,1);
+  if(S.nDot){gl.bindVertexArray(vaoDot);gl.drawArrays(gl.POINTS,0,S.nDot);}
+  gl.uniform1i(u_mode,2);               // the point at t, as a ring around the two knot dots
+  if(nLive){gl.bindVertexArray(vaoLive);gl.drawArrays(gl.POINTS,0,nLive);}
+  gl.bindVertexArray(null);
+  pushCam();
+}
+
+// ===== host messages =====
+// The camera is linked across the card, so the pose goes out whenever it actually changes and the
+// panel adopts one that arrives. Applying a remote pose also updates `sent`, so an adopted pose is
+// never echoed back — two panels bouncing the same orbit state at each other would drift.
+let sent=null,adopted=false;
+function pushCam(){
+  const c=[cam.yaw,cam.pitch,cam.dist,cam.target[0],cam.target[1],cam.target[2]];
+  if(sent&&c.every((v,i)=>Math.abs(v-sent[i])<1e-9))return;
+  sent=c;post({type:'cam',orbit:{yaw:cam.yaw,pitch:cam.pitch,dist:cam.dist,target:cam.target.slice()}});
+}
+function applyCam(o){
+  if(!o)return;
+  cam.yaw=o.yaw;cam.pitch=o.pitch;cam.dist=o.dist;cam.target=o.target.slice();
+  sent=[cam.yaw,cam.pitch,cam.dist,cam.target[0],cam.target[1],cam.target[2]];
+  adopted=true;      // …so a later frameScene() does not yank the pair back to the opening pose
+}
+let _hello=0;
+function hello(){post({type:'hello',bundle:BUNDLE});_hello=setTimeout(hello,600);}
+addEventListener('message',e=>{
+  if(e.origin!==location.origin)return;const m=e.data;
+  if(!m||m.ch!=='spdef'||m.to!==ID)return;
+  if(m.type==='view'||m.type==='seek')clearTimeout(_hello);
+  if(m.type==='seek'){S.t=S.frames>1?Math.min(Math.max(m.frame/(S.frames-1),0),1):0;}
+  else if(m.type==='resetView'){cam.yaw=home.yaw;cam.pitch=home.pitch;cam.dist=home.dist;
+    cam.target=home.target.slice();}
+  else if(m.type==='cam')applyCam(m.orbit);
+  else if(m.type==='view'){
+    // The host sends the whole option set every time (including the sibling panel's keys, which
+    // are simply not read here), so this stays idempotent.
+    if(m.knSamples!=null)S.count=m.knSamples;
+    if(m.knLinks!=null)S.links=!!m.knLinks;
+    if(m.knTangents!=null)S.tangents=!!m.knTangents;
+    if(m.knScale!=null)S.tanScale=m.knScale;
+    if(m.knPath!=null)S.path=!!m.knPath;
+    if(S.started)rebuild(true);}
+  else if(m.type==='error')showErr(m.msg);
+});
+
+if(HOST)hello();
+boot().then(()=>{
+  // Standalone (the same fallback viewer.html, points.html and field.html keep): run the clock here
+  // so the panel stays debuggable on its own. Hosted, the host owns the clock and this never starts.
+  if(HOST)return;
+  let t0=null;const FPS=30;
+  requestAnimationFrame(function play(t){requestAnimationFrame(play);
+    if(t0===null){t0=t;return;}
+    S.t=(S.t+(t-t0)/1000*FPS/Math.max(1,S.frames-1))%1;t0=t;});
+}).catch(e=>{console.error(e);showErr(e.message||e);});
+</script>
+</body>
+</html>

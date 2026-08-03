@@ -14,6 +14,7 @@ committed, and a root-absolute path that breaks the project-site subpath deploy.
 Exit code 0 = all clear, 1 = at least one FAIL.
 """
 import html.parser
+import json
 import os
 import re
 import socket
@@ -29,6 +30,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
          "projects/spdef/viewer.html", "projects/spdef/points.html",
          "projects/spdef/triplanes.html", "projects/spdef/field.html",
+         "projects/spdef/knots.html",
          "projects/grain/index.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
@@ -273,6 +275,10 @@ def local_refs(src):
                 # bundle folder fails only once someone opens the page. Anchored on the manifest's
                 # `.json`, so the `?scene=…` in a prose comment is not mistaken for a path.
                 r'[?&](?:scene|bundle)=([\w./-]+\.json)',
+                # …and the manifests named in the SpDef host's own config tables (a pane's `url`,
+                # and the per-example table the tri-plane card's picker switches between). Those
+                # are the only mention of the non-default example's assets anywhere in the page.
+                r"url\s*:\s*['\"]([\w./-]+\.json)['\"]",
                 # assets named only by a JS constant and fetched through the variable, so no
                 # fetch()/src= literal ever mentions them (the grain page's params and sample)
                 r"_URL\s*=\s*['\"]([^'\"]+)['\"]",
@@ -306,6 +312,17 @@ def check_assets(page, src):
             bad.append(ref)
         else:
             n += 1
+            # A bundle manifest names its own binary, and nothing in any page mentions that
+            # file — the knot panel's meta.json points at knots.bin, and a manifest committed
+            # without its payload would fail only in the browser, at load, as a blank canvas.
+            if os.path.basename(target) == "meta.json":
+                try:
+                    blob = (json.load(open(target, encoding="utf-8")) or {}).get("bin")
+                except ValueError:
+                    blob = None
+                    bad.append(f"{ref} (not valid JSON)")
+                if blob and not os.path.exists(os.path.join(os.path.dirname(target), blob)):
+                    bad.append(f"{ref} -> {blob} (manifest's binary)")
     for b in bad:
         fail(page, f"missing on disk: {b}")
     if not bad:

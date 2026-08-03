@@ -125,7 +125,14 @@
   .tload{background:var(--accent);border-color:var(--accent)}
   .tload:hover:not(:disabled){background:#17498f;border-color:#17498f}
   .tload:disabled{opacity:.55}
-  #abScrub,#amScrub,#ptScrub{flex:1 1 170px;min-width:110px;accent-color:var(--accent)}
+  #abScrub,#amScrub,#ptScrub,#fdScrub{flex:1 1 170px;min-width:110px;accent-color:var(--accent)}
+  /* The example picker. Same box as a .tbtn so the row reads as one set of controls; the label sits
+     outside the <select> rather than inside it as a placeholder option, which would be selectable. */
+  .tsel{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+  .tsel select{font:inherit;font-size:12.5px;font-weight:600;padding:5px 9px;border:1px solid var(--line);
+               border-radius:8px;background:var(--bg);color:var(--ink);cursor:pointer;
+               transition:color .16s,border-color .16s}
+  .tsel select:hover{color:var(--accent);border-color:var(--accent)}
   /* Frame steppers. Narrower than a .tbtn because they carry one glyph, and monospaced so the two
      arrows sit on the same optical baseline as the frame readout beside them. */
   .tstep{padding:5px 9px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -353,11 +360,11 @@
     <article class="subcard">
       <div class="subhd">
         <h3>What the model actually stores</h3>
-        <p class="subtag">D-NeRF <em>bouncingballs</em> · 14,534 canonical gaussians · three 128&times;128&times;32 tri-planes · 1.0 MB</p>
+        <p class="subtag" id="fdTag">D-NeRF <em>bouncingballs</em> · 14,534 canonical gaussians · three 128&times;128&times;32 tri-planes · 1,500 of them sampled at all 75 knots · 2.4 MB</p>
       </div>
-      <p class="lede">A plane at time <em>t</em> is <strong>base + &Sigma;<sub>r</sub> w<sub>r</sub>(t)&middot;res<sub>r</sub></strong> — one fixed plane plus six more, scaled by six numbers. Press play and watch what moves: the canonical cloud stays exactly where it is, and the sheets change. The plane axes are the world axes, and each sheet cell sits where the field samples it, which is why a sheet reads as the cloud’s shadow on that wall. Switch on <em>cast to the planes</em> to draw the lookup itself: the line from a gaussian’s centre to the foot of its perpendicular on each face is the address the field is read at, and the sheet colour where it lands is the value that comes back. <em>Hard ellipsoids</em> turns the soft splats into the points they actually are — shrink the radius to pull them apart.</p>
+      <p class="lede">A plane at time <em>t</em> is <strong>base + &Sigma;<sub>r</sub> w<sub>r</sub>(t)&middot;res<sub>r</sub></strong> — one fixed plane plus <span id="fdRank">six more, scaled by six numbers</span>. Press play and watch what moves: the canonical cloud stays exactly where it is, and the sheets change. The plane axes are the world axes, and each sheet cell sits where the field samples it, which is why a sheet reads as the cloud’s shadow on that wall. Switch on <em>cast to the planes</em> to draw the lookup itself: the line from a gaussian’s centre to the foot of its perpendicular on each face is the address the field is read at, and the sheet colour where it lands is the value that comes back. <em>Hard ellipsoids</em> turns the soft splats into the points they actually are — shrink the radius to pull them apart. Beside it is the same field’s output: a sample of those gaussians pushed to the two knots the playhead sits between, the tangent each one leaves its knot with, and the arc the renderer evaluates in between.</p>
 
-    <div class="ab ab1">
+    <div class="ab">
       <figure class="pane">
         <figcaption><span class="ptitle">Canonical cloud + the field that moves it</span><span class="ptag">one sorted splat pass · sheet cells are gaussians too</span></figcaption>
         <div class="stagebox idle">
@@ -366,11 +373,25 @@
           <p class="idlemsg">not loaded</p>
         </div>
       </figure>
+      <figure class="pane">
+        <figcaption><span class="ptitle">…and where it pushes them at the knots</span><span class="ptag">the interval under the playhead · offsets and stored tangents</span></figcaption>
+        <div class="stagebox idle">
+          <iframe id="paneH" title="Interactive viewer: a sample of canonical gaussians, the two spline knots bracketing the current time, their tangents and the arc between them"
+                  data-src="knots.html?bundle=knots/bouncingballs/meta.json&amp;id=knots"></iframe>
+          <p class="idlemsg">not loaded</p>
+        </div>
+      </figure>
     </div>
 
     <div class="transport">
-      <button id="fdLoad" class="tbtn tload">Load this figure · 1.0 MB</button>
-      <button id="fdClear" class="tbtn" hidden title="Unload this figure — discards the cloud, the tri-plane atlases and its WebGL context">✕ clear</button>
+      <label class="tsel" title="Which trained model this figure is showing. Both panels change together, and switching reloads them.">Example
+        <select id="fdScene">
+          <option value="balls">D-NeRF bouncingballs · 75 knots, rank 6</option>
+          <option value="lego">D-NeRF lego · 7 knots, rank 1</option>
+        </select>
+      </label>
+      <button id="fdLoad" class="tbtn tload">Load this figure · 2.4 MB</button>
+      <button id="fdClear" class="tbtn" hidden title="Unload this figure — discards the cloud, the tri-plane atlases, the knot bundle and both WebGL contexts">✕ clear</button>
       <button id="fdPlay" class="tbtn" disabled>▶ play</button>
       <label class="vslide" title="Playback rate, relative to the sequence's own 30 fps. The planes are affine in the six weights, so any rate evaluates them exactly — nothing is repeated or dropped.">Speed <input id="fdSpeed" type="range" min="10" max="200" step="5" value="100"><output id="fdSpeedN">1.00×</output></label>
       <input id="fdScrub" type="range" min="0" max="0" step="any" value="0" aria-label="Timeline position" disabled>
@@ -381,7 +402,7 @@
 
     <div class="viewopts" id="fdOpts" data-kind="field">
       <div class="vrow" data-o="rowSheets">
-        <label class="tchk" title="The plane spanning the x and y axes, on the low-z face of the field's bounding box"><input type="checkbox" data-o="sxy" checked> xy sheet</label>
+        <label class="tchk" title="The plane spanning the x and y axes, on the low-z face of the field's bounding box"><input type="checkbox" data-o="sxy" checked> xy</label>
         <label class="tchk" title="The plane spanning the x and z axes, on the high-y face"><input type="checkbox" data-o="sxz" checked> xz</label>
         <label class="tchk" title="The plane spanning the y and z axes, on the high-x face"><input type="checkbox" data-o="syz" checked> yz</label>
         <label class="tchk" title="The canonical gaussians — the pose the field deforms away from"><input type="checkbox" data-o="cloud" checked> Canonical cloud</label>
@@ -395,11 +416,20 @@
         <label class="tchk" title="Draw each sampled gaussian's perpendicular onto the three faces — the exact place the field is read for it. A line only goes to a sheet that is switched on."><input type="checkbox" data-o="cast"> Cast to the planes</label>
         <label class="vslide" title="How many gaussians cast lines, sampled evenly through the cloud">Lines <input type="range" data-o="castN" min="20" max="3000" step="20" value="400"><output data-o="castNN">400</output></label>
       </div>
+      <div class="vrow" data-o="rowKnots">
+        <label class="vslide" title="How many moving gaussians the knot panel draws. The bundle's rows are shuffled, so any count is an even sample of the cloud.">Samples <input type="range" data-o="knN" min="20" max="1500" step="20" value="300"><output data-o="knNN">300</output></label>
+        <label class="tchk" title="Dash a line from each canonical point to where the field puts it at either knot — the mapping the figure is about"><input type="checkbox" data-o="knLinks" checked> From canonical</label>
+        <label class="tchk" title="Draw each sampled point's whole trajectory, knot to knot, behind the current interval. One interval is 1/74 of it, so without this the highlighted piece has nothing to be small against."><input type="checkbox" data-o="knPath" checked> Whole path</label>
+      </div>
+      <div class="vrow" data-o="rowTan">
+        <label class="tchk" title="The tangent the cubic Hermite leaves each knot with — the stored v_xyz head — at the left knot (blue) and the right one (green). These are the model's own vectors and nothing derived, so do not expect them to point along the path: at a knot every two frames the straight part already explains the motion, the tangents move the curve by under a tenth of the interval's chord, and the trained ones come out about ten times shorter than that chord and some 64° away from it."><input type="checkbox" data-o="knTan" checked> Tangents</label>
+        <label class="vslide" title="Arrow length as a multiple of the true tangent. The tangent is the derivative per knot interval and this field's are about a tenth of the interval's own chord, so at true scale the arrows are sub-pixel; the panel's readout always states the factor in use.">Scale <input type="range" data-o="knScale" min="1" max="400" step="1" value="120"><output data-o="knScaleN">×120</output></label>
+      </div>
     </div>
     <p class="hint">Want the planes flat, with the six weight curves and the other ways of reading them — the template, each residual on its own, and where the field does most of its work? <a href="triplanes.html">Open the tri-plane inspector</a>.</p>
     </article>
 
-    <p class="hint">The two gaussian comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load; the trajectory demo and the tri-plane figure need no decoder at all — the first streams its knots as you scrub, the second evaluates its planes on the GPU from six numbers per frame. Each card loads only when you ask for it, and <em>clear</em> gives it back — scenes, renderers and decoded motion — if you would rather not hold them all at once. Once a card is loaded: drag inside a panel to orbit · in the gaussian panels, scroll to change fly speed and W/A/S/D and Q/E to move the focused one; in the trajectory and tri-plane panels, scroll or pinch to zoom and shift-drag or two-finger drag to pan. On a touch device an on-screen stick and up/down buttons appear on the first gaussian panel — the others follow, since the cameras are linked.</p>
+    <p class="hint">The two gaussian comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load; the trajectory demo and the tri-plane figure need no decoder at all — the first streams its knots as you scrub, the second evaluates its planes on the GPU from six numbers per frame. Each card loads only when you ask for it, and <em>clear</em> gives it back — scenes, renderers and decoded motion — if you would rather not hold them all at once. Once a card is loaded: drag inside a panel to orbit · in the gaussian panels, scroll to change fly speed and W/A/S/D and Q/E to move the focused one; in the trajectory, tri-plane and knot panels, scroll or pinch to zoom and shift-drag or two-finger drag to pan — worth doing in the knot panel, where two consecutive knots are a fraction of a pixel apart until you go in. On a touch device an on-screen stick and up/down buttons appear on the first gaussian panel — the others follow, since the cameras are linked.</p>
   </section>
 
   <section>
@@ -510,6 +540,35 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   //   field  — field.html, the canonical cloud and the tri-planes in one scene. Loads itself like
   //            points (no decoder), and `frac` for the same reason: the planes are affine in the
   //            six temporal weights, so every instant between two knots is evaluated, not replayed.
+  // ---- the tri-plane card's two examples -----------------------------------------------
+  // One card, two trained models, switched by the picker in its transport. Everything that differs
+  // lives here rather than in the markup: the two panel URLs, the manifests (which is what the
+  // asset check in verify.py reads), and the three pieces of prose that state per-model numbers —
+  // the subtag, the Load button's size, and the rank phrase in the lede, none of which any check
+  // can catch if they go stale.
+  //
+  // The two are deliberately far apart in knot density, because that is what the pair shows: at a
+  // knot every 2 frames (bouncingballs) the straight part already explains the motion and the
+  // stored tangents come out a tenth of the interval's chord and ~63° off it; at a knot every ~8
+  // frames (lego) they come out at 1.09x the chord and 8° off, i.e. actually tangent to the path.
+  // Rank differs too — 6 against 1 — which is why the lede's "plus six more" is a swapped span.
+  const FIELD_SCENES=[
+    {key:'balls', mb:'2.4 MB', scale:120,
+     rank:'six more, scaled by six numbers',
+     tag:'D-NeRF <em>bouncingballs</em> · 14,534 canonical gaussians · three 128&times;128&times;32 tri-planes '
+        +'· 1,500 of them sampled at all 75 knots · 2.4 MB',
+     src:{field:'field.html?scene=scenes/bouncingballs_canonical/scene.json&tri=triplanes/bouncingballs/&id=field',
+          knots:'knots.html?bundle=knots/bouncingballs/meta.json&id=knots'},
+     url:{field:'triplanes/bouncingballs/meta.json', knots:'knots/bouncingballs/meta.json'}},
+    {key:'lego', mb:'1.7 MB', scale:10,
+     rank:'one more, scaled by one number',
+     tag:'D-NeRF <em>lego</em> · 51,395 canonical gaussians · three 128&times;128&times;32 tri-planes '
+        +'· 1,500 of them sampled at all 7 knots · 1.7 MB',
+     src:{field:'field.html?scene=scenes/lego_canonical/scene.json&tri=triplanes/lego/&id=field',
+          knots:'knots.html?bundle=knots/lego/meta.json&id=knots'},
+     url:{field:'triplanes/lego/meta.json', knots:'knots/lego/meta.json'}}
+  ];
+
   const GROUPS=[
     {key:'balls',kind:'splat',
      ui:{load:'abLoad',clear:'abClear',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',touch:'abTouch',status:'abStatus',opts:'abOpts'},
@@ -526,8 +585,10 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
      panes:[{id:'anime',  frId:'paneF',url:'points/astra_samba/meta.json',           name:'trajectories'}]},
     {key:'field',kind:'field',frac:true,
      ui:{load:'fdLoad',clear:'fdClear',play:'fdPlay',scrub:'fdScrub',lbl:'fdFrame',reset:'fdReset',status:'fdStatus',opts:'fdOpts',
-         speed:'fdSpeed',speedN:'fdSpeedN'},
-     panes:[{id:'field',  frId:'paneG',url:'triplanes/bouncingballs/meta.json',      name:'the field'}]}
+         speed:'fdSpeed',speedN:'fdSpeedN',scene:'fdScene',tag:'fdTag',rankTxt:'fdRank'},
+     scenes:FIELD_SCENES,
+     panes:[{id:'field',  frId:'paneG',url:'triplanes/bouncingballs/meta.json',      name:'the field'},
+            {id:'knots',  frId:'paneH',url:'knots/bouncingballs/meta.json',          name:'the knots'}]}
   ];
   // Controls each kind's view-option block must expose. They are addressed by data-o rather than by
   // id (the block is repeated per group and ids must stay unique), so a typo here is invisible to
@@ -536,8 +597,13 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     splat:['rowEllip','ellip','ellipR','ellipRN','rowTraj','traj','trajN','trajNN',
            'trajL','trajLN','rowOff','off','offMix','offMixN'],
     points:['rowTrail','trail','trailLen','trailLenN'],
+    // The `field` card carries TWO panels of different renderers — field.html (the storage) and
+    // knots.html (what it predicts) — so one option block feeds both. Each panel reads the keys it
+    // understands and ignores the rest, which is what makes one broadcast `view` message enough.
     field:['rowSheets','sxy','sxz','syz','cloud','alpha','alphaN',
-           'rowEllip','ellip','ellipR','ellipRN','rowCast','cast','castN','castNN']};
+           'rowEllip','ellip','ellipR','ellipRN','rowCast','cast','castN','castNN',
+           'rowKnots','knN','knNN','knLinks','knPath',
+           'rowTan','knTan','knScale','knScaleN']};
   const _ctl=id=>document.getElementById(id);
   const byId=new Map(), ALL=[];
   // Everything about a pane that belongs to ONE load: delivery state, the host's own copies of its
@@ -567,6 +633,10 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       if(!el)throw new Error('view option "'+k+'" missing from #'+g.ui.opts);
       g.o[k]=el;
     }
+    // The markup's own ceilings for the sliders a panel narrows on `ready` (castMax, sampleMax).
+    // Those clamps only ever lower the max, so without a remembered original a card that switched
+    // from a scene with few castable gaussians to one with many would stay stuck at the low bound.
+    g.oMax={};for(const k of['castN','knN'])if(g.o[k])g.oMax[k]=+g.o[k].max;
     g.playing=false;g.gFrame=0;g.total=0;g.acc=0;g.lastT=0;g.loadMsg='loading…';
     g.started=false;g.loaded=false;g.lastCam=null;g.train=null;g.trainSorted=null;
     // Playback rate, frames of the source sequence per second. Only a continuous-clock card can
@@ -650,11 +720,18 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // the canonical cloud only; `cast` draws each sampled gaussian's perpendicular onto the three
     // faces — the address it reads the field at. The panel gates the lines on `sheets` itself, so
     // hiding a plane hides its lines with no second control here.
+    // The kn* keys belong to the knots panel next to it: how many of the bundle's shuffled rows to
+    // draw, whether to dash the canonical→knot mapping, whether to lay the whole trajectory behind
+    // the current interval, and the tangent arrows with their display scale (the trained tangent is
+    // a tenth of the interval chord, so true scale is sub-pixel — the panel names the factor).
     field:g=>({type:'view',
       sheets:[g.o.sxy.checked,g.o.sxz.checked,g.o.syz.checked],
       sheetAlpha:+g.o.alpha.value/100, cloud:g.o.cloud.checked,
       ellip:g.o.ellip.checked,        ellipR:+g.o.ellipR.value/100,
-      cast:g.o.cast.checked,          castCount:+g.o.castN.value})};
+      cast:g.o.cast.checked,          castCount:+g.o.castN.value,
+      knSamples:+g.o.knN.value,       knLinks:g.o.knLinks.checked,
+      knPath:g.o.knPath.checked,      knTangents:g.o.knTan.checked,
+      knScale:+g.o.knScale.value})};
   const viewState=g=>VIEW[g.kind](g);
   // Which controls each kind wires up, and which rows dim when their toggle is off. `rowMark` is
   // deliberately absent: it holds two independent toggles and no sliders, so there is nothing for
@@ -668,9 +745,13 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
            rows:[['rowTrail','trail']]},
     // rowSheets is deliberately NOT in `rows`: it holds four independent toggles, so there is no
     // single one whose off state should dim it. The two rows below it do have one each.
-    field:{chk:['sxy','sxz','syz','cloud','ellip','cast'],slide:['alpha','ellipR','castN'],
-           num:[['alpha','alphaN'],['ellipR','ellipRN',v=>(v/100).toFixed(2)],['castN','castNN']],
-           rows:[['rowEllip','ellip'],['rowCast','cast']]}};
+    // rowKnots is not in `rows` either: it holds the sample count and two independent toggles, so
+    // there is no single one whose off state should dim it.
+    field:{chk:['sxy','sxz','syz','cloud','ellip','cast','knLinks','knPath','knTan'],
+           slide:['alpha','ellipR','castN','knN','knScale'],
+           num:[['alpha','alphaN'],['ellipR','ellipRN',v=>(v/100).toFixed(2)],['castN','castNN'],
+                ['knN','knNN'],['knScale','knScaleN',v=>'×'+v]],
+           rows:[['rowEllip','ellip'],['rowCast','cast'],['rowTan','knTan']]}};
   function pushView(g){
     const w=OPT_WIRING[g.kind];
     for(const[src,out,fmt]of w.num)g.o[out].textContent=fmt?fmt(+g.o[src].value):g.o[src].value;
@@ -719,11 +800,14 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       // the host never opened the bundle, so it has nothing else to say about it. The streamed
       // figure is appended live — as a fraction of the whole sequence, because a counter that only
       // goes up is indistinguishable from one that never stops.
-      const noted=g.panes.find(p=>p.note);
+      // Joined, not first-wins: the tri-plane card runs two panels of different renderers, and each
+      // one is the only thing that can describe what it built.
+      const noted=g.panes.filter(p=>p.note),notes=noted.map(p=>p.note).join(' · ');
+      const mbp=noted.find(p=>p.totalMB);
       const s=g.panes.reduce((a,p)=>Math.max(a,p.splats),0);
-      g.el.status.textContent=(noted
-          ? g.total+' frames · '+noted.note+' · evaluated in your browser'
-            +(noted.totalMB?' · '+noted.mb.toFixed(2)+' of '+noted.totalMB.toFixed(2)+' MB streamed so far.':'.')
+      g.el.status.textContent=(noted.length
+          ? g.total+' frames · '+notes+' · evaluated in your browser'
+            +(mbp?' · '+mbp.mb.toFixed(2)+' of '+mbp.totalMB.toFixed(2)+' MB streamed so far.':'.')
           : g.total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.')
         +(dead.length?'  ·  ✗ '+dead.join(', ')+' failed to load — reload the page to retry.':'');
       return;}
@@ -788,8 +872,15 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       // foot of a perpendicular ON a sheet, so it is skipped, and without this the top of the slider
       // would silently do nothing. Clamp the value too, or the readout can outrun what is drawn.
       if(m.castMax!=null&&g.o.castN){
-        g.o.castN.max=Math.min(+g.o.castN.max,m.castMax);
+        g.o.castN.max=Math.min(g.oMax.castN,m.castMax);
         g.o.castN.value=Math.min(+g.o.castN.value,+g.o.castN.max);
+        pushView(g);
+      }
+      // Same idea for the knot panel: the bundle carries a fixed number of sampled gaussians, and a
+      // slider whose top runs past it would silently do nothing.
+      if(m.sampleMax!=null&&g.o.knN){
+        g.o.knN.max=Math.min(g.oMax.knN,m.sampleMax);
+        g.o.knN.value=Math.min(+g.o.knN.value,+g.o.knN.max);
         pushView(g);
       }
       // Same sequence across a group; if they ever aren't, the shortest bounds that timeline.
@@ -808,7 +899,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       if(minBuffered(g)>0)g.el.play.disabled=false;status(g);}
     // Cameras are always linked WITHIN a group and never across one: the two comparisons are
     // different scenes, so a shared pose would be meaningless.
-    else if(m.type==='cam'){g.lastCam={type:'cam',pos:m.pos,quat:m.quat,speed:m.speed};
+    // Two flavours, one relay. A fly camera (viewer.html) sends a pose and a speed; an orbit camera
+    // (field.html / knots.html) sends its orbit state, since a shared eye is not enough to keep two
+    // turntables in step — the target and the distance are what the pointer handlers actually edit.
+    else if(m.type==='cam'){g.lastCam=m.orbit?{type:'cam',orbit:m.orbit}
+                                             :{type:'cam',pos:m.pos,quat:m.quat,speed:m.speed};
       g.panes.forEach(q=>{if(q!==p)send(q,g.lastCam);});}
     else if(m.type==='error'){g.loaded=false;g.loadMsg='✗ '+p.name+': '+m.msg;status(g);}
   });
@@ -823,6 +918,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // otherwise. Same reason the keyframe path re-sends viewState below.
     if(p.g.kind==='points'||p.g.kind==='field'){
       if(send(p,viewState(p.g))&&p.g.total)send(p,{type:'seek',frame:p.g.gFrame});
+      if(p.g.lastCam)send(p,p.g.lastCam);   // …nor at the opening pose if its group has moved on
       return;}
     if(!p.built)return;
     if(!p.sentKf){
@@ -1058,6 +1154,34 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // `hidden`, not style.display — Clear puts the button back with hidden=false, which an inline
     // display:none would silently outrank.
     g.loaded=true;g.el.load.hidden=true;status(g);
+  }
+
+  // ---- the example picker (tri-plane card only) -----------------------------------------
+  // Both panels of the card are one example, so switching swaps both `src`s and the three pieces
+  // of prose that quote per-model numbers. A card that is already showing something is torn down
+  // and restarted: the picker is a request to see that model, and leaving the old one on screen
+  // under a new label would be worse than the reload. clearGroup() bumps `gen`, so a switch made
+  // mid-load abandons the pass in flight rather than racing it.
+  function applyScene(g,key){
+    const sc=(g.scenes||[]).find(x=>x.key===key)||g.scenes[0];
+    const relive=g.started;
+    if(g.started)clearGroup(g);
+    g.sceneKey=sc.key;
+    for(const p of g.panes){if(sc.src[p.id]){p.src=sc.src[p.id];p.url=sc.url[p.id];}}
+    g.el.load.textContent=g.loadLabel='Load this figure · '+sc.mb;
+    if(g.el.tag)g.el.tag.innerHTML=sc.tag;
+    if(g.el.rankTxt)g.el.rankTxt.textContent=sc.rank;
+    // The one view option an example switch DOES reset, against this page's usual rule that a
+    // control keeps its value across a load. The arrow scale is not a preference, it is a
+    // calibration: these two models' tangents differ by ~10x in magnitude (0.10 of the interval
+    // chord against 1.09), so bouncingballs' x120 draws lego's arrows several screens long.
+    if(sc.scale&&g.o.knScale){g.o.knScale.value=sc.scale;pushView(g);}
+    if(relive)startGroup(g);
+  }
+  for(const g of GROUPS){
+    if(!g.el.scene)continue;
+    applyScene(g,g.el.scene.value);          // markup and table cannot disagree if the table wins
+    g.el.scene.onchange=()=>applyScene(g,g.el.scene.value);
   }
 
   for(const g of GROUPS){g.el.load.onclick=()=>startGroup(g);g.el.clear.onclick=()=>clearGroup(g);status(g);}

@@ -12,7 +12,7 @@
 
   A THIRD renderer, deliberately. The core (EWA splatting, the 16-bit depth bucketing) is lifted
   from viewer.html, but this panel carries a shader branch the comparison panels must never grow —
-  plane cells whose colour is evaluated on the GPU from the tri-plane atlas and six time uniforms —
+  plane cells whose colour is evaluated on the GPU from the tri-plane atlas and the time weights —
   and viewer.html is what the two published comparisons depend on.
 
   What is on screen, and why it is built this way:
@@ -27,7 +27,9 @@
   - ONE VIEW: the plane at time t, G(t) = base + Σ_r w_r(t)·res_r, PCA-projected in the `composed`
     basis. This is a teaching figure; the magnitude maps, the template and the per-residual planes
     live in triplanes.html. So only the three composed_* atlases and the occupancy maps are
-    fetched, and scrubbing time costs six uniforms — no upload, no CPU compositing.
+    fetched, and scrubbing time costs `rank` uniforms — no upload, no CPU compositing. The rank is
+    the field's, not a constant: bouncingballs is 6, lego is 1, and u_w[6] is the ceiling the
+    shader's array imposes (a wider field fails loudly on load rather than rendering wrong).
   - Cells below the bundle's occupancy threshold are not emitted at all, and the rest carry
     occupancy as alpha: the sheets fade out exactly where the field stops being supervised.
   - HARD ELLIPSOIDS apply to the CLOUD ONLY. The same control the two comparison cards carry, but
@@ -43,7 +45,9 @@
     also the one reason a line program is back after the bounding box took the old one with it.
   - ORBIT, not fly, and no virtual movement pad — the same reasoning as points.html. One object on
     a turntable needs orbit/pan/dolly, and unlike a fly camera that vocabulary is fully reachable
-    by touch, which is what the pad exists to work around.
+    by touch, which is what the pad exists to work around. The orbit STATE (yaw, pitch, dist,
+    target — not just the eye) is linked to knots.html beside it through the host's `cam` relay:
+    the two panels are the same scene in the same frame, so two poses would be two figures.
   - alpha:true + premultipliedAlpha:true, cleared to (0,0,0,0). The splat blend is a front-to-back
     `under` operator (ONE_MINUS_DST_ALPHA, ONE); clearing to opaque white would leave DST_ALPHA at
     1 and multiply every splat by zero — a blank canvas.
@@ -123,7 +127,11 @@ uniform highp usampler2D u_tex;uniform highp sampler2D u_sh;uniform highp sample
 uniform mat4 u_proj,u_view;uniform vec2 u_focal,u_viewport;uniform vec3 u_campos;uniform bool u_hasSH;uniform float u_lowpass;
 uniform int u_shCols;uniform int u_shBands;
 uniform uint u_planeStart;uniform ivec2 u_res;
-uniform float u_w[6];
+// Six is the CEILING, not the count: the rank is the field's, and lego is rank 1 against
+// bouncingballs' 6. u_rank bounds the loop, because at rank 1 the atlas is two tiles wide and
+// r = 1..5 would texelFetch outside it — undefined by the ES 3.0 spec, and a NaN there would
+// poison the whole splat colour rather than contribute the zero the weight implies.
+uniform float u_w[6];uniform int u_rank;
 uniform vec3 u_lo[3],u_hi[3];uniform float u_show[3],u_sheetAlpha,u_cloudAlpha;
 uniform bool u_hard;   // hard-edged ellipsoids, CLOUD ONLY — the sheet cells stay soft, or the
                        // feature image becomes a grid of discs with holes between them
@@ -163,7 +171,7 @@ void main(){vHard=0.0;   // written before every early return; the flat varying 
    // the whole time axis is these seven fetches and six uniforms.
    int pl=int(cen.w>>28),cx=int((cen.w>>14)&0x3fffu),cy=int(cen.w&0x3fffu),row=pl*u_res.y+cy;
    vec3 v=texelFetch(u_coef,ivec2(cx,row),0).rgb;
-   for(int r=0;r<6;r++)v+=u_w[r]*texelFetch(u_coef,ivec2((r+1)*u_res.x+cx,row),0).rgb;
+   for(int r=0;r<u_rank;r++)v+=u_w[r]*texelFetch(u_coef,ivec2((r+1)*u_res.x+cx,row),0).rgb;
    base=clamp((v-u_lo[pl])/(u_hi[pl]-u_lo[pl]),0.0,1.0);
    al=float((cov.w>>24)&0xffu)/255.0*u_sheetAlpha*u_show[pl];
  }
@@ -202,7 +210,7 @@ const U=n=>gl.getUniformLocation(prog,n);
 const u_proj=U('u_proj'),u_view=U('u_view'),u_focal=U('u_focal'),u_viewport=U('u_viewport'),u_op=U('u_opacity'),
       u_texL=U('u_tex'),u_lowpassL=U('u_lowpass'),u_shL=U('u_sh'),u_camposL=U('u_campos'),u_hasSHL=U('u_hasSH'),
       u_shColsL=U('u_shCols'),u_shBandsL=U('u_shBands'),u_coefL=U('u_coef'),
-      u_planeStartL=U('u_planeStart'),u_resL=U('u_res'),u_wL=U('u_w[0]'),
+      u_planeStartL=U('u_planeStart'),u_resL=U('u_res'),u_wL=U('u_w[0]'),u_rankL=U('u_rank'),
       u_loL=U('u_lo[0]'),u_hiL=U('u_hi[0]'),
       u_showL=U('u_show[0]'),u_sheetAlphaL=U('u_sheetAlpha'),u_cloudAlphaL=U('u_cloudAlpha'),
       u_hardL=U('u_hard'),u_hardRL=U('u_hardR');
@@ -301,13 +309,18 @@ function frameScene(){
   // cameras aim at the origin, so the target is the origin and the pose is (yaw, pitch, dist).
   // CAM_ELEV then raises the viewpoint about that target — the orbit form of what viewer.html does
   // by rotating the camera about its own right axis.
+  let yaw=cam.yaw,pitch=cam.pitch,dist=cam.dist;
   if(camMeta){
     const e=camMeta.campos.map(v=>v*CAM_ZOOM),d=Math.hypot(e[0],e[1],e[2])||1;
-    cam.dist=d;cam.pitch=Math.max(-1.45,Math.min(1.45,Math.asin(e[2]/d)+CAM_ELEV));
-    cam.yaw=Math.atan2(e[0],e[1]);
+    dist=d;pitch=Math.max(-1.45,Math.min(1.45,Math.asin(e[2]/d)+CAM_ELEV));
+    yaw=Math.atan2(e[0],e[1]);
   }
-  cam.target=[0,0,0];
-  home={yaw:cam.yaw,pitch:cam.pitch,dist:cam.dist,target:[0,0,0]};
+  home={yaw,pitch,dist,target:[0,0,0]};
+  // A pose already adopted from the panel beside this one wins over the opening one. The cameras in
+  // this card are linked, so the panel that finished loading first is showing something the visitor
+  // may already have orbited — snapping both back to the default when the second one lands would
+  // undo it. `home` is still the opening pose, so "reset view" is unaffected.
+  if(!adopted){cam.yaw=yaw;cam.pitch=pitch;cam.dist=dist;cam.target=[0,0,0];}
   needSort=true;
 }
 // Pointer events, one code path for mouse and touch: one pointer orbits (shift or right button
@@ -362,6 +375,8 @@ async function boot(){
 
   stage('loading tri-planes…',45);
   const meta=await (await fetch(TRI+'meta.json')).json();
+  if(meta.rank>6)throw new Error('rank '+meta.rank+' exceeds this panel\'s u_w[6]; raise the '
+    +'array size in both shader and uniform if a wider field is ever shipped');
   S.meta=meta;S.frames=meta.num_frames||meta.capacity;
   const {h,w}=meta.levels[0],NT=meta.rank+1;
 
@@ -492,6 +507,7 @@ function setStaticUniforms(){
   const m=S.meta,lv=m.levels[0];
   gl.uniform1ui(u_planeStartL,planeStart);
   gl.uniform2i(u_resL,lv.w,lv.h);
+  gl.uniform1i(u_rankL,m.rank);
   // One window per plane, fixed for the whole sequence: the same colour has to mean the same
   // feature value at every t, or the sheets would be re-levelled under you as you scrub.
   const lo=new Float32Array(9),hi=new Float32Array(9);
@@ -549,6 +565,25 @@ function frame(t){
   gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,N);
   gl.bindVertexArray(null);
   if(S.cast)drawCast(proj,view);
+  pushCam();
+}
+
+// The camera is linked across the card — this panel and the knot panel beside it are the same
+// scene in the same frame, so two poses would be two figures. Orbit STATE travels, not an eye:
+// the target and the distance are what the pointer handlers edit, and a shared eye alone would let
+// the two turntables drift apart. Applying a remote pose also updates `sent`, so an adopted pose is
+// never echoed back.
+let sent=null,adopted=false;
+function pushCam(){
+  const c=[cam.yaw,cam.pitch,cam.dist,cam.target[0],cam.target[1],cam.target[2]];
+  if(sent&&c.every((v,i)=>Math.abs(v-sent[i])<1e-9))return;
+  sent=c;post({type:'cam',orbit:{yaw:cam.yaw,pitch:cam.pitch,dist:cam.dist,target:cam.target.slice()}});
+}
+function applyCam(o){
+  if(!o)return;
+  cam.yaw=o.yaw;cam.pitch=o.pitch;cam.dist=o.dist;cam.target=o.target.slice();
+  sent=[cam.yaw,cam.pitch,cam.dist,cam.target[0],cam.target[1],cam.target[2]];
+  adopted=true;      // …so a later frameScene() does not yank the pair back to the opening pose
 }
 
 // ===== host messages =====
@@ -565,6 +600,7 @@ addEventListener('message',e=>{
   if(m.type==='seek'){S.t=S.frames>1?Math.min(Math.max(m.frame/(S.frames-1),0),1):0;}
   else if(m.type==='resetView'){cam.yaw=home.yaw;cam.pitch=home.pitch;cam.dist=home.dist;
     cam.target=home.target.slice();}
+  else if(m.type==='cam')applyCam(m.orbit);
   else if(m.type==='view'){
     // The host sends the whole option set every time, so this stays idempotent.
     if(m.sheets)for(let i=0;i<3;i++)S.show[i]=m.sheets[i]?1:0;

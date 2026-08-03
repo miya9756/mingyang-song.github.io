@@ -143,10 +143,19 @@ The SpDef page hosts **four independent cards**, all driven by the one host scri
    — unlike the bouncingballs pair, which zeroes both.
 3. **1×1, DeformingThings4D *astra / samba dancing*** — not a comparison: the GS-free path, the
    *fitted spline itself*, and a **different renderer**. See the `points.html` section below.
-4. **1×1, D-NeRF *bouncingballs* again — the model taken apart.** The canonical gaussians and the
-   deformation field's three tri-planes in one scene, which is what makes it the last card: the
-   three above show what the field *does*, this one shows what it *is*. A third renderer again,
-   and the entrance to `triplanes.html`, which the card links. See the `field.html` section.
+4. **1×2, the model taken apart — with a picker for TWO trained models.** What the model *stores*
+   and what it *predicts*, side by side: left, the canonical gaussians and the deformation field's
+   three tri-planes in one scene (`field.html`); right, a sample of those gaussians pushed to the
+   two knots bracketing the playhead, with their tangents and the arc between them (`knots.html`).
+   That is what makes it the last card — the three above show what the field *does*, this one
+   shows what it *is* and what it emits. **Two more renderers, one card**, and the entrance to
+   `triplanes.html`, which the card links. See the `field.html` and `knots.html` sections.
+
+   The two examples are **D-NeRF bouncingballs** (75 knots — one every 2 frames — rank 6) and
+   **D-NeRF lego** (`lego_02`: 7 knots over 50 frames — one every ~8 — rank 1), chosen to be far
+   apart on the one axis that decides whether the stored tangents mean anything. They are not a
+   like-for-like comparison and are not presented as one: the picker shows one at a time, and the
+   card's clock, camera and view options belong to whichever is loaded.
 
 **`kind` is the only axis the host branches on** — `'splat'` (the first two cards, `viewer.html`
 panels the host fetches and decodes for) versus `'points'` and `'field'` (the last two, panels
@@ -155,6 +164,17 @@ them options and a seek rather than data). Anything per-kind — the required vi
 sends, which controls `pushView()` wires (`OPT_WIRING`) — is a table keyed by it, not an `if`
 scattered through the file. A group also opts into a **continuous clock** with `frac:true`, which
 changes `setFrame()`'s label and lets `tick()` advance in fractional frames.
+
+**`kind` is per GROUP, not per panel, and the last card has two different renderers in one group.**
+That is deliberate and it is why nothing had to be re-keyed: `VIEW.field` emits *both* panels' option
+sets in one message and each panel reads the keys it knows (`sheets`/`cast`/… in `field.html`,
+`knSamples`/`knScale`/… in `knots.html`), which is exactly the idempotence the protocol already
+required. A new panel of a new kind inside an existing card needs an `OPT_KEYS` extension and more
+keys in that kind's `viewState()`, not a second group — a second group would mean a second clock and
+a second camera for one comparison. Two knock-ons: `status()` **joins** every panel's `note` rather
+than taking the first (each renderer is the only thing that can describe what it built), and a
+slider whose range depends on the data is clamped from the panel that owns it (`castMax` from
+`field.html`, `sampleMax` from `knots.html`).
 
 Optional transport controls are **simply absent from that card's `ui`, resolved to `null`, and
 guarded at every use**: `touch` (only the splat cards have a virtual pad), `prev`/`next` and
@@ -206,6 +226,44 @@ plus its `GROUPS` entry.
 are different scenes with different frame counts, so linking them would be meaningless. The
 decoder and the view options are shared across the whole page. Adding a third comparison means
 one more entry in `GROUPS` plus its transport ids in the markup; nothing else changes.
+
+**The tri-plane card's example picker: `FIELD_SCENES`, and why the table rather than the markup.**
+Both panels of that card are one example, so the picker (`#fdScene`, resolved through the group's
+`ui` like every other control) swaps both `src`s at once and restarts the card if it was already
+showing something — leaving the old model on screen under a new label would be worse than the
+reload. `applyScene()` also rewrites the three pieces of prose that quote per-model numbers (the
+subtag, the Load button's size, and the lede's "plus six more, scaled by six numbers", which is a
+`<span>` because lego is rank 1) — **nothing checks those against the bundles**, so they live in the
+table beside the URLs rather than scattered through the markup. The markup's `data-src` still
+carries the default example so `verify.py` sees a real URL; the table wins at init, and if the two
+ever disagree the table is what loads.
+
+Two things a second example exposed, both fixed rather than worked around:
+
+- **`ready`-time slider clamps must not ratchet.** `castMax` / `sampleMax` narrow a slider to what
+  the loaded scene can actually supply, and they only ever *lower* the max — so switching from a
+  scene with few castable gaussians to one with many would have left the slider stuck low. `g.oMax`
+  remembers the markup's ceiling and every clamp starts from it.
+- **The tangent scale is reset on an example switch**, the one exception to this page's rule that a
+  view option keeps its value across a load. It is a calibration, not a preference: the two models'
+  tangents differ by ~10× in magnitude, so bouncingballs' ×120 draws lego's arrows several screens
+  long. Per-example defaults are `scale:` in the table.
+
+`triplanes.html` is **deliberately left on bouncingballs** and is not switched by the picker: it has
+no `?tri=` parameter, its rank selector is six hardcoded `<option>`s, and its prose counts "six
+weights at 75 knots" throughout. Making it follow the picker means data-driving all three — worth
+doing if a third example ever lands, but it is a page-sized edit, not a parameter.
+
+**The `cam` relay carries two flavours and the host does not care which.** A fly camera
+(`viewer.html`) sends `{pos,quat,speed}`; an orbit camera (`field.html`, `knots.html`) sends
+`{orbit:{yaw,pitch,dist,target}}`, because a shared eye is *not* enough to keep two turntables in
+step — the target and the distance are what the pointer handlers actually edit, and two panels that
+agreed only on the eye would drift apart the moment either panned. The host stores whichever arrived
+in `g.lastCam` and re-sends it to a panel that announces late (`flush()` sends it on the
+points/field path too, not just the keyframe path). Both orbit panels guard the echo the same way:
+`pushCam()` posts only on an actual change and `applyCam()` records what it adopted, and an adopted
+pose sets `adopted` so the loser of the load race does not yank the pair back to the opening pose
+when its own `frameScene()` runs. `home` is still the opening pose, so *reset view* is unaffected.
 
 **The americano panels render `fit=square`.** The capture camera is 536×960 portrait; the panel
 ignores that aspect and renders the full square canvas at the *wider* of the two FoVs, so the
@@ -406,7 +464,8 @@ of display range plain, 1.6 % companded, same bytes.
 
 ### `field.html` — canonical cloud + tri-planes in one 3D scene (a THIRD renderer)
 
-The fourth card's panel: both halves of the model in the coordinates they are stored in. The
+The fourth card's LEFT panel (`knots.html` is the right one): both halves of the model in the
+coordinates they are stored in. The
 renderer core (EWA splatting, the 16-bit depth bucketing) is lifted from `viewer.html`. It is a
 third renderer **on purpose** — it carries a shader branch the comparison panels must never grow,
 and `viewer.html` is what the two published comparisons depend on.
@@ -495,6 +554,110 @@ mismatch across stages, so `flat` on `vHard` has to be kept in step by hand. A s
 the panel and nothing else on this site would catch it. The atlas→texture layout and the shader's
 `texelFetch` indexing were separately checked against the checkpoint (≤2 % of display range, i.e.
 quantisation only). Do the same after touching either.
+
+### `knots.html` — the pushed knots and their tangents (a FOURTH renderer)
+
+The fourth card's right-hand panel, and the teaser figure animated: for a sample of the canonical
+gaussians it draws `X^c` (red), where the field puts it at the knot **left** of the playhead (blue)
+and at the knot **right** of it (green), each knot's tangent, the cubic Hermite arc between them,
+and the point itself at `t` on that arc. Beside `field.html` — the storage — this is the output.
+
+It is a **fourth renderer** and a deliberately small one: points and lines, no splats, no depth
+sort, no SH, no decoder. It shares the `{ch:'spdef'}` protocol, the orbit camera and the standalone
+fallback clock with its neighbours **and nothing else**; the splat core would have been carried
+whole to draw 1-pixel segments.
+
+What is load-bearing:
+
+- **The interval is TINY, and the figure is built around that.** Consecutive knots are two frames
+  apart: the mean chord between them is 0.007 in a scene 2.6 across — a couple of pixels. Drawn
+  alone the two knot dots sit on top of each other, which is why the **whole trajectory (all 75
+  knots) is drawn faintly as context and is ON by default**: one interval is 1/74 of it, and
+  without something to be small against, "which interval am I in" is unreadable. Zooming resolves
+  the rest.
+- **Tangents are drawn SCALED and the HUD names the factor.** The trained tangent is the derivative
+  per *interval*, and this field's are ~0.0007 against a 0.007 chord, so true scale is sub-pixel.
+  The default is ×120. Scaling is the only way to show direction; hiding the multiplier would
+  misstate the magnitude, hence the readout — do not drop it from the HUD.
+- **THE TWO EXAMPLES ARE THE EXPERIMENT, and this is the number to look at.** Knot density decides
+  whether the stored tangents mean anything, and the card's picker puts the two ends of that beside
+  each other. Measured on the shipped bundles:
+
+  | | knots | per interval | `\|v\|/\|chord\|` | angle(v, chord) | tangent term | speed at knot / mid |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | bouncingballs | 75 | ~2 frames | 0.105 | 63° (28 % < 30°) | 1 % of the chord | 0.11× / 1.49× |
+  | lego (`lego_02`) | 7 | ~8 frames | **1.088** | **8° (98 % < 30°)** | 13 % of the chord | 1.09× / 0.99× |
+
+  At 8-frame intervals the tangents come out *tangent to the path*, at the magnitude a faithful C¹
+  interpolant wants (Catmull-Rom would say 1.0), and the rendered motion runs at near-constant speed
+  through the knots (1.09× / 0.99×) instead of the smoothstep stop-and-rush the dense run shows
+  (0.11× / 1.49×). That is the identifiability argument confirmed from the other side: give the
+  tangent term something to explain — 13 % of the chord rather than 1 % — and the loss constrains
+  it. **Do not "fix" the bouncingballs arrows.** If a run's arrows look wrong, measure these numbers
+  before touching anything.
+
+- **The grey arrow is the SECANT, and it exists because the trained tangents do not follow the
+  path.** Measured on the shipped bundle: `|v|` is **0.10** of the interval's chord and **64°** away
+  from it (28 % within 30°), and the tangent field is nearly spatially constant (`|mean unit vector|`
+  = **0.85** — every arrow parallel). That is the model, not the drawing: finite-differencing the
+  rendered arc at the knot reproduces the drawn vector to 9e-5, and the parity block ties the curve
+  to torch. The cause is identifiability — with `spline_interval_stride = 2` a knot lands every two
+  frames and the piecewise-linear part already explains the motion: the tangent term moves the
+  rendered curve by **~1 %** of the chord (median 0.010 of it, p90 0.069), which at this scene's
+  0.007 chord is *below the position quantisation step the shipped bundle uses*. The reconstruction
+  loss therefore has almost nothing to say about `v`, and `xyz_velocity_div_loss = 5000`, which
+  penalises velocity *differences between neighbours*, decides — minimised by one spatially constant
+  field of any magnitude, which is exactly the 0.85. The `bouncingballs_wo_reg` run is the control:
+  same measurement gives 2.79 and 86°, long and random.
+- **What tangents that small cost, and why it still renders fine.** The arc's departure from the
+  straight chord is `t(2t−1)(t−1)·(m̄ − secant) + t(1−t)·(m₀ − m₁)` — it is straight exactly when the
+  tangents equal the secant. Measured: 9.5 % of the chord against a pure `m = 0` (smoothstep)
+  reference of 9.62 %, i.e. **the trained motion is smoothstep between knots** — 0.105× the mean
+  speed at each knot, 1.49× mid-interval, a **14× speed swing every two frames**. Sub-pixel in
+  position at this knot spacing; it scales with the chord, so it is the thing to look at on a
+  sparse-knot run.
+- **The SECANT was drawn beside the tangents and then REMOVED — do not re-add it.** It made the
+  disagreement visible (that was the first thing a reader asked about), but a quantity computed in
+  the panel, sitting next to one the model stores, reads as though the model produced both. The
+  figure shows stored vectors only; the disagreement is documented in prose instead — this section,
+  the panel header and the control's tooltip.
+- **Only moving gaussians are in the bundle.** The field pushes *every* gaussian off its canonical
+  position (the canonical frame is not the t=0 pose), so `|d_xyz|` says nothing about motion; the
+  exporter selects on peak deviation from the point's **own time-mean** (> 0.02 → 6,181 of 14,534).
+  For the static half the two knot dots would coincide with zero-length tangents.
+- **A prefix is a sample.** Rows are written in a deterministic shuffled order, so the count slider
+  draws the first N and still gets an even sample — the same trick `field.html`'s cast lines use,
+  and the reason moving that slider rebuilds nothing but the geometry.
+- **No depth test, painter's order instead** (unlike `points.html`). There is no solid geometry to
+  occlude anything and one sample's three dots sit within a pixel of each other, so a depth test
+  would arbitrarily pick which survives. Order is context → interval → dots → the point at `t`.
+  That last one is a **ring**, not a disc (`u_mode` 2 vs 1), so it surrounds the two knot dots
+  instead of covering the thing the card exists to show.
+- **Parity is checked on load.** `meta.json` carries torch-computed positions at 8 points × 6 times
+  and a tolerance; a mismatch refuses to draw. Same contract `traj.js` has with `traj_codec.py`,
+  for the same reason — a curve that is subtly wrong still looks like a curve.
+- **The camera is linked**, so the projection is `field.html`'s *verbatim* (same eye formula, same
+  screen-down `u`, same Y-flipped matrix, same `elev`/`zoom` defaults). If the two disagreed, one
+  orbit state would frame two different views. See the `cam` relay note above.
+- Buffers are **pooled, not reallocated**: the interval geometry is rebuilt every time the playhead
+  crosses a knot — about every other frame at 30 fps — and at the top of the sample slider that is
+  ~3.5 MB of garbage per rebuild otherwise. The whole-path buffer is time-independent and rebuilt
+  only when the count or its toggle changes.
+
+The bundle is `projects/spdef/knots/bouncingballs/` — `meta.json` + a single 1.37 MB `knots.bin`
+(canonical f32, then `d_xyz` and `v_xyz` as int16 on a per-component (zero, scale) grid; **not**
+float16, because the tangents are ~5e-4 and their *absolute* resolution is what the figure needs).
+One file, not the points bundle's streamed-per-knot layout: at this size streaming would be
+machinery for nothing. It is a **plain git object, not LFS** — same reasoning as
+`projects/spdef/points/**/*.bin`. `verify.py` now follows any referenced `meta.json` to the `bin`
+it names, since no page mentions that file and a manifest committed without its payload would fail
+only in the browser.
+
+**Shaders here are NOT glslangValidator-checked** — unlike `field.html`'s four, which are. There
+was no network on the box they were written on; they are two short ones (a pass-through vertex
+shader with `gl_PointSize`, and a fragment shader whose only branch is the point-sprite mask) and
+the panel reports a compile failure through its own error path rather than blanking. Run the
+validator over them if you touch them.
 
 ### Shared decode path — do NOT hoist `vendor/` out of `projects/smv/`
 
@@ -750,11 +913,13 @@ ffmpeg `*.wasm` is a plain binary git object, not LFS.
   (`.github/workflows/pages.yml` already sets `lfs: true`).
 - Pages serves the built artifact from its CDN, so visitor traffic costs no LFS
   bandwidth — only CI checkouts do.
-- **`projects/spdef/points/**/*.bin` is deliberately NOT in LFS.** LFS pays off for a few large
-  files; this bundle is 214 files averaging 23 KB (one per knot per component — see the
+- **`projects/spdef/points/**/*.bin` and `projects/spdef/knots/**/*.bin` are deliberately NOT in
+  LFS.** LFS pays off for a few large
+  files; the points bundle is 214 files averaging 23 KB (one per knot per component — see the
   build's reasoning in `web/README.md`), and 6.7 MB total. As plain git objects that costs
   nothing recurring; in LFS it would be 214 objects re-downloaded on every CI checkout, against
-  a monthly bandwidth quota, for no packing benefit. If a much larger point bundle is ever
+  a monthly bandwidth quota, for no packing benefit. The knot bundle is one 1.37 MB file, which is
+  under the threshold where LFS buys anything at all. If a much larger bundle is ever
   added, revisit — but scope any rule to that path, since `*.bin` is far too generic a glob for
   this repo.
 
@@ -824,6 +989,83 @@ time-invariant attributes are comparable — which is exactly what `--check` com
 match exactly. `--camera_from` copies the held-out test camera out of an existing `scene.json`
 rather than re-extracting it, so the canonical panel opens on the same pose as the comparisons
 above it.
+
+**Export the knot bundle** (the same card's right-hand panel — what the field *predicts* at each
+knot, for a sample of the canonical gaussians):
+
+```bash
+cd ~/4d-relight && PYTHONPATH=. conda run -n 4dre python \
+  scripts/visualization/export_knots.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/bouncingballs \
+  --out ~/mingyang-song.github.io/projects/spdef/knots/bouncingballs \
+  --camera_from ~/mingyang-song.github.io/projects/spdef/scenes/bouncingballs_canonical/scene.json \
+  --check /cluster/scratch/misong/4dre/dnerf/bouncingballs/bundle_4_packed
+```
+
+This is the **only** one of the three exporters that actually runs the field — grid lookup, feature
+product, decoder MLPs, at 75 knots × 14,534 points (~25 s on a CPU). It re-implements that forward
+path from the flat state dict rather than importing `GridDeformCoordNN`, because
+`deformation_fields.modules.hashencoder` JIT-compiles a CUDA extension at *import*, so the real
+class cannot even be loaded on a CPU box. The re-implementation is what `--check` exists to prove,
+and it is a strong check: a packed bundle's `gop_k/reference.npz` is the deformed cloud at that
+GOP's start frame, written by the compressor from the trained renderer — a different code path end
+to end. `bundle_4_packed` is used rather than `bundle_1_packed` precisely because three of its four
+GOPs start **mid-interval** (frames 38 / 76 / 113 → `t_rel` 0.87 / 0.75 / 0.12), so the Hermite arc
+is exercised and not just the knot values. Current result: every sampled point matches a keyframe
+point to **4.88e-4**, i.e. one position-quantisation step, at all four frames — and that also pins
+the frame→time convention as `t = frame/(num_frames-1)`, which is what all four panels use.
+
+Re-exporting changes three numbers the page states as literal text — the Load button, the subtag
+(both in `FIELD_SCENES`, not the markup) and the samples slider's `max` (which the panel also clamps
+at runtime via `sampleMax`, so the slider cannot outrun the data even if the table goes stale).
+
+**Add an example to the tri-plane card** — three bundles from one trained model, then one entry in
+`FIELD_SCENES`. This is the full recipe used for `lego_02`, in order:
+
+```bash
+cd ~/4d-relight
+# 0. the held-out test camera. --camera_from copies one out of an existing scene.json, and a model
+#    with no shipped scene has none — so build the block the same way build_web_bundle.py does.
+#    (Loads camera POSES only; no image decode, no GPU.)
+PYTHONPATH=web/player_browser conda run -n 4dre python -c "
+import json;from build_web_bundle import extract_camera
+json.dump({'camera':extract_camera('/cluster/scratch/misong/4dre/dnerf/lego_02/scene_config.yaml',
+          '/cluster/scratch/misong/datasets/dnerf/lego', dataset_name='dnerf')}, open('/tmp/lego_cam.json','w'))"
+
+# 1. the canonical cloud   2. the tri-planes   3. the knots
+PYTHONPATH=. conda run -n 4dre python scripts/visualization/export_canonical_scene.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/lego_02 \
+  --out ~/mingyang-song.github.io/projects/spdef/scenes/lego_canonical --camera_from /tmp/lego_cam.json
+PYTHONPATH=. conda run -n 4dre python scripts/visualization/export_triplanes.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/lego_02 \
+  --out ~/mingyang-song.github.io/projects/spdef/triplanes/lego
+PYTHONPATH=. conda run -n 4dre python scripts/visualization/export_knots.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/lego_02 \
+  --out ~/mingyang-song.github.io/projects/spdef/knots/lego \
+  --camera_from ~/mingyang-song.github.io/projects/spdef/scenes/lego_canonical/scene.json
+```
+
+Both panels must be given the **same** camera or the linked cameras frame two different views —
+step 1 embeds it and step 3 copies it back out of what step 1 wrote, so they cannot drift. There is
+no `--check` for a model with no packed bundle (lego_02 has none); the browser-side `parity` block
+still ties the curve to torch, and the forward path itself was verified end-to-end on bouncingballs.
+
+**The frame count is NOT recoverable from the checkpoint alone, and getting it wrong is silent.**
+`capacity = floor(num_time_steps · knot_ratio / interval_stride)`, so inverting it gives a *range*:
+bouncingballs (ratio 1.0, stride 2) pins 75 knots to 150 frames, but lego at ratio 0.3 gives 7 knots
+for anything from **47 to 53** frames. The old code rounded `capacity·stride/ratio` and returned 47
+— three frames short, which misplaces every knot on a timeline that maps `t = frame/(frames-1)`, and
+nothing on the page would have looked broken. Both exporters now read `len(transforms_train.json
+frames)` via the `source_path` in `scene_config.yaml`, fall back to the inversion only where it is
+unambiguous, and otherwise demand `--num_frames`. The two copies of that logic (`export_knots.py`
+holds `frame_count_candidates` + `frames_from_dataset`, `export_triplanes.py` has it inline in
+`sequence_length`) must be changed together.
+
+A new example also needs the **rank** to be within the panel's reach: `field.html` carries
+`uniform float u_w[6]`, bounded at draw time by the field's own `u_rank` (bouncingballs 6, lego 1).
+A rank-1 atlas is two tiles wide, so an unbounded 6-term loop would `texelFetch` outside it —
+undefined per the ES 3.0 spec, and a NaN there poisons the whole splat colour. Rank > 6 throws on
+load rather than rendering something wrong.
 
 `traj.js` must be re-copied verbatim alongside any bundle whose format changed — `meta.version`
 is a hash of the metadata and cache-busts every binary URL, but it cannot cache-bust a decoder
