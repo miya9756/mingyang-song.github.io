@@ -886,14 +886,26 @@ async function handleFile(f){
    interpolations differs by camera — SIDD shot G4 at four ISOs and IP at ten. The `value` stays
    the bare number so readControls(), the preset key and the download filename are untouched;
    only the label carries the marker. */
-function syncIsoOptions(){
-  const p=state.params, cam=els.camera.value, keep=els.iso.value;
+/* `prefer` is passed explicitly on the first call: the <select> is still empty then, so
+   assigning .value beforehand would not stick and the preference would be silently lost. */
+function syncIsoOptions(prefer){
+  const p=state.params, cam=els.camera.value, keep=prefer!==undefined?prefer:els.iso.value;
   els.iso.innerHTML=p.isos.map(v=>{
     const e=p.params[`${cam}|${v}`], interp=e&&e.measured===false;
     return `<option value="${v}">${v}${interp?' · interpolated':''}</option>`;
   }).join('');
-  els.iso.value=p.isos.includes(+keep)?keep:(p.isos.includes(1600)?1600:p.isos[0]);
+  els.iso.value=p.isos.includes(+keep)?keep:defaultIso(cam);
   showPresetNote();
+}
+/* ISO 1600 opens the page because it has grain you can see without zooming. But it is not
+   measured for every camera — SIDD stops at 800 for G4 — and a page whose whole claim is
+   "these are measurements" should not open on an interpolation. Aim at 1600, then snap to
+   the nearest ISO this camera was actually shot at. */
+const OPEN_ISO=1600;
+function defaultIso(cam){
+  const p=state.params, real=p.isos.filter(v=>p.params[`${cam}|${v}`].measured);
+  if(!real.length) return OPEN_ISO;
+  return real.reduce((b,v)=>Math.abs(Math.log(v/OPEN_ISO))<Math.abs(Math.log(b/OPEN_ISO))?v:b);
 }
 /* Says in words what the marker says in the list, and for a measurement adds the one number that
    decides how much to trust it: how many distinct SIDD scenes stood behind the fit. */
@@ -910,8 +922,7 @@ function populate(){
   els.camera.innerHTML=p.cameras.map(c=>
     `<option value="${c}">${CAM_NAMES[c]?`${c} · ${CAM_NAMES[c]}`:c}</option>`).join('');
   els.camera.value=p.cameras.includes('G4')?'G4':p.cameras[0];
-  els.iso.value=1600;
-  syncIsoOptions();
+  syncIsoOptions(defaultIso(els.camera.value));
 }
 els.pick.addEventListener('click',()=>els.file.click());
 els.file.addEventListener('change',(e)=>handleFile(e.target.files[0]));
