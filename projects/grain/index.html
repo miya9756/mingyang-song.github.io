@@ -6,7 +6,7 @@
 <title>Digital Camera Noise Synthesis</title>
 <link rel="icon" type="image/png" sizes="64x64" href="../../assets/web_icon.png">
 <link rel="apple-touch-icon" href="../../assets/web_icon.png">
-<meta name="description" content="Digital Camera Noise Synthesis — a generative camera-noise model, distilled into a per-channel intensity/variance curve and a spatial correlation kernel you can drive live in your browser.">
+<meta name="description" content="Digital Camera Noise Synthesis — camera grain measured from paired clean/noisy captures as a per-channel intensity/variance curve, a spatial correlation kernel and an RGB correlation matrix, and put back on your own photographs in the browser.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <meta name="theme-color" content="#f2f3f4"><!-- must track --bg; Safari tints its chrome from this -->
@@ -245,8 +245,9 @@
 <main class="inner">
   <section>
     <h2>Playground</h2>
-    <p class="lede">Sensor noise is not the white Gaussian speckle that denoising papers used to assume. It is <em>coloured</em> — brighter in the shadows than in the highlights, unequal across R, G and B, and correlated between neighbouring pixels by the camera’s own processing. Pick an image below and it is regrained as one of five smartphones at one of fourteen ISO levels, then drag the divider to compare against the clean original.</p>
-    <p class="lede">What runs here is <em>not</em> the network. The generator is conditioned on camera and ISO and trained adversarially; probing it as a black box reduces its behaviour to two measurable things: how loud the grain is at each clean intensity, and how strongly neighbouring pixels agree, and those are what this page ships: 70 presets of summary statistics, about 180&nbsp;KB of numbers.</p>
+    <p class="lede">Sensor noise is not the white Gaussian speckle that denoising papers used to assume. It is <em>coloured</em> — brighter in the shadows than in the highlights, unequal across R, G and B, correlated between neighbouring pixels by the camera’s own processing, and correlated <em>between</em> the three channels as well. Pick an image below and it is regrained as one of five smartphones at one of fourteen ISO levels, then drag the divider to compare against the clean original.</p>
+    <p class="lede">What runs here is <em>not</em> the network. These presets are measured straight off <a href="https://abdokamel.github.io/sidd/" target="_blank" rel="noopener">SIDD</a>’s paired clean and noisy captures — the same photographs the generator was trained on, read one step earlier — and reduced to three things: how loud the grain is at each clean intensity, how strongly neighbouring pixels agree, and how the three channels move together. That is what the page ships: 70 presets of summary statistics, about 180&nbsp;KB of numbers.</p>
+    <p class="lede">SIDD holds 34 of those 70 camera-and-ISO combinations. The other 36 are interpolated across ISO from the ones it does hold, and are labelled so in the picker — a fitted curve between two readings is a useful guess, but it is not a reading.</p>
 
     <div class="work">
       <!-- Deliberately <div>, not <section>: these two are panes of one playground, not sections
@@ -265,7 +266,7 @@
         </div>
 
         <fieldset>
-          <legend>Measured preset</legend>
+          <legend>Camera preset</legend>
           <div class="row">
             <div class="field">
               <label for="camera">Camera</label>
@@ -276,6 +277,11 @@
               <select id="iso"></select>
             </div>
           </div>
+          <!-- SIDD holds 32 of these 70 combinations; the rest are interpolated across ISO from
+               the ones it does hold. Saying which is which is the whole reason this note exists —
+               an interpolated preset presented as a reading is the one dishonest thing this page
+               could do. -->
+          <p class="note" id="preset-note"></p>
         </fieldset>
 
         <!-- Exactly one free control, deliberately. Upstream also has colour-noise, grain-size,
@@ -394,7 +400,8 @@
     <p class="eq">n<sub>c</sub> = k<sub>c</sub> ∗ ( σ<sub>c</sub>(I<sub>c</sub>) · w<sub>c</sub> ) &nbsp;&nbsp;&nbsp; noisy = clip(I + n, 0, 1)
       <span class="gloss"><code>w</code> is unit Gaussian noise, correlated across channels by a 3×3 Cholesky factor; <code>σ<sub>c</sub></code> is a 17-knot lookup evaluated at the <em>clean</em> intensity; <code>k<sub>c</sub></code> is a 9×9 symmetric kernel supplying the spatial correlation, normalised so that <code>Σk² = 1</code> — convolution then preserves exactly the variance the curve asked for.</span>
     </p>
-    <p class="lede">Both ingredients are plotted above, and neither is what the textbook model would predict: the curve is not affine in intensity, and the kernel is not a blur. The paper is where they are derived and evaluated.</p>
+    <p class="lede">Two of the three ingredients are plotted above, and neither is what the textbook model would predict: the curve is not affine in intensity, and the kernel is not a blur. The paper is where the generative model they summarise is derived and evaluated.</p>
+    <p class="lede">The third does not plot, and it is the one that is easiest to get wrong. Because the channels are mixed <em>before</em> each is filtered by its own kernel, the correlation left in the finished grain is not the correlation the model needs: it comes out attenuated by <code>⟨k<sub>c</sub>, k<sub>d</sub>⟩</code>, which is below 1 whenever two channels’ kernels differ at all. Measuring the output and using it directly would under-colour the grain by exactly that factor, so it is divided back out before the matrix is projected to the nearest valid correlation matrix and factored.</p>
   </section>
 
   <section>
@@ -432,9 +439,9 @@
 
   <section>
     <h2>Datasets &amp; credits</h2>
-    <p class="ack">The noise model behind the presets was trained on an open-source smartphone-noise dataset; the imagery on and around this page is credited alongside it.</p>
+    <p class="ack">The presets are measured from an open-source smartphone-noise dataset; the imagery on and around this page is credited alongside it.</p>
     <div class="datacard">
-      <p class="ref"><strong><a href="https://abdokamel.github.io/sidd/" target="_blank" rel="noopener">SIDD</a></strong> — real clean/noisy smartphone pairs; the source of every preset above (G4, GP, IP, N6 and S6 are its five cameras).<br>
+      <p class="ref"><strong><a href="https://abdokamel.github.io/sidd/" target="_blank" rel="noopener">SIDD</a></strong> — real clean/noisy smartphone pairs, and the source of every preset above (G4, GP, IP, N6 and S6 are its five cameras). Its ground truth is a paired capture rather than a denoiser’s output, which is what lets the grain be read off the difference without inheriting a denoiser’s errors. The <em>Medium sRGB</em> split is what was measured — 160 scenes over 34 camera-and-ISO combinations.<br>
       Abdelrahman Abdelhamed, Stephen Lin, and Michael S. Brown. 2018. A High-Quality Denoising Dataset for Smartphone Cameras. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR).</p>
       <p class="ref"><strong>Sample image</strong> — <em><a href="https://www.pixiv.net/artworks/142575987" target="_blank" rel="noopener">my own illustration</a></em>, used here because a drawing carries no sensor noise of its own. Unofficial fan art of <a href="https://pjsekai.sega.jp/" target="_blank" rel="noopener">Project SEKAI COLORFUL STAGE! feat. Hatsune Miku</a> — &copy; SEGA / &copy; Colorful Palette Inc. / &copy; Crypton Future Media, INC. <a href="https://piapro.net/" target="_blank" rel="noopener">www.piapro.net</a> All rights reserved. The drawing itself is &copy; 2026 Mingyang Song.</p>
       <p class="ref"><strong><a href="https://r0k.us/graphics/kodak/" target="_blank" rel="noopener">Kodak Lossless True Color Image Suite</a></strong> — <em>kodim16</em>, long a reference image for image-processing work, is the crop in the teaser strip on the landing page.</p>
@@ -470,7 +477,8 @@ const CAM_NAMES={G4:'LG G4',GP:'Google Pixel',IP:'iPhone 7',N6:'Nexus 6',S6:'Gal
 
 const els={
   file:$('file'),pick:$('pick'),sample:$('sample'),drop:$('drop'),
-  camera:$('camera'),iso:$('iso'),seed:$('seed'),reseed:$('reseed'),strength:$('strength'),
+  camera:$('camera'),iso:$('iso'),presetNote:$('preset-note'),
+  seed:$('seed'),reseed:$('reseed'),strength:$('strength'),
   strengthV:$('strength-v'),maxdim:$('maxdim'),maxdimNote:$('maxdim-note'),
   clear:$('clear'),download:$('download'),status:$('status'),timing:$('timing'),
   working:$('working'),workingLabel:$('workingLabel'),workingPct:$('workingPct'),busybar:$('busybar'),
@@ -828,7 +836,12 @@ async function setSource(img){
   els.clear.disabled=false;
   return render();
 }
-const readyMsg=()=>`Ready — ${Object.keys(state.params.params).length} measured presets.`;
+/* "measured" is a claim about the data, so it counts only the entries that carry one — the rest
+   are interpolated across ISO and the picker labels them. */
+const readyMsg=()=>{
+  const all=Object.values(state.params.params), m=all.filter(e=>e.measured).length;
+  return `Ready — ${all.length} presets, ${m} of them measured.`;
+};
 /* Back to the empty stage. The view options are deliberately left alone — camera, ISO, strength
    and seed are a setup you may want to carry to the next image, exactly as the SMV viewer keeps
    its view options across a scene load. The charts stay up too: they describe the preset, not the
@@ -869,12 +882,36 @@ async function handleFile(f){
 }
 
 /* ── wiring ────────────────────────────────────────────────────── */
+/* The ISO list is rebuilt per camera, because which ISOs are measurements and which are
+   interpolations differs by camera — SIDD shot G4 at four ISOs and IP at ten. The `value` stays
+   the bare number so readControls(), the preset key and the download filename are untouched;
+   only the label carries the marker. */
+function syncIsoOptions(){
+  const p=state.params, cam=els.camera.value, keep=els.iso.value;
+  els.iso.innerHTML=p.isos.map(v=>{
+    const e=p.params[`${cam}|${v}`], interp=e&&e.measured===false;
+    return `<option value="${v}">${v}${interp?' · interpolated':''}</option>`;
+  }).join('');
+  els.iso.value=p.isos.includes(+keep)?keep:(p.isos.includes(1600)?1600:p.isos[0]);
+  showPresetNote();
+}
+/* Says in words what the marker says in the list, and for a measurement adds the one number that
+   decides how much to trust it: how many distinct SIDD scenes stood behind the fit. */
+function showPresetNote(){
+  const p=state.params, e=p&&p.params[`${els.camera.value}|${els.iso.value}`];
+  if(!e){ els.presetNote.textContent=''; return; }
+  els.presetNote.textContent=e.measured
+    ? `Measured from ${e.scenes} SIDD scene${e.scenes===1?'':'s'} at this camera and ISO.`
+    : `Interpolated across ISO — ${els.camera.value} was measured at ${
+        (e.from||[]).map(k=>k.split('|')[1]).join(', ')}.`;
+}
 function populate(){
   const p=state.params;
   els.camera.innerHTML=p.cameras.map(c=>
     `<option value="${c}">${CAM_NAMES[c]?`${c} · ${CAM_NAMES[c]}`:c}</option>`).join('');
   els.camera.value=p.cameras.includes('G4')?'G4':p.cameras[0];
-  els.iso.innerHTML=p.isos.map(v=>`<option${v===1600?' selected':''}>${v}</option>`).join('');
+  els.iso.value=1600;
+  syncIsoOptions();
 }
 els.pick.addEventListener('click',()=>els.file.click());
 els.file.addEventListener('change',(e)=>handleFile(e.target.files[0]));
@@ -905,8 +942,11 @@ function chartsForPreset(){
   if(e) updateCharts(scaledCurves(e,o),
                      [0,1,2].map(c=>effectiveKernel(e.kernel[c],state.params.kernel_size)));
 }
-const presetChanged=()=>{ if(!state.source) chartsForPreset(); scheduleRender(0); };
-[els.camera,els.iso].forEach(el=>el.addEventListener('change',presetChanged));
+const presetChanged=()=>{ showPresetNote(); if(!state.source) chartsForPreset(); scheduleRender(0); };
+// Changing camera re-labels the ISO list (a different camera has a different set of measured
+// ISOs), so it has to rebuild before the preset is read, not after.
+els.camera.addEventListener('change',()=>{ syncIsoOptions(); presetChanged(); });
+els.iso.addEventListener('change',presetChanged);
 /* `input`, not `change`: the readout has to track the thumb while it is being dragged. The render
    itself is still debounced by scheduleRender's timer, so a drag across the range queues one
    synthesis at the end rather than sixty. */

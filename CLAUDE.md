@@ -822,11 +822,44 @@ by hand rather than copied. What changed in the port, and why:
 
 **Only summary statistics are published, and it must stay that way.** `assets/grain_params.json`
 (~180 KB, 70 presets = 5 SIDD cameras × 14 ISO levels) carries per-channel σ over 17 intensity
-knots, a 9×9 correlation kernel per channel, and a 3×3 Cholesky factor for the RGB correlation —
-the same quantities the paper plots. **No weights, no architecture, and nothing from which
-either could be recovered.** The checkpoints themselves are unpublishable; do not add them, and
-do not "upgrade" this page to run the real network (the ONNX path in `~/tempformer/web/` exists,
-but shipping it here would publish the generator).
+knots, a 9×9 correlation kernel per channel, the measured `rho(d)` it was factored from, and a
+3×3 Cholesky factor for the RGB correlation — the same quantities the paper plots. **No weights,
+no architecture, and nothing from which either could be recovered.** The checkpoints themselves
+are unpublishable; do not add them, and do not "upgrade" this page to run the real network (the
+ONNX path in `~/tempformer/web/` exists, but shipping it here would publish the generator).
+
+**The numbers are MEASURED FROM SIDD, not distilled from the network** (changed 2026-08-08;
+`calibrate_grain.py`, which probes the ONNX generator, is still there and still works — it is
+now the *other* way to fill the same file). The analyzer is
+`~/tempformer/noise_synthesizer/{grain_model,measure_grain,build_grain_params}.py` with
+`test_grain.py` beside it, and it stays in that repo: this one is public and the calibration
+method is not something to hand out. Only the distilled values cross over.
+
+Two consequences for the page, both visible:
+
+- **SIDD has only 34 of the 70 (camera, ISO) combinations.** The generator could fill the rest
+  because it was *conditioned* on ISO; a measurement cannot. So every entry carries `measured`,
+  the ISO picker is rebuilt per camera (`syncIsoOptions()`) to label the interpolated ones, and
+  `#preset-note` says which in words plus the scene count behind a real fit. The `<option>`
+  **value stays the bare number** — the preset key, `readControls()` and the download filename all
+  depend on it; only the label carries the marker.
+- **`mix` is now the correlation BEFORE spatial filtering.** What survives to the output is
+  `rho_out(c,d) = R(c,d)·⟨k_c,k_d⟩`, and ⟨k_c,k_d⟩ < 1 whenever two channels' kernels differ, so
+  the measured output correlation is always an attenuated R. The analyzer divides it back out,
+  then projects to the nearest correlation matrix (eigenvalue clip **and** unit-diagonal
+  renormalisation — neither alone is idempotent) before factoring. On SIDD the correction is
+  small (~0.01) because the three channels' kernels come out nearly identical; the acceptance
+  test synthesises deliberately different ones to prove the path works.
+
+`assets/grain-analyzer-spec.md` is the handoff note the analyzer was built from. It is **untracked
+and must stay that way, or move to `~/tempformer`** — `assets/` is served, and the spec is the
+calibration recipe in full, which is the thing this page deliberately does not hand out (see the
+*explanation cards* note above). Committing it publishes the method. Two places the implementation
+deliberately departs from it, both with a test pinning the reason:
+**`fit_kernel()` refines** the spectral factorisation instead of using it once (the spec builds
+the lag plane from a continuous `rho(hypot)` but measures it with `round(hypot)==d` rings, worth
+~0.10 in `rho(1)`), and the **flat gate is adaptive**, set from each combination's own local-std
+floor (a fixed threshold keeps 43% at G4/ISO100 and 0.2% at N6/ISO3200).
 
 Three invariants in the synthesis math, all load-bearing:
 
@@ -882,14 +915,33 @@ symptom that found this: **entering or leaving fullscreen visibly recomputed the
 fullscreen toggle fires `resize` without changing the layout behind it, so the handler now also
 drops any event that left the chart width unchanged.
 
-**Regenerating the parameters** needs the unpublished model, so it happens in the TempFormer
-repo and the result is copied here:
+**Regenerating the parameters** happens in the TempFormer repo — it needs the dataset (and, for
+the older path, the unpublished model) — and only the result is copied here:
 
 ```bash
-cd ~/tempformer && conda run -n TempFormer python -m noise_synthesizer.calibrate_grain \
+# measure from the paired captures (~30 min on CPU; this is what ships)
+cd ~/tempformer && conda run -n TempFormer python -m noise_synthesizer.measure_grain \
+  --data_dir /cluster/scratch/misong/datasets/SIDD_Medium_Srgb/crops_256_disk \
+  --max_crops 500 --out runs/grain/sidd_measured.json
+conda run -n TempFormer python -m noise_synthesizer.build_grain_params \
+  --measured runs/grain/sidd_measured.json \
+  --out ~/mingyang-song.github.io/projects/grain/assets/grain_params.json
+
+# the acceptance tests -- run them after ANY change to the three modules
+conda run -n TempFormer python -m noise_synthesizer.test_grain
+
+# the older path: probe the trained generator instead of the data
+conda run -n TempFormer python -m noise_synthesizer.calibrate_grain \
   --samples 64 --out playground/assets/grain_params.json
-cp playground/assets/grain_params.json ~/mingyang-song.github.io/projects/grain/assets/
 ```
+
+`measure_grain.py` writes the raw per-combination fit *plus* its diagnostics (`leak_slope`,
+`rho_gap_max`, `flat_threshold`, `sigma_knots_fitted`, `psd_projection_shift`);
+`build_grain_params.py` is what interpolates to 70 and strips it down to what the page needs.
+Read the diagnostics before shipping a re-measurement — **`leak_slope` is the one that matters**:
+it is the rise in `rho(1)` from the flattest quarter of the gated pixels to the most textured, so
+near zero means the fit is grain and a large positive value means it is image structure. Every
+combination currently reads between −0.01 and +0.03.
 
 **Two different pictures, on purpose.** The *Sample* button loads `assets/grain_example.jpg` — one
 of Mingyang's own illustrations ([pixiv](https://www.pixiv.net/artworks/142575987)) — because a
