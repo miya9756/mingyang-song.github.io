@@ -118,8 +118,23 @@ async function poolDecode(primary, srcs) {
 // that decodes a fixed set of scenes up front (the SpDef side-by-side) can free the primary, the
 // helper pool, the dequant worker and the blob URLs still holding a copy of the ~32 MB core.
 // The SMV viewer deliberately does NOT call this: it re-decodes on scene switch.
-// A later ffmpegReady() just re-fetches (warm HTTP/SW cache) and works normally.
-export async function disposeFFmpeg() {
+//
+// TWO THINGS ARE FREED HERE AND THEY HAVE VERY DIFFERENT COSTS TO REACQUIRE.
+//
+//   the INSTANCES  — the primary, the helper pool and the dequant worker. Each holds a live wasm
+//                    heap that GROWS with what it has decoded, so this is the large and unbounded
+//                    part. Rebuilt in milliseconds.
+//   the CORE URLs  — blob URLs holding the fetched ~32 MB of ffmpeg-core.js/.wasm. Fixed size, and
+//                    reacquiring them means FETCHING 32 MB again: from the HTTP cache if it still
+//                    has them, from the network if not. (The service worker that would make that
+//                    reliable is registered under /projects/smv/ and its scope does not reach the
+//                    SpDef page.)
+//
+// `keepCore` frees only the first. That is what a consumer wants when a scene can be unloaded and
+// loaded again in the same session — the SpDef page's Clear button — because the working set is
+// genuinely returned while a reload costs a wasm compile rather than a 32 MB download. Default is
+// the full release, so a page that is done for good (viewer.html standalone) is unaffected.
+export async function disposeFFmpeg({ keepCore = false } = {}) {
   const kill = (f) => { try { f.terminate(); } catch (e) {} };
   if (_ff) kill(_ff);
   _ff = null; _loading = null;
@@ -127,11 +142,16 @@ export async function disposeFFmpeg() {
   for (const h of _helpers) kill(h.ff);
   _helpers.length = 0; _helpersInit = null;
   if (_dq) { kill(_dq); _dq = null; _dqJobs = null; }
-  if (_coreURLs) {
+  if (_coreURLs && !keepCore) {
     for (const u of Object.values(_coreURLs)) { try { URL.revokeObjectURL(u); } catch (e) {} }
     _coreURLs = null;
   }
 }
+
+// Whether the ~32 MB core is already fetched, so a caller can say "loading decoder (~31 MB)" only
+// when that is actually what is about to happen. Cheap honesty: after a Clear the next load
+// reuses the blobs and the old wording promised a download that never occurs.
+export function coreCached() { return !!_coreURLs; }
 
 // ── dequant worker ───────────────────────────────────────────────────────────
 let _dq = null, _dqJobs = null, _dqId = 0;

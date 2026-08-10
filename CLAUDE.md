@@ -141,8 +141,15 @@ The SpDef page hosts **four independent cards**, all driven by the one host scri
    (`0.9` / `59`), plus full-count with `xyz/rot_velocity_div_loss` zeroed. 200 frames. Note
    the *no-reg* run here zeroes only the velocity-divergence terms, not the acceleration ones
    — unlike the bouncingballs pair, which zeroes both.
-3. **1×1, DeformingThings4D *astra / samba dancing*** — not a comparison: the GS-free path, the
-   *fitted spline itself*, and a **different renderer**. See the `points.html` section below.
+3. **1×1, the fitted spline itself — with a picker for TWO examples that are DIFFERENT RENDERERS.**
+   Not a comparison: one at a time, showing that "the timeline is continuous because the spline is
+   evaluated, not replayed" is a property of the *field*, not of any one pipeline.
+   - **DeformingThings4D *astra / samba dancing*** (`points.html`, `kind:'points'`) — the GS-free
+     path: the field fitted straight to a mesh's vertices, no rasteriser, no decoder. 837 frames
+     from 105 knots. See the `points.html` section below.
+   - **D-NeRF *hook*** (`knotsplat.html`, `kind:'knot'`) — the same curve carrying a *compressed
+     gaussian scene*: 100 frames of 23,716 gaussians out of **15 stored knots**, 2.3 MB.
+     See the `knotsplat.html` section below.
 4. **1×2, the model taken apart — with a picker for TWO trained models.** What the model *stores*
    and what it *predicts*, side by side: left, the canonical gaussians and the deformation field's
    three tri-planes in one scene (`field.html`); right, a sample of those gaussians pushed to the
@@ -157,15 +164,39 @@ The SpDef page hosts **four independent cards**, all driven by the one host scri
    like-for-like comparison and are not presented as one: the picker shows one at a time, and the
    card's clock, camera and view options belong to whichever is loaded.
 
-**`kind` is the only axis the host branches on** — `'splat'` (the first two cards, `viewer.html`
-panels the host fetches and decodes for) versus `'points'` and `'field'` (the last two, panels
-that load themselves and need no decoder, so `startGroup()` skips `pump()` and `flush()` sends
-them options and a seek rather than data). Anything per-kind — the required view-option keys (`OPT_KEYS`), what `viewState()`
-sends, which controls `pushView()` wires (`OPT_WIRING`) — is a table keyed by it, not an `if`
+**`kind` is the only axis the host branches on.** Two of them are **host-decoded** — `'splat'`
+(the first two cards, `viewer.html`) and `'knot'` (the third card's second example,
+`knotsplat.html`) — because a decoder per canvas is another copy of a ~32 MB ffmpeg core; both go
+through `pump()`, and `flush()` sends them a keyframe and then one payload per GOP/chunk, freed on
+the panel's ACK. Two are **self-loading** — `'points'` and `'field'` — needing no decoder at all,
+so `startGroup()` skips `pump()` and `flush()` sends them options and a seek rather than data.
+Anything per-kind — the required view-option keys (`OPT_KEYS`), what `viewState()`
+sends, which controls `pushView()` wires (`OPT_WIRING`), whether the camera flies and so wants the
+pad (`PAD_KINDS`) — is a table keyed by it, not an `if`
 scattered through the file. A group also opts into a **continuous clock** with `frac:true`, which
 changes `setFrame()`'s label and lets `tick()` advance in fractional frames.
 
-**`kind` is per GROUP, not per panel, and the last card has two different renderers in one group.**
+**`kind` is per SCENE, not per group — the trajectory card switches RENDERER with its picker.**
+`g.kind` follows the selected example (`applyScene()` sets it from the table); everything that
+branches reads it live. A group that can switch declares two extra fields:
+
+- **`kinds`** — every kind its option block must wire at boot, since re-wiring on a switch is one
+  more thing to forget. Overlapping keys are simply assigned the same handler twice.
+- **`optKind`** — the `OPT_KEYS` entry its block satisfies, i.e. the **union** of its kinds' keys
+  (`OPT_KEYS.traj`). `verify.py`'s `check_repeated_controls` matches `data-kind` against exactly
+  one entry, so the union has to be a named entry rather than something inferred — which is what
+  makes "added a control to `knot` and forgot the block" a check failure rather than a dead card.
+
+The controls belonging to the *other* example carry **`data-only="<kind>"`** and are hidden by
+`applyScene()`, which sweeps the whole card (`ui.root`) so a per-example control can sit in the
+transport as well as in the options block — the touch pad does. **That needs the CSS rule
+`[data-only][hidden]{display:none}`**: `.vrow` and `.tchk` both set `display`, and an author class
+selector outranks the UA stylesheet's `[hidden]`, so the attribute alone leaves the row on screen
+with only the script believing it is gone. (`.tbtn` sets no `display`, which is why the Load/Clear
+buttons' `hidden` has always worked.) The sibling rule beside it drops the separator a hidden row
+would otherwise leave above the visible one.
+
+**`kind` is not per PANEL, and the last card has two different renderers in one group.**
 That is deliberate and it is why nothing had to be re-keyed: `VIEW.field` emits *both* panels' option
 sets in one message and each panel reads the keys it knows (`sheets`/`cast`/… in `field.html`,
 `knSamples`/`knScale`/… in `knots.html`), which is exactly the idempotence the protocol already
@@ -177,11 +208,24 @@ slider whose range depends on the data is clamped from the panel that owns it (`
 `field.html`, `sampleMax` from `knots.html`).
 
 Optional transport controls are **simply absent from that card's `ui`, resolved to `null`, and
-guarded at every use**: `touch` (only the splat cards have a virtual pad), `prev`/`next` and
-`speed` (only the trajectory card has supervised-frame steppers and a playback rate). Adding a
+guarded at every use**: `touch` (only the cards whose camera *flies*), `prev`/`next` and
+`speed` (only the trajectory card has marked-instant steppers and a playback rate). Adding a
 control to one kind must not force a dummy into the others. `g.el` is built by walking `g.ui`
 rather than by naming keys, and `verify.py` reads the same `ui:{…}` blocks for its id check — so
 a new control needs no edit in either place.
+
+**The steppers and the frame readout are driven by `marks`, not by "supervised frames".** A panel
+sends `marks` (a list of frame positions), `markOn` and `markOff` (what to call being on one and
+between them) with its `ready`, because what is marked depends on what shipped: `points.html`
+sends the frames the field was trained on ("supervised" / "inferred"), `knotsplat.html` sends
+where its 15 knots fall ("at a knot" / "between knots"). **Marks are floats and are matched
+exactly** — 15 knots over 100 frames is one every ~7.07, so the old integer `Set` could not have
+held them. The list is scanned linearly per label update; the longest here is 210 entries.
+
+**`ready` can arrive more than once from one panel**, and the host's opening seek fires on the
+first only. `knotsplat.html` reports at keyframe install and again when its knots land, because
+the parity margin in its `note` does not exist until then; without the `first` guard the second
+report would yank the playhead back to frame 0 under a visitor who scrubbed during the decode.
 
 Both splat comparisons' five scenes are the **single-GOP** packing: one keyframe,
 `overlap_frames = 0`. For
@@ -194,9 +238,39 @@ contexts and a ~32 MB decoder — too much to spend on a visitor who came for th
 a group is started its iframes carry the viewer URL in **`data-src`, not `src`**, so no viewer,
 GL context or decoder exists for it. `startGroup()` assigns `src` and enqueues; groups run **one
 at a time** through `pump()`, because two quick clicks would otherwise put two decode chains on
-one wasm heap and race `disposeFFmpeg()` against a live decode. The decoder is released when the
-queue drains and re-acquired (warm cache) if another group is loaded later. `verify.py` reads
+one wasm heap and race `disposeFFmpeg()` against a live decode. `verify.py` reads
 `data-src` for asset checking; without that it stopped seeing `viewer.html` entirely.
+
+**The decoder is kept while any loaded card still wants it, and that is deliberate.** It used to be
+disposed the moment the queue drained, which was wrong once three of the four cards decode:
+`disposeFFmpeg()` also **revokes the blob URLs the core was compiled from**, so loading a second
+decoding card re-fetched and re-compiled the whole 31 MB. This page cannot lean on the service
+worker to soften that either (`sw.js` is registered under `/projects/smv/` and its scope does not
+reach here, so the refetch falls back to the plain HTTP cache, or the network if that has evicted
+it). `decoderWanted()` is the rule now: any **started** group whose `kind` is in `DECODER_KINDS`
+holds the core; clearing the last of them releases it, so the memory still comes back on request.
+
+Two call sites, and the split matters. `releaseDecoder()` runs at pump()'s drain, where the queue
+is empty and nothing is mid-decode. `releaseDecoderSoon()` runs from `clearGroup()` and is
+**deferred by a tick**, because the example picker clears and restarts a card in one synchronous
+go: releasing on the spot would race `disposeFFmpeg()` against the `ffmpegReady()` of the load
+starting immediately after. Never call `disposeFFmpeg()` straight from `clearGroup()`.
+
+**Both release with `{keepCore:true}`, and that is what makes Clear-then-load cheap.**
+`disposeFFmpeg()` frees two things with very different reacquisition costs: the **instances** (the
+primary, the helper pool, the dequant worker — each holding a live wasm heap that *grows* with what
+it has decoded, so this is the large and unbounded part, rebuilt in milliseconds) and the **core
+blob URLs** (the fetched ~32 MB of `ffmpeg-core.js`/`.wasm`, fixed size, and reacquiring them means
+fetching 32 MB again). Revoking the blobs is exactly what made pressing Clear and loading again
+re-download the core. `keepCore` frees only the instances, so the working set genuinely goes back
+while a reload costs a wasm compile; the blobs go when the page does. Default is still the full
+release, so `viewer.html`'s standalone fallback (done for good after one decode) is unaffected.
+`coreCached()` exists so the status line only promises "~31 MB, one-time" when a download is
+actually about to happen, and says "starting the decoder" otherwise.
+
+`disposeFFmpeg()` / `coreCached()` are **site-only additions to `decode_motion.js`** — upstream's
+copy has neither, and this file already diverges from it in `coreURLs()` too (see the module-relative
+note below). The "edit upstream and sync" rule covers the decode *math*, not this lifecycle helper.
 
 **Each comparison can also be given back.** `clearGroup()` is the counterpart to `startGroup()`:
 four cards already means seven WebGL contexts, seven scenes and every decoded motion array
@@ -214,6 +288,34 @@ anything from a cleared group (a `ready` posted just before teardown would re-en
 transport), and pump()'s catch only reports when the group is still started. Load hides with
 **`hidden`, not `style.display`** — Clear restores it with `hidden=false`, which an inline
 `display:none` would outrank.
+
+**Navigating a long page: the contents list and the back-to-top control.** Four cards, each a few
+screens tall once loaded, so the page is long before anything is even running.
+
+- **`nav.toc`** sits under the *Playground* heading and links `#abCard` / `#amCard` / `#ptCard` /
+  `#fdCard`. Its link text is the card's `<h3>` **verbatim** so the link and its destination cannot
+  drift apart (and a screen reader announces the heading you are about to land on); a card renamed
+  without its entry is the one thing to watch, since nothing checks it. Same pill as the header's
+  `.back` button, so the two read as one family rather than two inventions, and it wraps rather
+  than scrolls horizontally, which would hide exactly the entry someone is hunting for. The card
+  ids reuse the `ab`/`am`/`pt`/`fd` prefixes the transports already use. `#ptCard` predates this:
+  it is also the trajectory group's `ui.root`, which `applyScene()` sweeps for `data-only`.
+- **`.totop`** is revealed only once the masthead has scrolled away, by an **IntersectionObserver
+  on `#top` in a CLASSIC script** at the foot of the body. Classic for the same reason the boot
+  watchdog is: navigation must not be what breaks when a decode-path fetch is dropped and the
+  module never evaluates, and a scroll affordance has no business waiting on a ~32 MB decoder
+  graph. An observer rather than a scroll handler so nothing runs per scroll event over a page
+  with four WebGL panels; where the API is missing the control is simply always shown, which is
+  the right way to fail for something whose job is to be reachable. Hidden state is
+  `visibility:hidden`, not just `opacity:0`, so it leaves the tab order while invisible.
+- One known overlap, judged acceptable: the control is fixed bottom-right, and so are the virtual
+  pad's up/down buttons *inside* a panel. It only bites on touch, on the americano card (the only
+  one that still flies), with the pad on, and with that panel at the viewport's bottom-right. On a
+  phone the grid is one column and the pad is on the FIRST panel, i.e. the topmost, so in practice
+  they do not meet. Move the control before adding a pad to another card.
+- `scroll-behavior:smooth` and `.subcard{scroll-margin-top}` make a jump land the card's top edge
+  just below the viewport edge instead of flush against it. Both are switched off in the
+  reduced-motion block, along with the two new transitions.
 
 **Each comparison is a `.subcard`** — heading, lede, panels, transport, status line and view
 options in one bordered block, so it is unambiguous which transport drives which panels. Three
@@ -356,7 +458,28 @@ to the camera, which is what bouncingballs (already square, 800×800) still does
   the thing it affects. Trail max differs for that reason: 150 for bouncingballs, 200 for
   americano. `flush()` re-sends `viewState(p.g)` with the keyframe so a panel that installs late
   doesn't sit at the defaults.
-- **The virtual movement pad is per group, but only ever on ONE panel of it.** Same control as the
+- **Navigation is per panel: `viewer.html` takes `?nav=orbit`, and only the americano card still
+  flies.** The choice is a property of the *capture*, not of the renderer, which is why both modes
+  live in that file rather than one replacing the other. **Orbit** (bouncingballs' two panels, and
+  `knotsplat.html`, which has no fly path at all) is the vocabulary `points.html` / `field.html` /
+  `knots.html` already use: a synthetic D-NeRF subject sits at the origin, so rotating and dollying
+  *it* is what a reader wants, and one finger / two fingers reach all of it. **Fly** stays the
+  default and stays on americano: a close hand-held HyperNeRF capture of a table top, whose world
+  frame is not Z-up (the orbit path hardcodes `UP=[0,0,1]`) and which deliberately renders past the
+  filmed frustum, so "look around from in here" is the useful verb. Three things follow:
+  - **A group must be all one mode.** The `cam` relay carries either flavour and the host does not
+    care, but an orbit state cannot be applied to a fly camera — so `?nav=` is set the same way on
+    every panel of a card.
+  - **Orbiting, `resetView` restores `home` directly**, not through `frameScene()`: that function
+    deliberately declines to overwrite a pose adopted from the panel beside it, which is right on
+    load and wrong for a button whose entire job is to undo where you have got to.
+  - **An orbit card has no pad and omits `touch` from its `ui`** (see below). `setTouchUI()` also
+    refuses in orbit mode, so a standalone `?touch=1` or a stale host message cannot raise one.
+- **The virtual movement pad follows the CAMERA, not the kind.** It drives the WASD axes, so it
+  exists only for a card whose panels fly — **americano alone today**. `pushTouch()` no-ops when a
+  card has no `touch` id, which is what lets every caller stay unconditional. Do not reintroduce a
+  kind-keyed rule: bouncingballs and the knot example are both splat-drawing cards that orbit.
+- **The pad is per group, but only ever on ONE panel of it.** Same control as the
   SMV viewer's (`#vctrl` / `#joy` / `#vbtns`, stick → the WASD axes, ▲▼ → the Q/E axis, folded into
   `moveCam()`), but retinted: the SMV pad is translucent white over a dark scene, which on this
   page's white panel is invisible. The pad has to live *in* the panel — it sits over that canvas and
@@ -366,7 +489,7 @@ to the camera, which is what bouncingballs (already square, 800×800) still does
   picks the first *live and announced* panel — leftmost in the 1×N grid, topmost once it collapses
   to one column — and `pushTouch()` re-pushes on every hello (via `flush`), every panel failure and
   every toggle, so ownership can move without leaving a stale pad behind. The per-group checkbox
-  (`abTouch` / `amTouch`, in the transport, id-addressed since it is not part of the repeated
+  (`amTouch`, in the transport, id-addressed since it is not part of the repeated
   `.viewopts` block) **defaults to `(pointer:coarse)`**: with no keyboard there is otherwise no way
   to fly at all, only to orbit. It stays a checkbox because the detection is a guess and the pad is
   useful with a mouse. Hiding the pad must also zero `joyX/joyY/joyUp` or the camera keeps drifting.
@@ -659,6 +782,89 @@ shader with `gl_PointSize`, and a fragment shader whose only branch is the point
 the panel reports a compile failure through its own error path rather than blanking. Run the
 validator over them if you touch them.
 
+### `knotsplat.html` — a compressed scene played from its knots (a FIFTH renderer)
+
+The trajectory card's second example. A **knot bundle**
+(`scripts/compress/compress_knot_bundle.py`) stores the deformation field's own knots — a value
+and a tangent per knot — instead of one delta image per frame, so any timestep is a cubic-Hermite
+blend of the two knots bracketing it. For *hook*: **15 knot images per stream instead of 99 delta
+frames**, and 100 frames of 23,716 gaussians come out of 2.3 MB.
+
+It is a fifth renderer, not a mode of `viewer.html`, for the reason upstream split
+`web/player_knots/` off from `player_browser`: the two formats disagree on everything below the
+keyframe — four streams per chunk instead of two, one image per *knot* instead of per frame, a
+blend of two knots instead of keyframe-plus-delta, and no streaming window because the whole knot
+set is resident. `viewer.html` is what the two published comparisons depend on and its decode path
+is the one this file pins to `compression/decoder.py`; branching it for a second format is exactly
+the risk that rule exists to prevent. The renderer core (shaders, `RGBA32UI` splat texture,
+full-range 16-bit bucket sort) is `viewer.html`'s verbatim; the **orbit camera is `field.html`'s**,
+which shares the same basis convention — see *Navigation* below.
+
+- **Trails are the MESH card's, not `viewer.html`'s, and the Trails control is shared between the
+  two examples.** Each sampled gaussian's path is evaluated from the spline over the preceding
+  frames and the segment colour flips at every knot, so one stripe is one interval (about 7 frames
+  on hook, about 8 on astra). That is the whole reason the figure is worth drawing on a gaussian
+  scene at all: the colour change *is* the knot, which is the spacing the paper argues about.
+  `viewer.html`'s overlay is a different thing (a stored per-frame array, faded blue to red by age)
+  and would say nothing about knot spacing. Details that carry over from `points.html` unchanged:
+  the two stripe colours, alpha 0.65 further multiplied by `vAge`, the exact knot times inserted
+  into the uniform sample set so a stripe boundary lands **on** a knot, and per-interval runs drawn
+  as one `drawArrays` each. `evalSubset()` is `blendKnots` restricted to an index list, built from
+  the module's own `curveBasis`/`curveOrder` so there is still one definition of the curve; the
+  full-cloud path would evaluate all 23,716 rows per sample, which at ~200 samples a frame is not
+  affordable. **`TRAIL_POINTS`/`DETAIL` are 900/4, below points.html's 1500/5** — that card draws a
+  mesh and nothing else, while every frame here already costs a full-cloud blend, a splat-texture
+  upload and a depth sort, and the trail is rebuilt on top of that. **No motion filter is needed**
+  (unlike the bundle behind `knots.html`): every gaussian in hook moves, median peak deviation from
+  its own time-mean 0.216 in a scene 2.5 across, so a stride over the PLAS-sorted rows is already an
+  even sample. A trail crossing a CHUNK boundary is reported as absent rather than drawn: each chunk
+  has its own reference and its own PLAS order, so row *j* is a different gaussian either side.
+- **What it deliberately does NOT carry**, unlike `viewer.html`: the colorize-motion tint, which
+  reads a per-frame motion array that this format has none of.
+  Hard ellipsoids *is* shared: it is a property of the splat, not of how the splat got there.
+- **Per frame it is two 4-term blends per gaussian**, then the ordinary splat write and sort. No
+  decode, no new upload of offsets. That is why the timeline is genuinely continuous and why the
+  card's Speed slider means something here.
+- **The reference is the chunk's FIRST KNOT, and `xyz_d` is relative to it — but `rot_d` is
+  not.** Position adds the blend to the reference; rotation adds it to the *canonical* quaternion
+  and re-normalises. `compress_knot_bundle.py`'s docstring explains why the two references differ
+  in kind (the position bases sum to 1, so folding `d0` into the reference cancels; doing the same
+  for rotation would need a non-unit quaternion the reference grid cannot represent). Do not
+  "symmetrise" this.
+- **Parity is checked on load and reported in the status line.** At a knot the basis is
+  `[1,0,0,0]`, so the curve must return that knot's own stored offset; a mismatch means the panel
+  is rendering a deformation the model never predicted, which still looks like motion. Same
+  contract `traj.js` and `knots.html` have with their bundles.
+- **`knot_decode.js` is a COPY of `4d-relight/web/player_knots/knot_decode.js`** — re-copy it
+  whole rather than editing here, exactly as `traj.js` is re-copied; upstream's
+  `tests/test_knot_parity.py` is what ties its dequantisation and its curve to
+  `compression/offset_stream.py`. The one deliberate change is the three vendor specifiers
+  (`../player_browser/vendor/` → `../smv/vendor/`), which only its own `ffmpegReady()` reaches.
+  **The host never calls that** — `decodeKnotChunk()` takes the ffmpeg instance as an argument, so
+  the page keeps using the single instance `decode_motion.js` owns and there is never a second
+  ~32 MB core. Only the standalone `knotsplat.html?scene=…` fallback instantiates one.
+- **The host decodes, the panel renders** — same division as the splat cards, and it inherits
+  their hardening: `grab()`'s idle timeout and cache-busted retries, `withTimeout` around the
+  decoder, and a `gen` check after every await. `loadKnotGroup()` is a separate pass rather than a
+  branch inside `loadGroup()` because the manifest shapes genuinely differ (`chunks[]` with
+  `reference` and four streams, against `gops[]` with `reference_path` and two).
+
+**Only the upper byte of the position streams ships**, and that is a packaging decision, not an
+approximation invented in the viewer. A 16-bit stream is two planes (`xyz_*_u.mkv` +
+`xyz_*_l.mkv`); the lower planes are the bulk of the download and the least compressible part of
+it. `build_knot_web_bundle.py` copies only the upper plane and relabels the stream
+`png16_video` → `png16_upper_video` — a format `compression/offset_stream.py` already writes and
+reads, and what `compress_knot_bundle.py --no_full_precision` would have produced. Both readers
+reconstruct the identical value, `(u << 8)` rather than `(u << 8) | l`, a truncation toward the
+stream's minimum. `knot_decode.js` keys the low plane off the format string, so it needs no
+branch. **Verified offline**: the shipped files, read through the JS formulas, match
+`Png16UpperVideoReader` / `H2654ChReader` to 0.0, and the curve reproduces every knot exactly.
+Cost: max position error 4.8e-06 → **2.9e-03** world units in a scene 2.5 across, for 2.3 MB
+instead of 4.6 MB. Pass `--full_precision` to keep both planes.
+
+The upstream page has a live 16-bit/8-bit A/B toggle. **There is deliberately no such control
+here** — the low planes are not in the bundle, so the toggle would have nothing to switch back to.
+
 ### Shared decode path — do NOT hoist `vendor/` out of `projects/smv/`
 
 `viewer.html` imports `../smv/decode.js` and `../smv/decode_motion.js`. ES module specifiers
@@ -694,8 +900,10 @@ shaders, different data model, no decoder. Do not try to merge them.
   `traj.js` evaluates the same cubic Hermite the field uses, so the timeline is *continuous* and
   every frame between the supervised ticks is inferred in the browser. That is the whole claim of
   the card, which is why the group carries `frac:true` and the frame readout says
-  `· supervised` / `· inferred`, and why ⇤/⇥ step trained frames (`train_frames`, sent by the
-  panel on `ready`) — scrubbing lands on one only by accident.
+  `· supervised` / `· inferred`, and why ⇤/⇥ step trained frames — scrubbing lands on one only by
+  accident. Those go out on `ready` as **`marks` / `markOn` / `markOff`** (from
+  `meta.train_frames`), the generic spelling the card's other example also uses for its knots; see
+  the `marks` note in the host section above.
 - **`traj.js` is a VERBATIM copy of the upstream module** and mirrors `traj_codec.py` /
   `point_deform.py`. Every bundle carries a torch-computed `parity` block; the panel refuses to
   render if it disagrees, the same contract the splat path has with `compression/decoder.py`. Do
@@ -755,6 +963,14 @@ spline evaluates poses that were never stored. `tick()` uses `g.rate` for a `fra
 shared `FPS` elsewhere. It survives Clear, like the view options — a preference, not scene state.
 The slider carries **percent and the label shows a multiple** (`1.00×`); an absolute fps readout
 was tried and read as a rendering setting rather than a playback one.
+
+**`g.rate` is DERIVED from the slider, never assumed** — `applySpeed(g)`, called from init, from
+the slider's `input`, and from `startGroup()`. It used to be initialised to `FPS` and only ever
+updated by the handler, which left exactly one window where the control and the clock disagreed:
+before the first drag. That is the common case, not a corner — a browser restores a range input's
+value on reload without firing `input`, so a card reopened at 0.50× played at 1.00× until the
+slider was nudged. Any new control whose state the host caches needs the same treatment; it is the
+transport's version of the rule `syncViewOptions()` states for the render options.
 
 **The status line reports streamed bytes as a fraction, not a running total.** `bundleBytes()` in
 the panel derives the whole sequence's size from `meta.json` (`arrays[].bytes`, plus
@@ -1018,6 +1234,27 @@ conda run -n smv python ~/4d-relight/web/player_points/build_point_bundle.py \
 # and strip meta.json's source_path / model_path to their basenames: as built they are the
 # cluster's absolute paths, and this is a public site.
 ```
+
+**Package a knot bundle for the web** (the trajectory card's second example — a *compressed*
+scene whose motion on disk is the spline's knots, not one image per frame). Different builder
+again, and note it writes only the **upper** position plane by default — see the `knotsplat.html`
+section for why that is exactly a `--no_full_precision` bundle and not an approximation:
+
+```bash
+conda run -n 4dre python ~/4d-relight/web/player_knots/build_knot_web_bundle.py \
+  --bundle /cluster/scratch/misong/4dre/dnerf/hook_mlp_06/knot_bundle_packed \
+  --out ~/mingyang-song.github.io/projects/spdef/scenes/hook_knots --name hook \
+  --scene_config /cluster/scratch/misong/4dre/dnerf/hook_mlp_06/scene_config.yaml \
+  --source_path /cluster/scratch/misong/datasets/dnerf/hook
+```
+
+`--scene_config` + `--source_path` embed the held-out test camera (it reuses
+`build_web_bundle.py`'s own `extract_camera`, so the pose convention cannot drift); without it the
+panel auto-frames and opens on a pose the paper never shows. `--camera_from` copies the block out
+of an existing `scene.json` instead. The bundle must be `format: knot_bundle` — a frame bundle
+goes to `build_web_bundle.py`. Re-packaging changes four strings the page states as literal text,
+all of them in `TRAJ_SCENES` rather than the markup: the subtag, the panel caption and its tag
+line, and the Load button's size.
 
 **Export a canonical cloud** (for the explanation card — the model's *canonical* Gaussians, the
 thing the deformation field moves, as a one-frame static scene):

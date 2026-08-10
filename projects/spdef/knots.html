@@ -151,9 +151,9 @@ async function grab(url,label,pct){
       const out=new Uint8Array(n);let o=0;for(const p of parts){out.set(p,o);o+=p.length;}
       return out.buffer;
     }catch(e){clearTimeout(timer);lastErr=e;
-      if(a<FETCH_TRIES){stage(label+' — retrying…',null);await sleep(400*a);}}
+      if(a<FETCH_TRIES){stage(label+', retrying…',null);await sleep(400*a);}}
   }
-  throw new Error((lastErr&&lastErr.message||lastErr)+' — '+url);
+  throw new Error((lastErr&&lastErr.message||lastErr)+': '+url);
 }
 
 const gl=canvas.getContext('webgl2',{antialias:true,alpha:false});
@@ -451,7 +451,7 @@ function parity(p){
     });
   });
   if(worst>p.tol)throw new Error('knot bundle failed its parity check ('+worst.toExponential(2)
-    +' > '+p.tol.toExponential(2)+') — the page and the exporter disagree');
+    +' > '+p.tol.toExponential(2)+'), the page and the exporter disagree');
 }
 
 // ===== per-frame =====

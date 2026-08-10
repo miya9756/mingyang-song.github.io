@@ -251,6 +251,26 @@ function sortSplats(view){if(!depthIndex||depthIndex.length!==N)depthIndex=new U
  gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.bufferData(gl.ARRAY_BUFFER,depthIndex,gl.DYNAMIC_DRAW);}
 
 // ===== camera =====
+// TWO navigation modes, chosen per panel with ?nav=.
+//
+//   fly (default)  — WASD/drag, the SMV viewer's camera. Right for a capture you want to walk
+//                    into: HyperNeRF americano is a close hand-held shot of a table top, its world
+//                    frame is not Z-up, and the panel deliberately renders beyond the filmed
+//                    frustum (fit=square), so "look around from in here" is the useful verb.
+//   orbit          — one object on a turntable, the vocabulary points.html / field.html /
+//                    knots.html already use. Right for a synthetic D-NeRF scene: the subject sits
+//                    at the origin, so rotating and dollying IT beats moving yourself around it.
+//                    Also fully reachable by touch (one finger orbits, two pinch and pan), which
+//                    is the whole reason the virtual pad exists — an orbit panel needs no pad.
+//
+// The two are kept side by side rather than one replacing the other because the choice is a
+// property of the CAPTURE, not of this renderer. Everything below is written so the fly path is
+// exactly what it always was; the orbit path is additive and guarded by NAV_ORBIT.
+//
+// The `cam` relay carries whichever flavour the panel uses ({pos,quat,speed} or {orbit:{…}}) and
+// the host does not care — but every panel in a GROUP must agree, since one orbit state cannot be
+// applied to a fly camera. So ?nav= is set the same way on every panel of a card.
+const NAV_ORBIT=Q.get('nav')==='orbit';
 const worldUp=[0,-1,0];let camPos=[0,0,0],camQ=[1,0,0,0],radius=10,speed=5;
 // Opening elevation above the dataset camera, in degrees, from ?elev= (default 20). Per panel
 // because the right amount depends on the capture: bouncingballs is a synthetic turntable at
@@ -262,24 +282,81 @@ function vrot(q,v){const[w,x,y,z]=q,[a,b,c]=v;const ix=w*a+y*c-z*b,iy=w*b+z*a-x*
 function qmul(a,b){const[aw,ax,ay,az]=a,[bw,bx,by,bz]=b;return[aw*bw-ax*bx-ay*by-az*bz,aw*bx+ax*bw+ay*bz-az*by,aw*by-ax*bz+ay*bw+az*bx,aw*bz+ax*by-ay*bx+az*bw];}
 function qaxis(ax,an){const h=an/2,s=Math.sin(h);return[Math.cos(h),ax[0]*s,ax[1]*s,ax[2]*s];}
 function qn(q){const l=Math.hypot(...q)||1;return q.map(v=>v/l);}
-function viewMatrix(){const f=vrot(camQ,[0,0,1]),r=vrot(camQ,[1,0,0]),u=vrot(camQ,[0,1,0]);
+// ---- orbit state (NAV_ORBIT only) ----
+// Same construction as field.html's, whose renderer shares this basis convention: r/u/f are the
+// view matrix's COLUMNS with u pointing DOWN the screen (the projection flips Y), so the triad is
+// built directly and no quaternion is involved. UP is the canonical D-NeRF frame — the floor is
+// the xy plane — which is exactly why this mode is not offered to the HyperNeRF card.
+const UP=[0,0,1];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const norm3=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];};
+const cam={yaw:0,pitch:.4,dist:6,target:[0,0,0]};
+let home={yaw:0,pitch:.4,dist:6,target:[0,0,0]};
+function camBasis(){
+ const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch),cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+ const eye=[cam.target[0]+cam.dist*cp*sy,cam.target[1]+cam.dist*cp*cy,cam.target[2]+cam.dist*sp];
+ const f=norm3([cam.target[0]-eye[0],cam.target[1]-eye[1],cam.target[2]-eye[2]]);
+ const u=norm3([-(UP[0]-f[0]*dot3(UP,f)),-(UP[1]-f[1]*dot3(UP,f)),-(UP[2]-f[2]*dot3(UP,f))]);
+ return{eye,f,u,r:cross(u,f)};}
+function viewMatrix(){
+ if(NAV_ORBIT){const{eye,f,r,u}=camBasis();camPos=eye;
+   return[r[0],u[0],f[0],0,r[1],u[1],f[1],0,r[2],u[2],f[2],0,-dot3(r,eye),-dot3(u,eye),-dot3(f,eye),1];}
+ const f=vrot(camQ,[0,0,1]),r=vrot(camQ,[1,0,0]),u=vrot(camQ,[0,1,0]);
  const dr=-(r[0]*camPos[0]+r[1]*camPos[1]+r[2]*camPos[2]),du=-(u[0]*camPos[0]+u[1]*camPos[1]+u[2]*camPos[2]),df=-(f[0]*camPos[0]+f[1]*camPos[1]+f[2]*camPos[2]);
  return[r[0],u[0],f[0],0,r[1],u[1],f[1],0,r[2],u[2],f[2],0,dr,du,df,1];}
-function projMatrix(w,h,fx,fy){const zn=0.2,zf=500;return[2*fx/w,0,0,0,0,-2*fy/h,0,0,0,0,zf/(zf-zn),1,0,0,-(zf*zn)/(zf-zn),0];}
+// Orbiting, the near/far planes track the orbit distance: dollying right up to a gaussian is a
+// normal thing to do and a fixed 0.2 near plane clips it. The fly path keeps its fixed pair.
+function projMatrix(w,h,fx,fy){const zn=NAV_ORBIT?Math.min(0.5,Math.max(0.02,cam.dist*0.02)):0.2,
+ zf=NAV_ORBIT?cam.dist*20+100:500;return[2*fx/w,0,0,0,0,-2*fy/h,0,0,0,0,zf/(zf-zn),1,0,0,-(zf*zn)/(zf-zn),0];}
 const keys=new Set();let drag=false,lx=0,ly=0,lookTouchId=null,joyX=0,joyY=0,joyUp=0;
 canvas.tabIndex=0;canvas.style.outline='none';
-canvas.addEventListener('mousedown',e=>{drag=true;lx=e.clientX;ly=e.clientY;canvas.focus();});
-addEventListener('mouseup',()=>drag=false);
-addEventListener('mousemove',e=>{if(!drag)return;const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;camQ=qn(qmul(qmul(qaxis(worldUp,-dx*0.003),qaxis(vrot(camQ,[1,0,0]),-dy*0.003)),camQ));});
-canvas.addEventListener('wheel',e=>{e.preventDefault();speed*=Math.exp(-e.deltaY*0.001);speed=Math.min(Math.max(speed,radius*0.02),radius*40);},{passive:false});
-canvas.addEventListener('touchstart',e=>{const t=e.changedTouches[0];lookTouchId=t.identifier;drag=true;lx=t.clientX;ly=t.clientY;},{passive:true});
-canvas.addEventListener('touchmove',e=>{if(!drag)return;let t=null;for(const c of e.changedTouches)if(c.identifier===lookTouchId){t=c;break;}if(!t)return;const dx=t.clientX-lx,dy=t.clientY-ly;lx=t.clientX;ly=t.clientY;camQ=qn(qmul(qmul(qaxis(worldUp,-dx*0.004),qaxis(vrot(camQ,[1,0,0]),-dy*0.004)),camQ));e.preventDefault();},{passive:false});
-canvas.addEventListener('touchend',e=>{for(const c of e.changedTouches)if(c.identifier===lookTouchId)drag=false;});
-canvas.addEventListener('touchcancel',()=>drag=false);
+// ---- pointer input ----------------------------------------------------------------------
+// Orbit: one code path for mouse and touch — one pointer orbits (shift or right button pans), two
+// pinch to dolly and drag to pan. The pitch clamp keeps the view off the poles, where the
+// up-vector orthogonalisation degenerates. Verbatim in behaviour from field.html.
+if(NAV_ORBIT){
+ const ptrs=new Map();let mode=null,pinch0=0,dist0=0;
+ const mid=()=>{const v=[...ptrs.values()];return[(v[0].x+v[1].x)/2,(v[0].y+v[1].y)/2];};
+ const spread=()=>{const v=[...ptrs.values()];return Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y)||1;};
+ const panBy=(dx,dy)=>{const{r,u}=camBasis(),s=cam.dist*0.0015;
+   for(let c=0;c<3;c++)cam.target[c]+=-r[c]*dx*s-u[c]*dy*s;};   // u is screen-down, hence -u
+ canvas.addEventListener('pointerdown',e=>{
+   canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+   if(ptrs.size===1){mode=(e.shiftKey||e.button===2)?'pan':'orbit';lx=e.clientX;ly=e.clientY;}
+   else if(ptrs.size===2){mode='pinch';pinch0=spread();dist0=cam.dist;[lx,ly]=mid();}});
+ canvas.addEventListener('pointermove',e=>{
+   if(!ptrs.has(e.pointerId))return;
+   ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+   if(mode==='pinch'&&ptrs.size>=2){cam.dist=Math.max(1e-3,dist0*pinch0/spread());
+     const[mx,my]=mid();panBy(mx-lx,my-ly);lx=mx;ly=my;return;}
+   if(ptrs.size!==1)return;
+   const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;
+   if(mode==='pan')panBy(dx,dy);
+   else{cam.yaw+=dx*0.006;cam.pitch=Math.max(-1.45,Math.min(1.45,cam.pitch-dy*0.006));}});
+ const drop=e=>{ptrs.delete(e.pointerId);
+   if(ptrs.size===1){mode='orbit';const v=[...ptrs.values()][0];lx=v.x;ly=v.y;}
+   else if(!ptrs.size)mode=null;};
+ canvas.addEventListener('pointerup',drop);canvas.addEventListener('pointercancel',drop);
+ canvas.addEventListener('contextmenu',e=>e.preventDefault());
+ canvas.addEventListener('wheel',e=>{e.preventDefault();cam.dist*=Math.exp(e.deltaY*0.001);},{passive:false});
+}else{
+
+ canvas.addEventListener('mousedown',e=>{drag=true;lx=e.clientX;ly=e.clientY;canvas.focus();});
+ addEventListener('mouseup',()=>drag=false);
+ addEventListener('mousemove',e=>{if(!drag)return;const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;camQ=qn(qmul(qmul(qaxis(worldUp,-dx*0.003),qaxis(vrot(camQ,[1,0,0]),-dy*0.003)),camQ));});
+ canvas.addEventListener('wheel',e=>{e.preventDefault();speed*=Math.exp(-e.deltaY*0.001);speed=Math.min(Math.max(speed,radius*0.02),radius*40);},{passive:false});
+ canvas.addEventListener('touchstart',e=>{const t=e.changedTouches[0];lookTouchId=t.identifier;drag=true;lx=t.clientX;ly=t.clientY;},{passive:true});
+ canvas.addEventListener('touchmove',e=>{if(!drag)return;let t=null;for(const c of e.changedTouches)if(c.identifier===lookTouchId){t=c;break;}if(!t)return;const dx=t.clientX-lx,dy=t.clientY-ly;lx=t.clientX;ly=t.clientY;camQ=qn(qmul(qmul(qaxis(worldUp,-dx*0.004),qaxis(vrot(camQ,[1,0,0]),-dy*0.004)),camQ));e.preventDefault();},{passive:false});
+ canvas.addEventListener('touchend',e=>{for(const c of e.changedTouches)if(c.identifier===lookTouchId)drag=false;});
+ canvas.addEventListener('touchcancel',()=>drag=false);
+}
 // keydown is bound inside this document, so WASD only reaches the panel that has focus — the
 // other panel follows through the host's camera link, not through its own keyboard.
+// Movement keys belong to the fly camera; an orbit panel must not swallow the page's scroll keys.
+if(!NAV_ORBIT){
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(['w','a','s','d','q','e',' '].includes(k))e.preventDefault();keys.add(k);});
-addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));}
 addEventListener('blur',()=>{keys.clear();drag=false;joyEnd();joyUp=0;});
 // Virtual pad, same control as the SMV viewer: the stick feeds the WASD axes and the two buttons
 // the Q/E axis, so touch and keyboard end up in one place in moveCam(). Host-gated (`touch`
@@ -301,7 +378,10 @@ holdBtn(document.getElementById('vup'),1);holdBtn(document.getElementById('vdn')
 // One listener on the pad covers the stick and both buttons.
 vctrl.addEventListener('contextmenu',e=>e.preventDefault());
 // Hiding the pad must also drop whatever it was holding, or the camera keeps drifting after it goes.
-function setTouchUI(on){vctrl.classList.toggle('on',!!on);if(!on){joyEnd();joyUp=0;}}
+// The pad drives the WASD axes, so it has nothing to do in orbit mode — orbit/pan/dolly are all
+// reachable by touch directly. Refused here as well as omitted from the host's `ui`, so the
+// standalone page and a stale host message both do the right thing.
+function setTouchUI(on){if(NAV_ORBIT)on=false;vctrl.classList.toggle('on',!!on);if(!on){joyEnd();joyUp=0;}}
 let lastT=null;
 function moveCam(t){if(lastT==null){lastT=t;return;}const dt=Math.min((t-lastT)/1000,0.1);lastT=t;const f=vrot(camQ,[0,0,1]),r=vrot(camQ,[1,0,0]);let mv=[0,0,0];const add=(v,s)=>{mv[0]+=v[0]*s;mv[1]+=v[1]*s;mv[2]+=v[2]*s;};
  if(keys.has('w'))add(f,1);if(keys.has('s'))add(f,-1);if(keys.has('d'))add(r,1);if(keys.has('a'))add(r,-1);if(keys.has('e')||keys.has(' '))add(worldUp,-1);if(keys.has('q')||keys.has('control'))add(worldUp,1);
@@ -309,12 +389,21 @@ function moveCam(t){if(lastT==null){lastT=t;return;}const dt=Math.min((t-lastT)/
  const len=Math.hypot(...mv);if(len>0){const s=speed*(keys.has('shift')?4:1)*dt/len;camPos=[camPos[0]+mv[0]*s,camPos[1]+mv[1]*s,camPos[2]+mv[2]*s];}}
 // Camera link. Echo suppression is by construction: applying a remote pose also updates the
 // last-sent snapshot, so the next diff finds nothing and no message bounces back.
+// Two flavours over one relay, and the host does not care which — but a group must be all of one,
+// since an orbit state cannot be applied to a fly camera. Orbiting, what travels is the whole
+// orbit STATE (yaw, pitch, dist AND target): a shared eye alone would let two turntables drift
+// apart the moment either panned, because the target and the distance are what the handlers edit.
 let _sent=null,_remote=null;
-const _camState=()=>camPos.concat(camQ,[speed]);
+const _camState=()=>NAV_ORBIT?[cam.yaw,cam.pitch,cam.dist,cam.target[0],cam.target[1],cam.target[2]]
+                             :camPos.concat(camQ,[speed]);
 function emitCamIfMoved(){const s=_camState();
- if(_sent){let same=true;for(let i=0;i<8;i++)if(Math.abs(s[i]-_sent[i])>1e-7){same=false;break;}if(same)return;}
- _sent=s;post({type:'cam',pos:camPos.slice(),quat:camQ.slice(),speed});}
-function applyCam(m){_remote=m;camPos=m.pos.slice();camQ=m.quat.slice();if(m.speed)speed=m.speed;_sent=_camState();}
+ if(_sent){let same=true;for(let i=0;i<s.length;i++)if(Math.abs(s[i]-_sent[i])>1e-7){same=false;break;}if(same)return;}
+ _sent=s;post(NAV_ORBIT?{type:'cam',orbit:{yaw:cam.yaw,pitch:cam.pitch,dist:cam.dist,target:cam.target.slice()}}
+                      :{type:'cam',pos:camPos.slice(),quat:camQ.slice(),speed});}
+function applyCam(m){_remote=m;
+ if(NAV_ORBIT){const o=m.orbit;if(!o)return;
+   cam.yaw=o.yaw;cam.pitch=o.pitch;cam.dist=o.dist;cam.target=o.target.slice();_sent=_camState();return;}
+ camPos=m.pos.slice();camQ=m.quat.slice();if(m.speed)speed=m.speed;_sent=_camState();}
 function resize(){const dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.max(1,Math.floor(wrap.clientWidth*dpr));canvas.height=Math.max(1,Math.floor(wrap.clientHeight*dpr));}
 addEventListener('resize',resize);
 
@@ -357,7 +446,7 @@ function drawTraj(){if(!trajVerts)return;
  gl.uniformMatrix4fv(tu_proj,false,projMatrix(curVw,curVh,curFx,curFy));gl.uniformMatrix4fv(tu_view,false,curView);gl.uniform1f(tu_alpha,trajAlpha);
  gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.drawArrays(gl.LINES,0,trajVerts);
  gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);gl.bindVertexArray(vao);}
-function frame(t){requestAnimationFrame(frame);moveCam(t);
+function frame(t){requestAnimationFrame(frame);if(!NAV_ORBIT)moveCam(t);
  if(!N||!gops.length)return;
  emitCamIfMoved();
  fpsN++;if(t-fpsT>1000){fps=Math.round(fpsN*1000/(t-fpsT));fpsN=0;fpsT=t;post({type:'stats',fps,splats:N});}
@@ -388,6 +477,22 @@ function frameScene(){
  let cx=0,cy=0,cz=0;for(let i=0;i<N;i++){cx+=baseCenter[3*i];cy+=baseCenter[3*i+1];cz+=baseCenter[3*i+2];}cx/=N;cy/=N;cz/=N;
  const ds=[];for(let i=0;i<N;i+=10)ds.push(Math.hypot(baseCenter[3*i]-cx,baseCenter[3*i+1]-cy,baseCenter[3*i+2]-cz));ds.sort((a,b)=>a-b);
  radius=ds[Math.floor(ds.length*0.9)]||10;speed=radius*0.3;
+ if(NAV_ORBIT){
+   // The same opening view, expressed as orbit state instead of a pose: the D-NeRF test camera
+   // aims at the origin to ~1e-8, so the target IS the origin and the pose is (yaw, pitch, dist)
+   // read straight off it. CAM_ELEV raises the viewpoint about that target — the orbit form of the
+   // rotation the fly branch below applies about the camera's own right axis, so both modes open
+   // on the same framing. No camera in the scene falls back to the cloud's centroid and radius.
+   let yaw=cam.yaw,pitch=cam.pitch,dist=cam.dist,target=[0,0,0];
+   if(camMeta){const e=camMeta.campos,d=Math.hypot(e[0],e[1],e[2])||1;
+     dist=d;pitch=Math.max(-1.45,Math.min(1.45,Math.asin(e[2]/d)+CAM_ELEV));yaw=Math.atan2(e[0],e[1]);}
+   else{target=[cx,cy,cz];dist=radius*2.6;pitch=CAM_ELEV;}
+   home={yaw,pitch,dist,target:target.slice()};
+   // A pose already adopted from another panel in this group wins over the opening one: the panel
+   // that loaded first may already have been orbited, and snapping both back when the second lands
+   // would undo that. `home` keeps the opening pose, so reset view is unaffected.
+   if(!_remote){cam.yaw=yaw;cam.pitch=pitch;cam.dist=dist;cam.target=target.slice();}
+   _sent=null;return;}
  if(camMeta){camPos=camMeta.campos.slice();camQ=camMeta.camquat.slice();
    // Nav axis comes from the dataset camera, NOT the renderer's hardcoded [0,-1,0]. D-NeRF's world
    // frame is Z-up, so that default sits ~81 deg off here and only 0.25 off the view direction:
@@ -437,7 +542,12 @@ addEventListener('message',e=>{if(e.origin!==location.origin)return;const m=e.da
  if(!m||m.ch!=='spdef'||m.to!==ID)return;
  if(m.type==='cam')applyCam(m);
  else if(m.type==='seek'){gFrame=((m.frame%totalFrames)+totalFrames)%totalFrames;builtFrame=-1;needSort=true;}
- else if(m.type==='resetView')frameScene();
+ // Orbiting, reset goes to the OPENING pose held in `home` rather than through frameScene(), which
+ // deliberately declines to overwrite a pose adopted from the panel beside this one — that guard is
+ // right on load and wrong for a button whose whole job is to undo where you have got to.
+ else if(m.type==='resetView'){
+   if(NAV_ORBIT){cam.yaw=home.yaw;cam.pitch=home.pitch;cam.dist=home.dist;cam.target=home.target.slice();needSort=true;}
+   else frameScene();}
  else if(m.type==='view'){
    // Host sends the whole option set every time, so this stays idempotent. Both invalidations
    // matter: trajKey caches the built trail, builtFrame caches the written splat colours — a
@@ -490,8 +600,8 @@ async function loadStandalone(){
   const ff=await ffmpegReady(()=>{});
   for(let gi=0;gi<scene.gops.length;gi++){
     const g=scene.gops[gi];
-    const streams={xyz:{bytes:await grab(base+g.streams.xyz.path,`motion ${gi+1} — xyz…`),meta:g.streams.xyz.meta},
-                   rot:{bytes:await grab(base+g.streams.rot.path,`motion ${gi+1} — rot…`),meta:g.streams.rot.meta}};
+    const streams={xyz:{bytes:await grab(base+g.streams.xyz.path,`motion ${gi+1} · xyz…`),meta:g.streams.xyz.meta},
+                   rot:{bytes:await grab(base+g.streams.rot.path,`motion ${gi+1} · rot…`),meta:g.streams.rot.meta}};
     stage(`decoding motion ${gi+1}/${scene.gops.length}…`,60);
     const r=await decodeMotionGopBundle(ff,streams,built[gi].kf);
     installMotion({gop:gi,motion:r.motion,F:r.F});

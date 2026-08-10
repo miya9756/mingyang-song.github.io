@@ -6,7 +6,7 @@
 <title>Spline Deformation Field</title>
 <link rel="icon" type="image/png" sizes="64x64" href="../../assets/web_icon.png">
 <link rel="apple-touch-icon" href="../../assets/web_icon.png">
-<meta name="description" content="Spline Deformation Field — SIGGRAPH Conference Papers '25. A spline-based trajectory representation for reconstructing dynamic scenes, where the number of knots explicitly sets the degrees of freedom.">
+<meta name="description" content="Spline Deformation Field. SIGGRAPH Conference Papers '25. A spline-based trajectory representation for reconstructing dynamic scenes, where the number of knots explicitly sets the degrees of freedom.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <meta name="theme-color" content="#eef1f5"><!-- must track --bg; Safari tints its chrome from this -->
@@ -154,6 +154,16 @@
   .vslide input[type=range]{width:104px;accent-color:var(--accent)}
   .vslide output{font:12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;min-width:3.4em;text-align:right}
   .vrow.off .vslide{opacity:.42}
+  /* Per-example controls. In a card whose picker can switch RENDERER (the trajectory one),
+     applyScene() hides the controls belonging to the other example by setting `hidden`. That has
+     to be said here as well as in the script: .vrow and .tchk both set `display`, and an author
+     class selector outranks the UA stylesheet's [hidden]{display:none} — so the attribute on its
+     own would leave the row on screen with only the JS believing it was gone. Scoped to
+     [data-only], which is exactly the set of elements applyScene touches.
+     The second rule is the knock-on: a hidden row is still a sibling for `+`, so the visible one
+     after it would otherwise draw a separator with nothing above it. */
+  [data-only][hidden]{display:none}
+  .vrow[hidden]+.vrow{margin-top:0;padding-top:0;border-top:0}
   .hint{margin:9px 0 0;font-size:12.5px;color:var(--muted)}
   .hint em{font-style:normal;font-weight:600;color:var(--ink)}
   .citebox{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
@@ -176,14 +186,49 @@
   .ref+.ref{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
   footer{border-top:1px solid var(--line);margin-top:20px;padding:26px 0 48px;color:var(--muted);font-size:13px}
 
+  /* Contents. Same pill as the .back button in the header, so the two read as one family of
+     navigation affordances rather than two inventions. Wraps rather than scrolls: four entries fit
+     on one line on a laptop and stack cleanly on a phone, and a horizontally scrolling strip hides
+     exactly the entries a visitor is looking for. The number is the only accent, which keeps one
+     focal point per pill (the same rule the landing page's cards follow). */
+  .toc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+  .toc a{display:inline-flex;align-items:baseline;gap:7px;padding:6px 13px;border-radius:999px;
+         border:1px solid var(--line);background:var(--surface);color:var(--muted);
+         font-size:12.5px;line-height:1.35;text-decoration:none;
+         transition:color .16s,border-color .16s,background-color .16s}
+  .toc a:hover,.toc a:focus-visible{color:var(--ink);border-color:var(--accent);text-decoration:none}
+  .toc a b{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+  /* The anchor lands the card's top edge a little below the viewport edge instead of flush against
+     it, so the heading does not read as cropped. */
+  .subcard{scroll-margin-top:16px}
+
+  /* Back to top. Revealed only once the masthead has scrolled away (see the classic script at the
+     foot of the body) so it is absent on the first screen, where it would be noise. Fixed, and
+     above the panels: the iframes are in the flow, so a fixed element paints over them.
+     `hidden` is not used here because the element has a `display` of its own; the class is. */
+  .totop{position:fixed;right:clamp(14px,3vw,28px);bottom:clamp(14px,3vw,28px);z-index:20;
+         display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;
+         border:1px solid var(--line);background:rgba(255,255,255,.92);backdrop-filter:blur(4px);
+         box-shadow:0 2px 12px -4px var(--shadow);color:var(--muted);font-size:12.5px;
+         text-decoration:none;opacity:0;visibility:hidden;transform:translateY(6px);
+         transition:opacity .2s,transform .2s,visibility .2s,color .16s,border-color .16s}
+  .totop.on{opacity:1;visibility:visible;transform:none}
+  .totop:hover,.totop:focus-visible{color:var(--accent);border-color:var(--accent);text-decoration:none}
+  /* Smooth only for in-page jumps, and only where motion is welcome (see the reduced-motion block).
+     Without it a catalogue click teleports and it is easy to lose which card you landed on. */
+  html{scroll-behavior:smooth}
+
   @media(prefers-reduced-motion:reduce){
-    .back,.back .barrow,.byline .authors a,.tbtn{transition:none}
+    .back,.back .barrow,.byline .authors a,.tbtn,.toc a,.totop{transition:none}
     .back:hover .barrow{transform:none}
+    /* still revealed, just not animated in, and the jump is instant */
+    .totop{transform:none}
+    html{scroll-behavior:auto}
   }
 </style>
 </head>
 <body>
-<header>
+<header id="top">
   <div class="inner">
     <a class="back" href="../../"><span class="barrow" aria-hidden="true">←</span> Mingyang Song</a>
     <h1>Spline Deformation Field</h1>
@@ -198,8 +243,18 @@
 <main class="inner">
   <section>
     <h2>Playground</h2>
+    <!-- Four cards, each a few screens tall once loaded, so the page is long before anything is
+         even running. This is the map: what is here, and one click to each. Scoped to the
+         playground because that is the part worth skipping around in; the citation and dataset
+         sections below are short and sit at the end where they are expected. -->
+    <nav class="toc" aria-label="Playground contents">
+      <a href="#abCard"><b>1</b> Regularizers on a clean sequence</a>
+      <a href="#amCard"><b>2</b> Knot count as a regularizer</a>
+      <a href="#ptCard"><b>3</b> The spline itself, between the supervised frames</a>
+      <a href="#fdCard"><b>4</b> What the model actually stores</a>
+    </nav>
 
-    <article class="subcard">
+    <article class="subcard" id="abCard">
       <div class="subhd">
         <h3>Regularizers on a clean sequence</h3>
         <p class="subtag">D-NeRF <em>bouncingballs</em> · synthetic · 150 frames · 2.5 MB</p>
@@ -211,7 +266,7 @@
         <figcaption><span class="ptitle">With regularization</span><span class="ptag">velocity-divergence + acceleration</span></figcaption>
         <div class="stagebox idle">
           <iframe id="paneA" title="Interactive viewer: bouncingballs reconstructed with temporal regularization"
-                  data-src="viewer.html?scene=scenes/bouncingballs_reg/scene.json&amp;id=reg"></iframe>
+                  data-src="viewer.html?scene=scenes/bouncingballs_reg/scene.json&amp;id=reg&amp;nav=orbit"></iframe>
           <p class="idlemsg">not loaded</p>
         </div>
       </figure>
@@ -219,7 +274,7 @@
         <figcaption><span class="ptitle">Without regularization</span><span class="ptag">both terms set to zero</span></figcaption>
         <div class="stagebox idle">
           <iframe id="paneB" title="Interactive viewer: bouncingballs reconstructed without temporal regularization"
-                  data-src="viewer.html?scene=scenes/bouncingballs_noreg/scene.json&amp;id=noreg"></iframe>
+                  data-src="viewer.html?scene=scenes/bouncingballs_noreg/scene.json&amp;id=noreg&amp;nav=orbit"></iframe>
           <p class="idlemsg">not loaded</p>
         </div>
       </figure>
@@ -227,19 +282,18 @@
 
     <div class="transport">
       <button id="abLoad" class="tbtn tload">Load this comparison · 2.5 MB</button>
-      <button id="abClear" class="tbtn" hidden title="Unload this comparison — discards its scenes, WebGL contexts and decoded motion, and cancels the load if one is still running">✕ clear</button>
+      <button id="abClear" class="tbtn" hidden title="Unload this comparison. Discards its scenes, WebGL contexts and decoded motion, and cancels the load if one is still running">✕ clear</button>
       <button id="abPlay" class="tbtn" disabled>▶ play</button>
       <input id="abScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
-      <span id="abFrame" class="tnum">—</span>
+      <span id="abFrame" class="tnum">not loaded</span>
       <button id="abReset" class="tbtn">reset view</button>
-      <label class="tchk" title="On-screen stick and up/down buttons for flying the camera, on the first panel. The panels share one camera, so the others follow."><input type="checkbox" id="abTouch"> Touch controls</label>
     </div>
     <p id="abStatus" class="hint">Not loaded.</p>
     <div class="viewopts" id="abOpts" data-kind="splat">
-      <p class="vlead">Toggle these to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 150-frame path. Applies to both panels above.</p>
+      <p class="vlead">Toggle these to see the trajectory differences clearly: turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 150-frame path. Applies to both panels above.</p>
       <div class="vrow off" data-o="rowEllip">
         <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the underlying point-based representation is visible"><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
-        <label class="vslide" title="Ellipsoid radius in standard deviations — shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
+        <label class="vslide" title="Ellipsoid radius in standard deviations; shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
       </div>
       <div class="vrow off" data-o="rowTraj">
         <label class="tchk" title="Overlay motion trails on a sample of dynamic gaussians (blue = oldest → red = newest)"><input type="checkbox" data-o="traj"> Trajectories</label>
@@ -253,7 +307,7 @@
     </div>
     </article>
 
-    <article class="subcard">
+    <article class="subcard" id="amCard">
       <div class="subhd">
         <h3>Knot count as a regularizer</h3>
         <p class="subtag">HyperNeRF <em>americano</em> · casual hand-held capture · 200 frames · 8.1 MB</p>
@@ -290,20 +344,20 @@
 
     <div class="transport">
       <button id="amLoad" class="tbtn tload">Load this comparison · 8.1 MB</button>
-      <button id="amClear" class="tbtn" hidden title="Unload this comparison — discards its scenes, WebGL contexts and decoded motion, and cancels the load if one is still running">✕ clear</button>
+      <button id="amClear" class="tbtn" hidden title="Unload this comparison. Discards its scenes, WebGL contexts and decoded motion, and cancels the load if one is still running">✕ clear</button>
       <button id="amPlay" class="tbtn" disabled>▶ play</button>
       <input id="amScrub" type="range" min="0" max="0" value="0" aria-label="Timeline position" disabled>
-      <span id="amFrame" class="tnum">—</span>
+      <span id="amFrame" class="tnum">not loaded</span>
       <button id="amReset" class="tbtn">reset view</button>
       <label class="tchk" title="On-screen stick and up/down buttons for flying the camera, on the first panel. The panels share one camera, so the others follow."><input type="checkbox" id="amTouch"> Touch controls</label>
     </div>
     <p id="amStatus" class="hint">Not loaded.</p>
 
     <div class="viewopts" id="amOpts" data-kind="splat">
-      <p class="vlead">Toggle these to see the trajectory differences clearly — turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 200-frame path. Applies to the three panels above.</p>
+      <p class="vlead">Toggle these to see the trajectory differences clearly: turn on <em>Trajectories</em> and raise <em>Trail</em> to draw each gaussian’s full 200-frame path. Applies to the three panels above.</p>
       <div class="vrow off" data-o="rowEllip">
         <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the underlying point-based representation is visible"><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
-        <label class="vslide" title="Ellipsoid radius in standard deviations — shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
+        <label class="vslide" title="Ellipsoid radius in standard deviations; shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
       </div>
       <div class="vrow off" data-o="rowTraj">
         <label class="tchk" title="Overlay motion trails on a sample of dynamic gaussians (blue = oldest → red = newest)"><input type="checkbox" data-o="traj"> Trajectories</label>
@@ -317,52 +371,64 @@
     </div>
     </article>
 
-    <article class="subcard">
+    <article class="subcard" id="ptCard">
       <div class="subhd">
         <h3>The spline itself, between the supervised frames</h3>
-        <p class="subtag">DeformingThings4D <em>astra · samba dancing</em> · 837 frames · 7,921 points · 5.0 MB for the whole sequence, 0.2 MB of it up front</p>
+        <p class="subtag" id="ptTag">DeformingThings4D <em>astra · samba dancing</em> · 837 frames · 7,921 points · 5.0 MB for the whole sequence, 0.2 MB of it up front</p>
       </div>
-      <p class="lede">The two cards above render gaussians. This one drops the rasterizer entirely and fits the same spline deformation field straight to a mesh’s vertices, which is how the field’s temporal quality is measured. What ships is not a replay: it is the <em>fitted spline</em>: a per-point offset and tangent at each of knots, and your browser evaluates the same cubic Hermite the field itself uses.</p>
-      <p class="lede">The mesh is <em>decimated ≈4×</em>, from the sequence’s 31,515 vertices down to 7,921 to stay light.</p>
+      <p class="lede" id="ptLede">The two cards above render gaussians. This one drops the rasterizer entirely and fits the same spline deformation field straight to a mesh’s vertices, which is how the field’s temporal quality is measured. What ships is not a replay: it is the <em>fitted spline</em>, a per-point offset and tangent at each knot, and your browser evaluates the same cubic Hermite the field itself uses. The mesh is <em>decimated ≈4×</em>, from the sequence’s 31,515 vertices down to 7,921 to stay light.</p>
 
     <div class="ab ab1">
       <figure class="pane">
-        <figcaption><span class="ptitle">Fitted trajectories</span><span class="ptag">105 knots · cubic Hermite · evaluated in your browser</span></figcaption>
+        <figcaption><span class="ptitle" id="ptPTitle">Fitted trajectories</span><span class="ptag" id="ptPTag">105 knots · cubic Hermite · evaluated in your browser</span></figcaption>
         <div class="stagebox idle">
           <iframe id="paneF" title="Interactive viewer: a deforming mesh whose vertex trajectories are evaluated from the fitted spline"
-                  data-src="points.html?bundle=points/astra_samba/meta.json&amp;id=anime"></iframe>
+                  data-src="points.html?bundle=points/astra_samba/meta.json&amp;id=spline"></iframe>
           <p class="idlemsg">not loaded</p>
         </div>
       </figure>
     </div>
 
     <div class="transport">
+      <label class="tsel" title="Which fitted spline this card is showing: the GS-free mesh fit, or the same curve carrying a compressed gaussian scene. Switching reloads the panel.">Example
+        <select id="ptScene">
+          <option value="anime">DeformingThings4D astra · a mesh, no rasterizer</option>
+          <option value="hook">D-NeRF hook · gaussians, 15 knots</option>
+        </select>
+      </label>
       <button id="ptLoad" class="tbtn tload">Load this demo · 5.0 MB</button>
-      <button id="ptClear" class="tbtn" hidden title="Unload this demo — discards the bundle, its WebGL context and every knot fetched so far">✕ clear</button>
+      <button id="ptClear" class="tbtn" hidden title="Unload this demo. Discards the bundle, its WebGL context and every knot fetched so far">✕ clear</button>
       <button id="ptPlay" class="tbtn" disabled>▶ play</button>
-      <label class="vslide" title="Playback rate, relative to the sequence's own 30 fps. Below 1.00× the spline is not repeating frames — it is evaluating poses that were never stored, which is exactly what a continuous trajectory buys you.">Speed <input id="ptSpeed" type="range" min="10" max="200" step="5" value="100"><output id="ptSpeedN">1.00×</output></label>
-      <button id="ptPrev" class="tbtn tstep" disabled title="Previous supervised frame — one the field was actually trained on">⇤</button>
-      <button id="ptNext" class="tbtn tstep" disabled title="Next supervised frame — one the field was actually trained on">⇥</button>
+      <label class="vslide" title="Playback rate, relative to the sequence's own 30 fps. Below 1.00× the spline is not repeating frames; it is evaluating poses that were never stored, which is exactly what a continuous trajectory buys you.">Speed <input id="ptSpeed" type="range" min="10" max="200" step="5" value="100"><output id="ptSpeedN">1.00×</output></label>
+      <button id="ptPrev" class="tbtn tstep" disabled title="Step back to the previous marked instant: a supervised frame on the mesh fit, a stored knot on the gaussian scene">⇤</button>
+      <button id="ptNext" class="tbtn tstep" disabled title="Step on to the next marked instant: a supervised frame on the mesh fit, a stored knot on the gaussian scene">⇥</button>
       <input id="ptScrub" type="range" min="0" max="0" step="any" value="0" aria-label="Timeline position" disabled>
-      <span id="ptFrame" class="tnum">—</span>
+      <span id="ptFrame" class="tnum">not loaded</span>
       <button id="ptReset" class="tbtn">reset view</button>
     </div>
     <p id="ptStatus" class="hint">Not loaded.</p>
 
-    <div class="viewopts" id="ptOpts" data-kind="points">
+    <!-- data-kind="traj" is the UNION of the two example kinds this card can show (points and
+         knot); verify.py checks the block against OPT_KEYS.traj, so a control either example
+         needs has to be here. `data-only` is what hides the rows belonging to the other one. -->
+    <div class="viewopts" id="ptOpts" data-kind="traj">
       <div class="vrow" data-o="rowTrail">
-        <label class="tchk" title="Draw each sampled vertex's path over the preceding frames, sampled from the spline"><input type="checkbox" data-o="trail" checked> Trails</label>
-        <label class="vslide" title="How far back the trail reaches, in frames. One knot interval — one stripe — is about 8 frames.">Length <input type="range" data-o="trailLen" min="2" max="120" value="40"><output data-o="trailLenN">40</output></label>
+        <label class="tchk" title="Draw each sampled point's path over the preceding frames, sampled from the spline itself. The colour flips at every knot, so one stripe is one knot interval."><input type="checkbox" data-o="trail" checked> Trails</label>
+        <label class="vslide" title="How far back the trail reaches, in frames. One stripe is one knot interval: about 8 frames on the mesh, about 7 on the gaussian scene.">Length <input type="range" data-o="trailLen" min="2" max="120" value="40"><output data-o="trailLenN">40</output></label>
+      </div>
+      <div class="vrow off" data-o="rowEllip" data-only="knot" hidden>
+        <label class="tchk" title="Render each gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the point-based representation the spline is moving becomes visible"><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
+        <label class="vslide" title="Ellipsoid radius in standard deviations; shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
       </div>
     </div>
     </article>
 
-    <article class="subcard">
+    <article class="subcard" id="fdCard">
       <div class="subhd">
         <h3>What the model actually stores</h3>
         <p class="subtag" id="fdTag">D-NeRF <em>bouncingballs</em> · 14,534 canonical gaussians · three 128&times;128&times;32 tri-planes · 1,500 of them sampled at all 75 knots · 2.4 MB</p>
       </div>
-      <p class="lede">A plane at time <em>t</em> is <strong>base + &Sigma;<sub>r</sub> w<sub>r</sub>(t)&middot;res<sub>r</sub></strong> — one fixed plane plus <span id="fdRank">six more, scaled by six numbers</span>. Press play and watch what moves: the canonical cloud stays exactly where it is, and the sheets change. The plane axes are the world axes, and each sheet cell sits where the field samples it, which is why a sheet reads as the cloud’s shadow on that wall. Switch on <em>cast to the planes</em> to draw the lookup itself: the line from a gaussian’s centre to the foot of its perpendicular on each face is the address the field is read at, and the sheet colour where it lands is the value that comes back. <em>Hard ellipsoids</em> turns the soft splats into the points they actually are — shrink the radius to pull them apart. Beside it is the same field’s output: a sample of those gaussians pushed to the two knots the playhead sits between, the tangent each one leaves its knot with, and the arc the renderer evaluates in between.</p>
+      <p class="lede">A plane at time <em>t</em> is <strong>base + &Sigma;<sub>r</sub> w<sub>r</sub>(t)&middot;res<sub>r</sub></strong>: one fixed plane plus <span id="fdRank">six more, scaled by six numbers</span>. Press play and watch what moves: the canonical cloud stays exactly where it is, and the sheets change. The plane axes are the world axes, and each sheet cell sits where the field samples it, which is why a sheet reads as the cloud’s shadow on that wall. Switch on <em>cast to the planes</em> to draw the lookup itself: the line from a gaussian’s centre to the foot of its perpendicular on each face is the address the field is read at, and the sheet colour where it lands is the value that comes back. <em>Hard ellipsoids</em> turns the soft splats into the points they actually are; shrink the radius to pull them apart. Beside it is the same field’s output: a sample of those gaussians pushed to the two knots the playhead sits between, the tangent each one leaves its knot with, and the arc the renderer evaluates in between.</p>
 
     <div class="ab">
       <figure class="pane">
@@ -391,11 +457,11 @@
         </select>
       </label>
       <button id="fdLoad" class="tbtn tload">Load this figure · 2.4 MB</button>
-      <button id="fdClear" class="tbtn" hidden title="Unload this figure — discards the cloud, the tri-plane atlases, the knot bundle and both WebGL contexts">✕ clear</button>
+      <button id="fdClear" class="tbtn" hidden title="Unload this figure. Discards the cloud, the tri-plane atlases, the knot bundle and both WebGL contexts">✕ clear</button>
       <button id="fdPlay" class="tbtn" disabled>▶ play</button>
-      <label class="vslide" title="Playback rate, relative to the sequence's own 30 fps. The planes are affine in the six weights, so any rate evaluates them exactly — nothing is repeated or dropped.">Speed <input id="fdSpeed" type="range" min="10" max="200" step="5" value="100"><output id="fdSpeedN">1.00×</output></label>
+      <label class="vslide" title="Playback rate, relative to the sequence's own 30 fps. The planes are affine in the six weights, so any rate evaluates them exactly; nothing is repeated or dropped.">Speed <input id="fdSpeed" type="range" min="10" max="200" step="5" value="100"><output id="fdSpeedN">1.00×</output></label>
       <input id="fdScrub" type="range" min="0" max="0" step="any" value="0" aria-label="Timeline position" disabled>
-      <span id="fdFrame" class="tnum">—</span>
+      <span id="fdFrame" class="tnum">not loaded</span>
       <button id="fdReset" class="tbtn">reset view</button>
     </div>
     <p id="fdStatus" class="hint">Not loaded.</p>
@@ -405,31 +471,31 @@
         <label class="tchk" title="The plane spanning the x and y axes, on the low-z face of the field's bounding box"><input type="checkbox" data-o="sxy" checked> xy</label>
         <label class="tchk" title="The plane spanning the x and z axes, on the high-y face"><input type="checkbox" data-o="sxz" checked> xz</label>
         <label class="tchk" title="The plane spanning the y and z axes, on the high-x face"><input type="checkbox" data-o="syz" checked> yz</label>
-        <label class="tchk" title="The canonical gaussians — the pose the field deforms away from"><input type="checkbox" data-o="cloud" checked> Canonical cloud</label>
+        <label class="tchk" title="The canonical gaussians, the pose the field deforms away from"><input type="checkbox" data-o="cloud" checked> Canonical cloud</label>
         <label class="vslide" title="How strongly the sheets are drawn over the cloud">Sheet opacity <input type="range" data-o="alpha" min="0" max="100" value="85"><output data-o="alphaN">85</output></label>
       </div>
       <div class="vrow off" data-o="rowEllip">
-        <label class="tchk" title="Render each canonical gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the point cloud the field deforms is visible as points. The sheet cells stay soft — hard-edging them would break the feature image into a grid of discs."><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
-        <label class="vslide" title="Ellipsoid radius in standard deviations — shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
+        <label class="tchk" title="Render each canonical gaussian as a hard-edged ellipsoid instead of the soft 3DGS falloff, so the point cloud the field deforms is visible as points. The sheet cells stay soft; hard-edging them would break the feature image into a grid of discs."><input type="checkbox" data-o="ellip"> Hard ellipsoids</label>
+        <label class="vslide" title="Ellipsoid radius in standard deviations; shrink to separate individual points">Radius <input type="range" data-o="ellipR" min="20" max="200" value="100"><output data-o="ellipRN">1.00</output></label>
       </div>
       <div class="vrow off" data-o="rowCast">
-        <label class="tchk" title="Draw each sampled gaussian's perpendicular onto the three faces — the exact place the field is read for it. A line only goes to a sheet that is switched on."><input type="checkbox" data-o="cast"> Cast to the planes</label>
+        <label class="tchk" title="Draw each sampled gaussian's perpendicular onto the three faces, the exact place the field is read for it. A line only goes to a sheet that is switched on."><input type="checkbox" data-o="cast"> Cast to the planes</label>
         <label class="vslide" title="How many gaussians cast lines, sampled evenly through the cloud">Lines <input type="range" data-o="castN" min="20" max="3000" step="20" value="400"><output data-o="castNN">400</output></label>
       </div>
       <div class="vrow" data-o="rowKnots">
         <label class="vslide" title="How many moving gaussians the knot panel draws. The bundle's rows are shuffled, so any count is an even sample of the cloud.">Samples <input type="range" data-o="knN" min="20" max="1500" step="20" value="300"><output data-o="knNN">300</output></label>
-        <label class="tchk" title="Dash a line from each canonical point to where the field puts it at either knot — the mapping the figure is about"><input type="checkbox" data-o="knLinks" checked> From canonical</label>
+        <label class="tchk" title="Dash a line from each canonical point to where the field puts it at either knot, the mapping the figure is about"><input type="checkbox" data-o="knLinks" checked> From canonical</label>
         <label class="tchk" title="Draw each sampled point's whole trajectory, knot to knot, behind the current interval. One interval is 1/74 of it, so without this the highlighted piece has nothing to be small against."><input type="checkbox" data-o="knPath" checked> Whole path</label>
       </div>
       <div class="vrow" data-o="rowTan">
-        <label class="tchk" title="The tangent the cubic Hermite leaves each knot with — the stored v_xyz head — at the left knot (blue) and the right one (green). These are the model's own vectors and nothing derived, so do not expect them to point along the path: at a knot every two frames the straight part already explains the motion, the tangents move the curve by under a tenth of the interval's chord, and the trained ones come out about ten times shorter than that chord and some 64° away from it."><input type="checkbox" data-o="knTan" checked> Tangents</label>
+        <label class="tchk" title="The tangent the cubic Hermite leaves each knot with (the stored v_xyz head) at the left knot (blue) and the right one (green). These are the model's own vectors and nothing derived, so do not expect them to point along the path: at a knot every two frames the straight part already explains the motion, the tangents move the curve by under a tenth of the interval's chord, and the trained ones come out about ten times shorter than that chord and some 64° away from it."><input type="checkbox" data-o="knTan" checked> Tangents</label>
         <label class="vslide" title="Arrow length as a multiple of the true tangent. The tangent is the derivative per knot interval and this field's are about a tenth of the interval's own chord, so at true scale the arrows are sub-pixel; the panel's readout always states the factor in use.">Scale <input type="range" data-o="knScale" min="1" max="400" step="1" value="120"><output data-o="knScaleN">×120</output></label>
       </div>
     </div>
-    <p class="hint">Want the planes flat, with the six weight curves and the other ways of reading them — the template, each residual on its own, and where the field does most of its work? <a href="triplanes.html">Open the tri-plane inspector</a>.</p>
+    <p class="hint">Want the planes flat, with the six weight curves and the other ways of reading them: the template, each residual on its own, and where the field does most of its work? <a href="triplanes.html">Open the tri-plane inspector</a>.</p>
     </article>
 
-    <p class="hint">The two gaussian comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load; the trajectory demo and the tri-plane figure need no decoder at all — the first streams its knots as you scrub, the second evaluates its planes on the GPU from six numbers per frame. Each card loads only when you ask for it, and <em>clear</em> gives it back — scenes, renderers and decoded motion — if you would rather not hold them all at once. Once a card is loaded: drag inside a panel to orbit · in the gaussian panels, scroll to change fly speed and W/A/S/D and Q/E to move the focused one; in the trajectory, tri-plane and knot panels, scroll or pinch to zoom and shift-drag or two-finger drag to pan — worth doing in the knot panel, where two consecutive knots are a fraction of a pixel apart until you go in. On a touch device an on-screen stick and up/down buttons appear on the first gaussian panel — the others follow, since the cameras are linked.</p>
+    <p class="hint">The two gaussian comparisons share a one-time ~31&nbsp;MB decoder, cached by your browser after the first load; the trajectory demo and the tri-plane figure need no decoder at all: the first streams its knots as you scrub, the second evaluates its planes on the GPU from six numbers per frame. Each card loads only when you ask for it, and <em>clear</em> gives it back (scenes, renderers and decoded motion) if you would rather not hold them all at once. Once a card is loaded, almost every panel works the same way: <em>drag to orbit, scroll or pinch to zoom, shift-drag or two-finger drag to pan</em>. That is worth doing in the knot panel, where two consecutive knots are a fraction of a pixel apart until you go in. The one exception is the <em>americano</em> comparison, a close hand-held capture you can fly through instead: scroll there changes speed, W/A/S/D and Q/E move the focused panel, and on a touch device an on-screen stick and up/down buttons appear on its first panel. Within a card the cameras are linked, so whichever you move, the others follow.</p>
   </section>
 
   <section>
@@ -462,21 +528,43 @@
     <h2>Datasets</h2>
     <p class="ack">The sequences reconstructed above come from open-source dynamic-scene datasets, used here for research demonstration. Please cite the original authors:</p>
     <div class="datacard">
-      <p class="ref"><strong><a href="https://www.albertpumarola.com/research/D-NeRF/index.html" target="_blank" rel="noopener">D-NeRF</a></strong> — synthetic dynamic scenes; <em>bouncingballs</em> above.<br>
+      <p class="ref"><strong><a href="https://www.albertpumarola.com/research/D-NeRF/index.html" target="_blank" rel="noopener">D-NeRF</a></strong>: synthetic dynamic scenes; <em>bouncingballs</em> above.<br>
       Albert Pumarola, Enric Corona, Gerard Pons-Moll, and Francesc Moreno-Noguer. 2021. D-NeRF: Neural Radiance Fields for Dynamic Scenes. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR).</p>
-      <p class="ref"><strong><a href="https://hypernerf.github.io/" target="_blank" rel="noopener">HyperNeRF</a></strong> — casually captured real-world scenes; <em>americano</em> above.<br>
+      <p class="ref"><strong><a href="https://hypernerf.github.io/" target="_blank" rel="noopener">HyperNeRF</a></strong>: casually captured real-world scenes; <em>americano</em> above.<br>
       Keunhong Park, Utkarsh Sinha, Peter Hedman, Jonathan T. Barron, Sofien Bouaziz, Dan B Goldman, Ricardo Martin-Brualla, and Steven M. Seitz. 2021. HyperNeRF: A Higher-Dimensional Representation for Topologically Varying Neural Radiance Fields. ACM Transactions on Graphics (Proc. SIGGRAPH Asia) 40, 6 (2021).</p>
-      <p class="ref"><strong><a href="https://github.com/rabbityl/DeformingThings4D" target="_blank" rel="noopener">DeformingThings4D</a></strong> — animated humanoid and animal mesh sequences; <em>astra · samba dancing</em> above.<br>
+      <p class="ref"><strong><a href="https://github.com/rabbityl/DeformingThings4D" target="_blank" rel="noopener">DeformingThings4D</a></strong>: animated humanoid and animal mesh sequences; <em>astra · samba dancing</em> above.<br>
       Yang Li, Hikari Takehara, Takafumi Taketomi, Bo Zheng, and Matthias Nießner. 2021. 4DComplete: Non-Rigid Motion Estimation Beyond the Observable Surface. In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV).</p>
     </div>
   </section>
 </main>
+
+<a class="totop" id="toTop" href="#top"><span aria-hidden="true">↑</span> Top</a>
 
 <footer>
   <!-- The reserved-rights claim covers Mingyang's own text, figures and code only; the vendored
        decode path and the two datasets above keep their own licences, hence the second clause. -->
   <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved. Third-party code and datasets remain under their own licences.</div>
 </footer>
+
+<script>
+// Back-to-top reveal. CLASSIC, and deliberately not part of the module below, for the same reason
+// the boot watchdog is: module loading is all-or-nothing, and navigation should not be the thing
+// that breaks when a decode-path fetch is dropped. It also has no business waiting on a ~32 MB
+// decoder graph to resolve before a scroll affordance appears.
+//
+// An IntersectionObserver on the masthead rather than a scroll listener: the browser reports the
+// crossing itself, so there is no handler running on every scroll event over a page with four
+// WebGL panels on it. Where the API is missing, the control is simply always shown, which is the
+// right way to fail for something whose whole job is to be reachable.
+(function () {
+  var b = document.getElementById('toTop'), h = document.getElementById('top');
+  if (!b || !h) return;
+  if (!('IntersectionObserver' in window)) { b.classList.add('on'); return; }
+  new IntersectionObserver(function (e) {
+    b.classList.toggle('on', !e[0].isIntersecting);
+  }, { threshold: 0 }).observe(h);
+})();
+</script>
 
 <script>
 // Boot watchdog. Deliberately a CLASSIC script: the host below is a module, and module loading is
@@ -491,7 +579,7 @@ setTimeout(function () {
   ['abStatus', 'amStatus', 'ptStatus'].forEach(function (id, i) {
     var el = document.getElementById(id);
     if (!el) return;
-    el.textContent = '✗ The viewer failed to start — a script did not load. ';
+    el.textContent = '✗ The viewer failed to start. A script did not load. ';
     if (i) return;                       // one Retry button is enough; it reloads the whole page
     var b = document.createElement('button');
     b.className = 'tbtn'; b.textContent = 'Retry';
@@ -518,7 +606,11 @@ setTimeout(function () {
 // Protocol, both directions, is {ch:'spdef', ...}: panel->host carries `id`, host->panel carries
 // `to`. Anything else on the page posting messages is ignored by both ends.
 import { parseNpz, decodeShared, buildKeyframe } from '../smv/decode.js';
-import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle, disposeFFmpeg } from '../smv/decode_motion.js';
+import { ffmpegReady, recreateFFmpeg, decodeMotionGopBundle, disposeFFmpeg, coreCached } from '../smv/decode_motion.js';
+// The knot bundle's stream decode. It takes the ffmpeg instance as an ARGUMENT, so this page
+// keeps using the one instance decode_motion.js owns — importing knot_decode's own ffmpegReady
+// would put a second ~32 MB core on the page. Its curve maths is imported by knotsplat.html.
+import { decodeKnotChunk } from './knot_decode.js';
 
 window.__spdefBooted=true;   // clears the classic watchdog above: the module graph did resolve
 
@@ -540,6 +632,16 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   //   field  — field.html, the canonical cloud and the tri-planes in one scene. Loads itself like
   //            points (no decoder), and `frac` for the same reason: the planes are affine in the
   //            six temporal weights, so every instant between two knots is evaluated, not replayed.
+  //   knot   — knotsplat.html, a KNOT BUNDLE: gaussians again, but the motion on disk is the
+  //            spline's own knots rather than one delta image per frame. Host-decoded like
+  //            `splat` (it is the same ffmpeg.wasm and the same reference.npz), `frac` like
+  //            `points` (every frame is a blend of two knots, so there is no stored frame to
+  //            snap to), and no decode frontier at all — the whole knot set is resident.
+  //
+  // `kind` is per SCENE, not per group: the trajectory card offers one of each through its
+  // picker. A group therefore declares `kinds` (everything its option block must wire at boot)
+  // and `optKind` (the OPT_KEYS entry that block satisfies, the union), while `g.kind` follows
+  // whichever example is selected. Everything below that branches on kind reads `g.kind`.
   // ---- the tri-plane card's two examples -----------------------------------------------
   // One card, two trained models, switched by the picker in its transport. Everything that differs
   // lives here rather than in the markup: the two panel URLs, the manifests (which is what the
@@ -553,14 +655,14 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // frames (lego) they come out at 1.09x the chord and 8° off, i.e. actually tangent to the path.
   // Rank differs too — 6 against 1 — which is why the lede's "plus six more" is a swapped span.
   const FIELD_SCENES=[
-    {key:'balls', mb:'2.4 MB', scale:120,
+    {key:'balls', load:'Load this figure · 2.4 MB', scale:120,
      rank:'six more, scaled by six numbers',
      tag:'D-NeRF <em>bouncingballs</em> · 14,534 canonical gaussians · three 128&times;128&times;32 tri-planes '
         +'· 1,500 of them sampled at all 75 knots · 2.4 MB',
      src:{field:'field.html?scene=scenes/bouncingballs_canonical/scene.json&tri=triplanes/bouncingballs/&id=field',
           knots:'knots.html?bundle=knots/bouncingballs/meta.json&id=knots'},
      url:{field:'triplanes/bouncingballs/meta.json', knots:'knots/bouncingballs/meta.json'}},
-    {key:'lego', mb:'1.7 MB', scale:10,
+    {key:'lego', load:'Load this figure · 1.7 MB', scale:10,
      rank:'one more, scaled by one number',
      tag:'D-NeRF <em>lego</em> · 51,395 canonical gaussians · three 128&times;128&times;32 tri-planes '
         +'· 1,500 of them sampled at all 7 knots · 1.7 MB',
@@ -569,9 +671,54 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
      url:{field:'triplanes/lego/meta.json', knots:'knots/lego/meta.json'}}
   ];
 
+  // ---- the trajectory card's two examples -----------------------------------------------
+  // Same picker mechanism as FIELD_SCENES, but here the two examples are DIFFERENT KINDS — the
+  // point is that "the spline evaluated between the supervised frames" is not a property of the
+  // GS-free path, it is a property of the field. So one entry is the mesh fit (points.html, no
+  // rasterizer, no decoder) and the other is a compressed gaussian scene whose motion on disk is
+  // 15 knots (knotsplat.html, host-decoded from ffmpeg.wasm). `kind` is what the host switches on.
+  //
+  // Every string a reader could check against the data lives here rather than in the markup: the
+  // subtag, the panel's caption and its tag line, the Load button's size, and the lede. Nothing
+  // verifies those against the bundles, so keeping them beside the URLs is the only thing that
+  // stops them drifting apart.
+  const TRAJ_SCENES=[
+    {key:'anime', kind:'points', load:'Load this demo · 5.0 MB',
+     src:'points.html?bundle=points/astra_samba/meta.json&id=spline',
+     url:'points/astra_samba/meta.json',
+     tag:'DeformingThings4D <em>astra · samba dancing</em> · 837 frames · 7,921 points '
+        +'· 5.0 MB for the whole sequence, 0.2 MB of it up front',
+     ptitle:'Fitted trajectories',
+     ptag:'105 knots · cubic Hermite · evaluated in your browser',
+     lede:'The two cards above render gaussians. This one drops the rasterizer entirely and fits the '
+        +'same spline deformation field straight to a mesh’s vertices, which is how the field’s '
+        +'temporal quality is measured. What ships is not a replay: it is the <em>fitted spline</em>, '
+        +'a per-point offset and tangent at each knot, and your browser evaluates the same cubic '
+        +'Hermite the field itself uses. Turn on <em>trails</em> and the colour flips at every knot, '
+        +'so one stripe is one interval, about 8 frames here. The mesh is <em>decimated ≈4×</em>, '
+        +'from the sequence’s 31,515 vertices down to 7,921 to stay light.'},
+    {key:'hook', kind:'knot', load:'Load this demo · 2.3 MB',
+     src:'knotsplat.html?scene=scenes/hook_knots/scene.json&id=spline&elev=15',
+     url:'scenes/hook_knots/scene.json',
+     tag:'D-NeRF <em>hook</em> · 100 frames · 23,716 gaussians · <em>15 knots</em> · 2.3 MB, '
+        +'positions at 8 bits',
+     ptitle:'A compressed scene, played from its knots',
+     ptag:'15 knots · cubic Hermite · one stripe per knot interval',
+     lede:'The same claim, back on gaussians and in the format that actually ships. Nothing here '
+        +'stores a frame: the file carries the deformation field’s own knots, where each gaussian '
+        +'is and the tangent it leaves with at 15 instants, and every one of the 100 frames is a '
+        +'cubic-Hermite blend of the two knots bracketing it, computed for all 23,716 gaussians on '
+        +'the fly. That is 15 images per stream instead of 99, and it is why the timeline is '
+        +'continuous rather than a flip-book: scrub between two knots and you are watching the '
+        +'field interpolate, not a stored picture. Turn on <em>trails</em> to see where the knots '
+        +'fall: each path is sampled from the spline and its colour flips at every knot, so one '
+        +'stripe is one interval, about 7 frames here. Positions ship as the upper byte only: '
+        +'8 bits, half the download, and a worst-case error of 0.003 in a scene 2.5 across.'}
+  ];
+
   const GROUPS=[
     {key:'balls',kind:'splat',
-     ui:{load:'abLoad',clear:'abClear',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',touch:'abTouch',status:'abStatus',opts:'abOpts'},
+     ui:{load:'abLoad',clear:'abClear',play:'abPlay',scrub:'abScrub',lbl:'abFrame',reset:'abReset',status:'abStatus',opts:'abOpts'},
      panes:[{id:'reg',    frId:'paneA',url:'scenes/bouncingballs_reg/scene.json',    name:'with reg'},
             {id:'noreg',  frId:'paneB',url:'scenes/bouncingballs_noreg/scene.json',  name:'without reg'}]},
     {key:'amer',kind:'splat',
@@ -579,13 +726,15 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
      panes:[{id:'k33',    frId:'paneC',url:'scenes/americano_knots33/scene.json',    name:'33 knots'},
             {id:'kfull',  frId:'paneD',url:'scenes/americano_full/scene.json',       name:'full knots'},
             {id:'knoreg', frId:'paneE',url:'scenes/americano_full_noreg/scene.json', name:'full knots, no reg'}]},
-    {key:'traj',kind:'points',frac:true,
+    {key:'traj',kind:'points',kinds:['points','knot'],optKind:'traj',frac:true,
      ui:{load:'ptLoad',clear:'ptClear',play:'ptPlay',scrub:'ptScrub',lbl:'ptFrame',reset:'ptReset',status:'ptStatus',opts:'ptOpts',
-         prev:'ptPrev',next:'ptNext',speed:'ptSpeed',speedN:'ptSpeedN'},
-     panes:[{id:'anime',  frId:'paneF',url:'points/astra_samba/meta.json',           name:'trajectories'}]},
+         prev:'ptPrev',next:'ptNext',speed:'ptSpeed',speedN:'ptSpeedN',
+         root:'ptCard',scene:'ptScene',tag:'ptTag',lede:'ptLede',ptitle:'ptPTitle',ptag:'ptPTag'},
+     scenes:TRAJ_SCENES,
+     panes:[{id:'spline', frId:'paneF',url:'points/astra_samba/meta.json',           name:'the spline'}]},
     {key:'field',kind:'field',frac:true,
      ui:{load:'fdLoad',clear:'fdClear',play:'fdPlay',scrub:'fdScrub',lbl:'fdFrame',reset:'fdReset',status:'fdStatus',opts:'fdOpts',
-         speed:'fdSpeed',speedN:'fdSpeedN',scene:'fdScene',tag:'fdTag',rankTxt:'fdRank'},
+         speed:'fdSpeed',speedN:'fdSpeedN',scene:'fdScene',tag:'fdTag',rank:'fdRank'},
      scenes:FIELD_SCENES,
      panes:[{id:'field',  frId:'paneG',url:'triplanes/bouncingballs/meta.json',      name:'the field'},
             {id:'knots',  frId:'paneH',url:'knots/bouncingballs/meta.json',          name:'the knots'}]}
@@ -597,6 +746,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     splat:['rowEllip','ellip','ellipR','ellipRN','rowTraj','traj','trajN','trajNN',
            'trajL','trajLN','rowOff','off','offMix','offMixN'],
     points:['rowTrail','trail','trailLen','trailLenN'],
+    knot:['rowTrail','trail','trailLen','trailLenN','rowEllip','ellip','ellipR','ellipRN'],
+    // The trajectory card's block, which has to satisfy BOTH of its examples' kinds — the two
+    // lists above, concatenated. Its `data-kind="traj"` points verify.py at this entry, so a
+    // control added to `points` or `knot` and forgotten here fails the check rather than the card.
+    traj:['rowTrail','trail','trailLen','trailLenN','rowEllip','ellip','ellipR','ellipRN'],
     // The `field` card carries TWO panels of different renderers — field.html (the storage) and
     // knots.html (what it predicts) — so one option block feeds both. Each panel reads the keys it
     // understands and ignores the rest, which is what makes one broadcast `view` message enough.
@@ -613,6 +767,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // Frames of the source sequence per second, and the default for every card's `rate`. Declared
   // before the init loop below, which reads it.
   const FPS=30;
+  // Playback rate read off the card's own Speed slider. One place, called from init, from the
+  // slider's `input`, and from startGroup — so the control is the single source of truth and the
+  // readout beside it can never describe a rate the clock is not using.
+  function applySpeed(g){if(!g.el.speed)return;const pc=+g.el.speed.value;
+    g.rate=FPS*pc/100;if(g.el.speedN)g.el.speedN.textContent=(pc/100).toFixed(2)+'×';}
   function resetPane(p){
     p.frames=0;p.buffered=0;p.splats=0;p.note='';p.mb=0;p.totalMB=0;
     p.alive=false;p.ready=false;p.failed=false;p.sentKf=false;p.kfAt=0;p.kfRetries=0;
@@ -628,7 +787,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // block is repeated per group and ids must stay unique. Missing one is a markup typo, and it
     // would otherwise surface much later as a TypeError inside an event handler.
     g.opts=_ctl(g.ui.opts);g.o={};
-    for(const k of OPT_KEYS[g.kind]){
+    for(const k of OPT_KEYS[g.optKind||g.kind]){
       const el=g.opts&&g.opts.querySelector('[data-o="'+k+'"]');
       if(!el)throw new Error('view option "'+k+'" missing from #'+g.ui.opts);
       g.o[k]=el;
@@ -638,7 +797,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // from a scene with few castable gaussians to one with many would stay stuck at the low bound.
     g.oMax={};for(const k of['castN','knN'])if(g.o[k])g.oMax[k]=+g.o[k].max;
     g.playing=false;g.gFrame=0;g.total=0;g.acc=0;g.lastT=0;g.loadMsg='loading…';
-    g.started=false;g.loaded=false;g.lastCam=null;g.train=null;g.trainSorted=null;
+    g.started=false;g.loaded=false;g.lastCam=null;g.marks=null;g.markOn='';g.markOff='';
     // Playback rate, frames of the source sequence per second. Only a continuous-clock card can
     // honour a rate below the source's own: a splat scene has one decoded pose per frame, so
     // slowing it down can only repeat them, while the spline evaluates poses that were never
@@ -647,9 +806,14 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // Shown as a MULTIPLE of the sequence's own rate rather than as an absolute fps, which read as
     // a rendering setting rather than as a playback one. The slider carries percent; the label is
     // the only place the ratio is spelt out.
+    // DERIVED from the control, never assumed — the same rule the view options follow. It used to
+    // be initialised to FPS and only ever updated by the input handler, so `g.rate` and the slider
+    // could disagree at exactly one moment: before the first drag. That is not hypothetical, it is
+    // the common case — a browser restores a range input's value on reload without firing `input`,
+    // so a card reopened at 0.50x played at 1.00x until you nudged the slider. Reading it here
+    // (and again in startGroup) closes the gap wherever it opens.
     g.rate=FPS;
-    if(g.el.speed)g.el.speed.oninput=()=>{const pc=+g.el.speed.value;
-      g.rate=FPS*pc/100;g.el.speedN.textContent=(pc/100).toFixed(2)+'×';};
+    if(g.el.speed){g.el.speed.oninput=()=>applySpeed(g);applySpeed(g);}
     // `gen` is bumped by Clear (and by each start) so an in-flight loadGroup pass can tell that the
     // group it is loading has been thrown away; `loadLabel` is the button's original text, which
     // Clear puts back after loadGroup replaced it with 'loading…'.
@@ -677,18 +841,26 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   function setFrame(g,f){if(!g.total)return;g.gFrame=((f%g.total)+g.total)%g.total;
     g.el.scrub.value=g.gFrame;g.el.lbl.textContent=g.frac?fracLabel(g):'frame '+g.gFrame+' / '+(g.total-1);
     gsend(g,{type:'seek',frame:g.gFrame});}
-  // A frame is SUPERVISED only if it is exactly one the field was trained on. Every fractional
-  // position, and the three whole frames between each trained pair, is the spline's own inference —
-  // which is the entire claim of the trajectory card, so the readout has to say which one you are
-  // looking at rather than leaving every frame looking equally real.
+  // The marked instants of a continuous timeline, and what to call being on one. Everything
+  // between them is the spline's own inference — the entire claim of the trajectory card — so the
+  // readout has to say which one you are looking at rather than leaving every frame equally real.
+  // What counts as marked is the PANEL's to say, because it depends on what shipped: the mesh fit
+  // sends the frames the field was trained on ("supervised" / "inferred"), the knot bundle sends
+  // where its 15 knots fall ("at a knot" / "between knots"). Those are not integers — 15 knots over
+  // 100 frames is one every ~7.07 — so this is a sorted float list scanned exactly, not a Set of
+  // frame numbers. The scan is O(marks) per label update; the longest list here is 210.
+  function marked(g){
+    if(!g.marks)return false;
+    for(let i=0;i<g.marks.length;i++)if(Math.abs(g.gFrame-g.marks[i])<1e-6)return true;
+    return false;}
   function fracLabel(g){
-    const r=Math.round(g.gFrame),sup=g.train&&g.train.has(r)&&Math.abs(g.gFrame-r)<1e-6;
-    return 'frame '+g.gFrame.toFixed(2)+' / '+(g.total-1)+(g.train?(sup?' · supervised':' · inferred'):'');}
-  // Nearest trained frame either side, and the reason the steppers exist: scrubbing lands on a
-  // supervised frame only by accident, so without them you can never see the two ends of what the
-  // spline is interpolating between.
-  function stepTrain(g,dir){
-    const F=g.trainSorted;if(!F||!F.length)return;
+    return 'frame '+g.gFrame.toFixed(2)+' / '+(g.total-1)
+      +(g.marks?' · '+(marked(g)?g.markOn:g.markOff):'');}
+  // Nearest marked instant either side, and the reason the steppers exist: scrubbing lands on one
+  // only by accident, so without them you can never see the two ends of what the spline is
+  // interpolating between.
+  function stepMark(g,dir){
+    const F=g.marks;if(!F||!F.length)return;
     let best=null;
     for(const f of F){
       if(dir>0){if(f>g.gFrame+1e-6){best=f;break;}}
@@ -711,6 +883,14 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // cost/smoothness trade with no editorial content, so both are fixed in points.html; the
     // ground-truth overlay is gone from the bundle entirely (see the comment there).
     points:g=>({type:'view',
+      trail:g.o.trail.checked, trailLen:+g.o.trailLen.value}),
+    // `ellip` is the comparison cards' control under the same name and the same units (radius in
+    // std-devs); `trail` is the mesh example's, and it is shared on purpose — both examples draw
+    // the same figure, a path sampled from the spline and striped by knot, so one stripe is one
+    // knot interval in either. What the knot panel does NOT carry is the motion tint, which reads
+    // a per-frame motion array that this format has no such thing as.
+    knot:g=>({type:'view',
+      ellip:g.o.ellip.checked, ellipR:+g.o.ellipR.value/100,
       trail:g.o.trail.checked, trailLen:+g.o.trailLen.value}),
     // Which sheets, how strongly, and whether the cloud is drawn. There is no view SWITCH here:
     // the panel shows the planes themselves at t, and the other readings of them (the template,
@@ -743,6 +923,9 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     points:{chk:['trail'],slide:['trailLen'],
            num:[['trailLen','trailLenN']],
            rows:[['rowTrail','trail']]},
+    knot:{chk:['trail','ellip'],slide:['trailLen','ellipR'],
+           num:[['trailLen','trailLenN'],['ellipR','ellipRN',v=>(v/100).toFixed(2)]],
+           rows:[['rowTrail','trail'],['rowEllip','ellip']]},
     // rowSheets is deliberately NOT in `rows`: it holds four independent toggles, so there is no
     // single one whose off state should dim it. The two rows below it do have one each.
     // rowKnots is not in `rows` either: it holds the sample count and two independent toggles, so
@@ -758,8 +941,12 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     for(const[row,tog]of w.rows)g.o[row].classList.toggle('off',!g.o[tog].checked);
     gsend(g,viewState(g));
   }
-  for(const g of GROUPS){
-    const w=OPT_WIRING[g.kind];
+  // Wired for EVERY kind the group can show, not just the one selected now — the controls all
+  // exist in the block from the start, and re-wiring on an example switch would be one more thing
+  // to forget. The handler is the same for all of them, so an overlapping key is simply assigned
+  // twice. pushView() then reads only the ACTIVE kind's table, so the hidden rows cost nothing.
+  for(const g of GROUPS)for(const kd of g.kinds||[g.kind]){
+    const w=OPT_WIRING[kd];
     w.chk.forEach(k=>g.o[k].onchange=()=>pushView(g));
     w.slide.forEach(k=>g.o[k].oninput=()=>pushView(g));
   }
@@ -782,8 +969,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // is recomputed (and pushed) whenever a panel announces or fails, so it lands on the leftmost
   // panel as soon as that one is actually there.
   const touchPane=g=>{const L=livePanes(g);return L.find(p=>p.alive)||L[0]||null;};
-  // No-op for a group with no pad (the trajectory card orbits, which touch reaches unaided), so
-  // every caller — flush(), a panel failure, the toggle — can stay unconditional.
+  // The pad follows the CAMERA, not the kind: it drives the WASD axes, so it exists only for a
+  // card whose panels fly. A card that orbits reaches everything by touch already — one finger
+  // rotates, two pinch and pan — so it simply omits `touch` from its `ui` and this is a no-op,
+  // which is what lets every caller (flush(), a panel failure, the toggle) stay unconditional.
+  // Only the americano card flies today; bouncingballs and the knot example are `?nav=orbit`.
   function pushTouch(g){if(!g.el.touch)return;const t=g.el.touch.checked?touchPane(g):null;
     g.panes.forEach(p=>send(p,{type:'touch',on:p===t}));}
   for(const g of GROUPS){if(!g.el.touch)continue;g.el.touch.checked=IS_TOUCH;g.el.touch.onchange=()=>pushTouch(g);}
@@ -793,7 +983,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   // progress would keep overwriting the "Not loaded" line of a comparison that no longer exists.
   function stage(g,label,pct){if(!g.started)return;g.loadMsg=label;gsend(g,{type:'stage',label,pct});status(g);}
   function status(g){
-    if(!g.started){g.el.status.textContent='Not loaded — press “Load” to fetch and decode this comparison in your browser.';return;}
+    if(!g.started){g.el.status.textContent='Not loaded. Press “Load” to fetch and decode this comparison in your browser.';return;}
     const dead=g.panes.filter(p=>p.failed).map(p=>p.name);
     if(g.loaded&&livePanes(g).every(p=>p.ready)){
       // A points panel sends its own one-line summary (point count, interval count, parity margin):
@@ -809,7 +999,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
           ? g.total+' frames · '+notes+' · evaluated in your browser'
             +(mbp?' · '+mbp.mb.toFixed(2)+' of '+mbp.totalMB.toFixed(2)+' MB streamed so far.':'.')
           : g.total+' frames · up to '+s.toLocaleString()+' splats per panel · decoded in your browser.')
-        +(dead.length?'  ·  ✗ '+dead.join(', ')+' failed to load — reload the page to retry.':'');
+        +(dead.length?'  ·  ✗ '+dead.join(', ')+' failed to load; reload the page to retry.':'');
       return;}
     // Name a panel that has not come up. Silence here is what made the CDN failures look like
     // "the canvas just didn't render" instead of "that frame never loaded".
@@ -836,7 +1026,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       if(!p.alive){
         if(Date.now()-p.t0<6000*(p.tries+1))continue;   // generous: a cold CDN fetch is not a failure
         if(p.tries>=MAX_TRIES){
-          p.g.loadMsg='\u2717 the \u201c'+p.name+'\u201d panel could not be loaded \u2014 please reload the page';
+          p.g.loadMsg='\u2717 the \u201c'+p.name+'\u201d panel could not be loaded, please reload the page';
           status(p.g);continue;}
         p.tries++;
         p.sentKf=false;                                 // the reloaded document knows nothing
@@ -866,7 +1056,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       p.frames=m.frames;p.splats=m.splats;p.ready=true;p.note=m.note||'';p.totalMB=m.totalMB||0;
       // The trained frames, so the readout can tell supervised from inferred and the steppers can
       // land on one. Only a points panel sends them; without them fracLabel() stays silent.
-      if(m.train){g.train=new Set(m.train);g.trainSorted=m.train.slice().sort((a,b)=>a-b);}
+      if(m.marks){g.marks=m.marks.slice().sort((a,b)=>a-b);g.markOn=m.markOn||'supervised';g.markOff=m.markOff||'inferred';}
       // How many gaussians can cast a line at all — only the field panel sends it. The markup's max
       // is an upper bound on legibility, not on the data: a gaussian outside the field's box has no
       // foot of a perpendicular ON a sheet, so it is skipped, and without this the top of the slider
@@ -885,17 +1075,25 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       }
       // Same sequence across a group; if they ever aren't, the shortest bounds that timeline.
       const L=livePanes(g);
-      if(L.length&&L.every(q=>q.frames>0)){g.total=L.reduce((n,q)=>Math.min(n,q.frames),Infinity);
+      if(L.length&&L.every(q=>q.frames>0)){
+        // `ready` can arrive MORE THAN ONCE from one panel. The knot panel sends it when its
+        // keyframe installs and again when the knots land, because the parity margin in its note
+        // does not exist until then — and a second one must not yank the playhead back to the
+        // opening frame under someone who has been scrubbing while the decode ran. So the opening
+        // seek happens on the first report only; later ones re-send wherever the card already is,
+        // which a panel that has just (re)installed needs anyway.
+        const first=!g.total;
+        g.total=L.reduce((n,q)=>Math.min(n,q.frames),Infinity);
         // A trail covers the past, so a trails-first panel asks to open one trail-length in rather
         // than at frame 0, where its main feature has nothing to draw.
         g.el.scrub.max=g.total-1;g.el.scrub.disabled=false;
-        if(g.el.prev){g.el.prev.disabled=g.el.next.disabled=!g.trainSorted;}
-        setFrame(g,m.openAt||0);}
+        if(g.el.prev){g.el.prev.disabled=g.el.next.disabled=!g.marks;}
+        setFrame(g,first?(m.openAt||0):g.gFrame);}
       status(g);
     }
     else if(m.type==='buffered'){p.buffered=m.end;
       // ACK: the panel has this GOP, so the host's copy can go.
-      if(m.gop!=null&&p.built&&p.built[m.gop]){p.built[m.gop].acked=true;p.built[m.gop].motion=null;}
+      if(m.gop!=null&&p.built&&p.built[m.gop]){const b=p.built[m.gop];b.acked=true;b.motion=null;b.knots=null;}
       if(minBuffered(g)>0)g.el.play.disabled=false;status(g);}
     // Cameras are always linked WITHIN a group and never across one: the two comparisons are
     // different scenes, so a shared pose would be meaningless.
@@ -921,9 +1119,17 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       if(p.g.lastCam)send(p,p.g.lastCam);   // …nor at the opening pose if its group has moved on
       return;}
     if(!p.built)return;
+    // Two host-decoded formats share this delivery machinery — the keyframe first, then one
+    // payload per GOP/chunk, each freed only once the panel ACKs it. Only the two message shapes
+    // differ, so they are built here and everything around them stays common.
+    const K=p.g.kind;
     if(!p.sentKf){
-      if(!send(p,{type:'keyframe',totalFrames:p.scene.num_frames,camera:p.scene.camera,
-                  gops:p.built.map(b=>({kf:b.kf,start:b.start,end:b.end,gop_id:b.gop_id}))}))return;
+      if(!send(p,K==='knot'
+          ? {type:'keyframe',totalFrames:p.scene.num_frames,camera:p.scene.camera,
+             curve:p.scene.curve,numIntervals:p.scene.num_intervals,numKnots:p.scene.num_knots,
+             chunks:p.built.map(b=>({kf:b.kf,start_knot:b.start_knot,end_knot:b.end_knot}))}
+          : {type:'keyframe',totalFrames:p.scene.num_frames,camera:p.scene.camera,
+             gops:p.built.map(b=>({kf:b.kf,start:b.start,end:b.end,gop_id:b.gop_id}))}))return;
       p.sentKf=true;p.kfAt=Date.now();
       send(p,{type:'stage',label:p.g.loadMsg,pct:null});
       send(p,viewState(p.g));           // a panel installing late must not sit at the option defaults
@@ -934,8 +1140,11 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // (the `gop` field on `buffered`). Transferring destroyed the only copy at send time, which
     // made a failed or reloaded panel permanently unrecoverable — the host had nothing left to
     // re-send. The extra copy is transient: it lives from send to ACK, then goes.
-    p.built.forEach((b,gi)=>{if(b.motion&&!b.sent){
-      if(send(p,{type:'motion',gop:gi,motion:b.motion,F:b.F}))b.sent=true;}});
+    p.built.forEach((b,i)=>{if(b.sent)return;
+      const m=K==='knot'
+        ? (b.knots&&{type:'knots',chunk:i,streams:b.knots.streams,rows:b.knots.rows})
+        : (b.motion&&{type:'motion',gop:i,motion:b.motion,F:b.F});
+      if(m&&send(p,m))b.sent=true;});
     if(p.built.every(b=>b.sent))send(p,{type:'hide'});
   }
 
@@ -972,10 +1181,10 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
         return out;
       }catch(e){
         clearTimeout(timer);lastErr=e;
-        if(attempt<FETCH_TRIES){stage(g,label+' — retrying…',null);await sleep(400*attempt);}
+        if(attempt<FETCH_TRIES){stage(g,label+', retrying…',null);await sleep(400*attempt);}
       }
     }
-    throw new Error((lastErr&&lastErr.message||lastErr)+' — '+url);
+    throw new Error((lastErr&&lastErr.message||lastErr)+': '+url);
   }
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   // Guards the two awaits in the load path that carry no timeout of their own: ffmpegReady()
@@ -1004,6 +1213,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
   function startGroup(g){
     if(g.started)return;
     g.gen++;g.started=true;
+    applySpeed(g);                    // a rate set before this card was ever loaded still applies
     g.el.load.disabled=true;g.el.load.textContent='loading\u2026';
     g.el.clear.hidden=false;          // Clear doubles as Cancel while the load is still running
     for(const p of g.panes){p.t0=Date.now();p.box.classList.remove('idle');p.fr.src=p.src;}
@@ -1039,7 +1249,7 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     const qi=queue.indexOf(g);if(qi>=0)queue.splice(qi,1);   // queued but never started
     g.started=false;g.loaded=false;g.playing=false;
     g.total=0;g.gFrame=0;g.acc=0;g.lastT=0;g.lastCam=null;g.loadMsg='loading\u2026';
-    g.train=null;g.trainSorted=null;
+    g.marks=null;
     for(const p of g.panes){
       p.fr.src='about:blank';        // discards the document: GL context, textures, motion, worker
       p.box.classList.add('idle');
@@ -1048,13 +1258,50 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     g.el.play.disabled=true;g.el.play.textContent='\u25b6 play';
     g.el.scrub.disabled=true;g.el.scrub.max=0;g.el.scrub.value=0;
     if(g.el.prev){g.el.prev.disabled=true;g.el.next.disabled=true;}
-    g.el.lbl.textContent='\u2014';
+    g.el.lbl.textContent='not loaded';
     g.el.load.hidden=false;g.el.load.disabled=false;g.el.load.textContent=g.loadLabel;
     g.el.clear.hidden=true;
     status(g);
-    // If this was the group being decoded, pump() reaches an empty queue and disposeFFmpeg() hands
-    // the ~32 MB core back too; no need to force it here.
+    // Clearing the last decoding card is what releases the core; see releaseDecoderSoon().
+    releaseDecoderSoon();
   }
+
+  // ---- when the ~32 MB decoder may be handed back --------------------------
+  // Three of the four cards decode with ffmpeg.wasm, and it used to be disposed the moment the
+  // queue drained. That is wrong once a second card can want it, because a full dispose also
+  // REVOKES the blob URLs the core was compiled from: loading a second decoding card re-fetched
+  // and re-compiled the whole 31 MB. (This page cannot lean on the service worker to soften that:
+  // sw.js is registered under /projects/smv/ and its scope does not reach here, so the refetch
+  // falls back to the plain HTTP cache, or the network if that has evicted it.)
+  //
+  // So the rule is now: keep the decoder for as long as any STARTED card is one that decodes, and
+  // release it when the last of them is cleared. Load two cards in a row and the second pays
+  // nothing; clear them all and the memory genuinely goes back.
+  //
+  // Release only happens where nothing is mid-decode: pump()'s drain point, and clearGroup() when
+  // the pump is idle. Calling it from clearGroup() while a decode is running would pull the core
+  // out from under an in-flight decodeMotionGopBundle().
+  const DECODER_KINDS=new Set(['splat','knot']);
+  const decoderWanted=()=>GROUPS.some(g=>g.started&&DECODER_KINDS.has(g.kind));
+  // KEEP_CORE everywhere on this page. Releasing frees the ffmpeg instances and the dequant worker
+  // (the live wasm heaps, which grow with what they have decoded) but NOT the blob URLs holding the
+  // fetched ~32 MB core. Revoking those was what made Clear-then-load re-download the whole thing:
+  // the working set really is handed back, while a reload costs a wasm compile instead of 32 MB
+  // over the network. The blobs go when the page does.
+  const KEEP_CORE={keepCore:true};
+  // Only promise a 31 MB download when one is actually about to happen. After a Clear, or for the
+  // second decoding card, the core is already fetched and the wait is a wasm compile.
+  const decoderLabel=()=>coreCached()?'starting the decoder\u2026'
+                                     :'loading decoder (ffmpeg.wasm, ~31 MB, one-time)\u2026';
+  // From pump()'s drain: the queue is empty and nothing is mid-decode, so the check is immediate.
+  async function releaseDecoder(){if(!decoderWanted())await disposeFFmpeg(KEEP_CORE);}
+  // From clearGroup(), and DEFERRED BY A TICK on purpose. The example picker clears and restarts a
+  // card in one synchronous go, so releasing on the spot would race disposeFFmpeg() (which nulls
+  // _ff and revokes the core blobs) against the ffmpegReady() of the load starting immediately
+  // after. One tick later the queue and `pumping` say whether that happened, and if a pump is
+  // running it reaches its own drain point and owns the decision there.
+  function releaseDecoderSoon(){setTimeout(()=>{
+    if(pumping||queue.length||decoderWanted())return;disposeFFmpeg(KEEP_CORE);},0);}
 
   async function pump(){
     if(pumping)return;pumping=true;
@@ -1062,16 +1309,16 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
       for(;;){
         if(queue.length){
           const g=queue.shift();
-          try{await loadGroup(g);}
+          try{await (g.kind==='knot'?loadKnotGroup(g):loadGroup(g));}
           catch(e){console.error(e);
                    // A group cleared mid-load is not a failure to report — it has no panels left.
                    if(g.started){g.loadMsg='\u2717 '+(e.message||e);status(g);
                                  gsend(g,{type:'error',msg:String(e.message||e)});}}
           continue;
         }
-        // Queue drained: hand the ~32 MB core back. A click landing during the await is picked up
-        // by the re-check below, and ffmpegReady() simply re-acquires from a warm cache.
-        await disposeFFmpeg();
+        // Queue drained. The core is handed back only if no loaded card still wants it; see
+        // releaseDecoder(). A click landing during the await is picked up by the re-check below.
+        await releaseDecoder();
         if(!queue.length)break;
       }
     }finally{pumping=false;}
@@ -1090,12 +1337,12 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     const got=await Promise.all(g.panes.map(async p=>{
       try{
         const base=p.url.replace(/[^/]*$/,'');
-        p.scene=await grabJSON(g,p.url,p.name+' \u2014 manifest\u2026');
+        p.scene=await grabJSON(g,p.url,p.name+' \u00b7 manifest\u2026');
         let shared=null;
         if(p.scene.has_shared_statics&&p.scene.shared_statics_path)
           shared=decodeShared(parseNpz(await grab(g,base+p.scene.shared_statics_path,'shared statics\u2026')));
         const refs=[];
-        for(const sg of p.scene.gops)refs.push(await grab(g,base+sg.reference_path,p.name+' \u2014 keyframe\u2026'));
+        for(const sg of p.scene.gops)refs.push(await grab(g,base+sg.reference_path,p.name+' \u00b7 keyframe\u2026'));
         return {p,shared,refs};
       }catch(e){console.error('[spdef]',p.name,e);return {p,err:e};}
     }));
@@ -1112,13 +1359,13 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     // min(decodedEnd) over the group, so draining one scene first would pin its timeline at 0.
     // (A no-op on the single-GOP scenes shipped today; it is the shape that stays correct if a
     // multi-GOP packing is dropped back in.)
-    stage(g,'loading decoder (ffmpeg.wasm, ~31 MB, one-time)\u2026',6);
+    stage(g,decoderLabel(),6);
     let ff;
     try{ff=await withTimeout(ffmpegReady(()=>{}),150000,'decoder download');}
     catch(e){
       // ffmpegReady caches its in-flight promise, so a hung load can only be retried by resetting
       // it — recreateFFmpeg() is what clears _loading.
-      console.error('[spdef]',e);stage(g,'decoder stalled \u2014 retrying\u2026',6);
+      console.error('[spdef]',e);stage(g,'decoder stalled, retrying\u2026',6);
       ff=await withTimeout(recreateFFmpeg(()=>{}),150000,'decoder download');}
     if(stale())return;
     const okPanes=g.panes.filter(p=>!p.failed);
@@ -1128,9 +1375,9 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     for(let gi=0;gi<maxG;gi++) for(const p of g.panes){
       if(p.failed||gi>=p.scene.gops.length)continue;
       const base=p.url.replace(/[^/]*$/,''),sg=p.scene.gops[gi],ng=p.scene.gops.length;
-      const tag=ng>1?p.name+' \u2014 GOP '+(gi+1)+'/'+ng:p.name;
-      const streams={xyz:{bytes:await grab(g,base+sg.streams.xyz.path,tag+' \u2014 motion xyz\u2026'),meta:sg.streams.xyz.meta},
-                     rot:{bytes:await grab(g,base+sg.streams.rot.path,tag+' \u2014 motion rot\u2026'),meta:sg.streams.rot.meta}};
+      const tag=ng>1?p.name+' \u00b7 GOP '+(gi+1)+'/'+ng:p.name;
+      const streams={xyz:{bytes:await grab(g,base+sg.streams.xyz.path,tag+' \u00b7 motion xyz\u2026'),meta:sg.streams.xyz.meta},
+                     rot:{bytes:await grab(g,base+sg.streams.rot.path,tag+' \u00b7 motion rot\u2026'),meta:sg.streams.rot.meta}};
       if(stale())return;                                 // cleared mid-fetch: drop the bytes, do not decode them
       stage(g,'decoding '+tag+'\u2026',Math.round(10+80*nDone/totalG));
       let r;
@@ -1156,26 +1403,94 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     g.loaded=true;g.el.load.hidden=true;status(g);
   }
 
-  // ---- the example picker (tri-plane card only) -----------------------------------------
-  // Both panels of the card are one example, so switching swaps both `src`s and the three pieces
-  // of prose that quote per-model numbers. A card that is already showing something is torn down
-  // and restarted: the picker is a request to see that model, and leaving the old one on screen
-  // under a new label would be worse than the reload. clearGroup() bumps `gen`, so a switch made
-  // mid-load abandons the pass in flight rather than racing it.
+  // A knot bundle is a different object from a frame bundle everywhere below the keyframe: four
+  // streams per chunk instead of two, one image per KNOT instead of per frame, and no per-frame
+  // decode at all — so it gets its own pass rather than a branch threaded through loadGroup().
+  // What it deliberately keeps is everything that hardened that one: grab()'s idle timeout and
+  // cache-busted retries, withTimeout around the decoder, a stale() check after every await, and
+  // the SAME ffmpeg instance (decodeKnotChunk takes it as an argument, so there is never a second
+  // ~32 MB core on the page). It is one panel and, today, one chunk; the loop is per chunk anyway
+  // so a multi-chunk bundle needs no change here.
+  async function loadKnotGroup(g){
+    const gen=g.gen, stale=()=>g.gen!==gen;
+    const p=g.panes[0],base=p.url.replace(/[^/]*$/,'');
+    p.scene=await grabJSON(g,p.url,p.name+' · manifest…');
+    if(stale())return;
+    if(p.scene.format!=='knot_bundle')throw new Error('not a knot bundle: '+p.url);
+    // Keyframes first, exactly as the splat path does it: the first knot's pose is on screen and
+    // orbitable before the ~31 MB decoder has even been asked for.
+    const refs=[];
+    for(const c of p.scene.chunks)refs.push(await grab(g,base+c.reference,p.name+' · keyframe…'));
+    if(stale())return;
+    p.built=p.scene.chunks.map((c,i)=>({kf:buildKeyframe(parseNpz(refs[i]),null,0),
+      start_knot:c.start_knot,end_knot:c.end_knot,knots:null,sent:false,acked:false}));
+    flush(p);
+    stage(g,decoderLabel(),6);
+    let ff;
+    try{ff=await withTimeout(ffmpegReady(()=>{}),150000,'decoder download');}
+    catch(e){console.error('[spdef]',e);stage(g,'decoder stalled, retrying…',6);
+      ff=await withTimeout(recreateFFmpeg(()=>{}),150000,'decoder download');}
+    if(stale())return;
+    const nC=p.scene.chunks.length;
+    for(let ci=0;ci<nC;ci++){
+      const tag=nC>1?p.name+' · chunk '+(ci+1)+'/'+nC:p.name;
+      // decodeKnotChunk fetches its own streams, so it is handed grab() as the fetcher — that is
+      // what puts the idle timeout and the retries under it — and narrates through the same line.
+      const d=await withTimeout(decodeKnotChunk(ff,p.scene.chunks[ci],
+          rel=>grab(g,base+rel,tag+' · knot streams…'),
+          (name,done,total)=>stage(g,'decoding '+tag+' · '+name+' ('+done+'/'+total+')…',
+                                   Math.round(10+80*(ci+done/total)/nC))),
+        300000,'knot decode');
+      if(stale())return;
+      p.built[ci].knots={streams:d.streams,rows:d.rows};
+      flush(p);
+      await yieldFrame();
+      if(stale())return;
+    }
+    g.loaded=true;g.el.load.hidden=true;status(g);
+  }
+
+  // ---- the example pickers (the trajectory card and the tri-plane card) -------------------
+  // A card's panels are one example, so switching swaps every panel `src` and every piece of prose
+  // that quotes a per-example number. A card that is already showing something is torn down and
+  // restarted: the picker is a request to see that example, and leaving the old one on screen under
+  // a new label would be worse than the reload. clearGroup() bumps `gen`, so a switch made mid-load
+  // abandons the pass in flight rather than racing it.
+  //
+  // The two pickers differ in one way. The tri-plane card's examples are two models of the SAME
+  // kind, so only URLs and numbers change; the trajectory card's are two different renderers, so
+  // `kind` changes with them — and with it which VIEW/OPT_WIRING table applies, which controls are
+  // on screen, and whether the host or the panel does the loading. `src`/`url` are per-pane maps
+  // there (two panels) and plain strings here (one), so both spellings are accepted.
   function applyScene(g,key){
     const sc=(g.scenes||[]).find(x=>x.key===key)||g.scenes[0];
     const relive=g.started;
     if(g.started)clearGroup(g);
     g.sceneKey=sc.key;
-    for(const p of g.panes){if(sc.src[p.id]){p.src=sc.src[p.id];p.url=sc.url[p.id];}}
-    g.el.load.textContent=g.loadLabel='Load this figure · '+sc.mb;
-    if(g.el.tag)g.el.tag.innerHTML=sc.tag;
-    if(g.el.rankTxt)g.el.rankTxt.textContent=sc.rank;
+    if(sc.kind)g.kind=sc.kind;
+    for(const p of g.panes){
+      const src=typeof sc.src==='string'?sc.src:sc.src[p.id],url=typeof sc.url==='string'?sc.url:sc.url[p.id];
+      if(src){p.src=src;p.url=url;}}
+    g.el.load.textContent=g.loadLabel=sc.load;
+    // Every per-example string in one loop: the subtag, the lede, the panel caption and its tag
+    // line, the tri-plane card's rank phrase. A key absent from either the table or the markup is
+    // simply skipped, so a card takes only the ones it has.
+    for(const k of['tag','lede','ptitle','ptag','rank'])
+      if(g.el[k]&&sc[k]!=null)g.el[k].innerHTML=sc[k];
+    // Controls that belong to one example only — the option rows for the other kind, and the
+    // touch pad, which exists because that example flies rather than orbits. Swept over the whole
+    // card, so a per-example control can live in the transport as well as in the options block.
+    if(g.el.root)for(const el of g.el.root.querySelectorAll('[data-only]'))
+      el.hidden=el.getAttribute('data-only')!==g.kind;
     // The one view option an example switch DOES reset, against this page's usual rule that a
     // control keeps its value across a load. The arrow scale is not a preference, it is a
     // calibration: these two models' tangents differ by ~10x in magnitude (0.10 of the interval
     // chord against 1.09), so bouncingballs' x120 draws lego's arrows several screens long.
-    if(sc.scale&&g.o.knScale){g.o.knScale.value=sc.scale;pushView(g);}
+    if(sc.scale&&g.o.knScale)g.o.knScale.value=sc.scale;
+    // Unconditional, and it has to be: pushView reads the ACTIVE kind's table, so a kind switch
+    // is what formats the newly-shown rows' outputs and dims them by their own toggle. It also
+    // broadcasts, which is a no-op while the panels are still about:blank.
+    pushView(g);
     if(relive)startGroup(g);
   }
   for(const g of GROUPS){
@@ -1190,8 +1505,8 @@ window.__spdefBooted=true;   // clears the classic watchdog above: the module gr
     g.el.play.onclick=()=>{g.playing=!g.playing;g.el.play.textContent=g.playing?'❚❚ pause':'▶ play';g.lastT=0;g.acc=0;};
     g.el.scrub.oninput=()=>{g.playing=false;g.el.play.textContent='▶ play';setFrame(g,+g.el.scrub.value);};
     g.el.reset.onclick=()=>gsend(g,{type:'resetView'});
-    if(g.el.prev)g.el.prev.onclick=()=>stepTrain(g,-1);
-    if(g.el.next)g.el.next.onclick=()=>stepTrain(g,1);
+    if(g.el.prev)g.el.prev.onclick=()=>stepMark(g,-1);
+    if(g.el.next)g.el.next.onclick=()=>stepMark(g,1);
   }
 
   function tick(t){requestAnimationFrame(tick);

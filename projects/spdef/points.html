@@ -292,7 +292,7 @@ async function hardFetch(url){
               json:async()=>JSON.parse(new TextDecoder().decode(out))};
     }catch(e){clearTimeout(timer);lastErr=e;if(attempt<FETCH_TRIES)await sleep(400*attempt);}
   }
-  throw new Error((lastErr&&lastErr.message||lastErr)+' — '+url);
+  throw new Error((lastErr&&lastErr.message||lastErr)+': '+url);
 }
 
 // What the whole sequence weighs, so the status line can read `1.24 / 5.60 MB` rather than a
@@ -328,9 +328,9 @@ async function loadBundle(url){
     // Same contract the splat path has with compression/decoder.py: if the JS curve has drifted
     // from the torch one, the geometry on screen is not the model's, so do not show it.
     showErr(parity.skipped
-      ? `spline parity INCOMPLETE — ${parity.skipped} of ${meta.parity.frames.length} check frames `
+      ? `spline parity INCOMPLETE: ${parity.skipped} of ${meta.parity.frames.length} check frames `
         +`could not be evaluated (a knot failed to load)`
-      : `spline parity FAILED — max |js − torch| = ${parity.maxError.toExponential(2)} > ${parity.tolerance}`);
+      : `spline parity FAILED: max |js − torch| = ${parity.maxError.toExponential(2)} > ${parity.tolerance}`);
     return;
   }
 
@@ -348,7 +348,12 @@ async function loadBundle(url){
   resize();requestAnimationFrame(render);
   stage('ready',100);loadEl.classList.add('hide');
   post({type:'ready',frames:meta.frame_end,splats:meta.num_points,
-        train:meta.train_frames,knotSpacing:meta.timestep_denominator/meta.num_intervals,
+        // The frames the field was actually trained on, as this card's marked instants — the host
+        // labels the readout from them and the steppers land on them. `marks` rather than `train`
+        // because the other example in this card marks its stored KNOTS instead, and one spelling
+        // for one thing is what keeps the host generic. markOn/markOff are the words for it.
+        marks:meta.train_frames,markOn:'supervised',markOff:'inferred',
+        knotSpacing:meta.timestep_denominator/meta.num_intervals,
         // A trail covers the PAST, so at frame 0 there is nothing for it to draw and the panel
         // would open on the one state where its main feature is invisible. Ask the host to open
         // one trail-length in instead.
