@@ -50,8 +50,17 @@
      operator, so clearing to an opaque colour would leave DST_ALPHA at 1 and multiply every splat
      by zero — a blank canvas. Same contract as projects/spdef/field.html. */
   .stage{position:relative;width:min(60vw,1000px);aspect-ratio:4/3;margin:44px auto 0}
+  /* The last four declarations are for the press-and-hold easter egg (see the script). A two-second
+     press is its gesture, and a two-second press is also what a touch OS reads as "select this":
+     holding the canvas raised iOS's selection callout and magnifier over the painting. Suppressing
+     it on `pointerdown` does not work — the callout comes off the touch sequence rather than the
+     pointer event — so it has to be refused in CSS, and Android's long-press menu is refused by the
+     `contextmenu` handler the script already installs for right-drag. Same four declarations, and
+     the same reason, as the SMV viewer's movement pad. */
   #gl{position:absolute;inset:0;width:100%;height:100%;display:block;
-      touch-action:none;cursor:grab;outline:none}
+      touch-action:none;cursor:grab;outline:none;
+      -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+      -webkit-tap-highlight-color:transparent}
   #gl.drag{cursor:grabbing}
   /* Keyboard focus must stay visible — it is the only way anyone navigating by key can tell the
      picture is the thing they are about to turn. But POINTER focus must not show it: the script
@@ -169,7 +178,12 @@ if(!gl){say('This page needs WebGL2, which this browser did not provide.',true);
 const VERT=`#version 300 es
 precision highp float;precision highp int;uniform highp usampler2D u_tex;uniform highp sampler2D u_sh;uniform mat4 u_proj,u_view;uniform vec2 u_focal,u_viewport;uniform vec3 u_campos;uniform bool u_hasSH;uniform float u_lowpass;
 uniform int u_shCols;   // SH codebook entries per texture row (2D-tiled so height stays within MAX_TEXTURE_SIZE)
-in vec2 a_pos;in uint a_index;out vec4 vColor;out vec2 vPos;
+// The easter egg's wave, in WORLD space: a front at radius u_waveR out from u_seed, u_waveW thick.
+// Everything it has passed is drawn as a hard-edged ellipsoid squeezed to u_squeeze of its radius.
+// Idle it costs nothing to leave in: u_waveR is 0, so the phase is 0 for every splat and the
+// squeeze is 1. It is flat, not smooth — the phase is a property of the splat, not of the pixel.
+uniform vec3 u_seed;uniform float u_waveR,u_waveW,u_squeeze;
+in vec2 a_pos;in uint a_index;out vec4 vColor;out vec2 vPos;flat out float vPhase;
 vec3 shRest(vec3 d,int e){float x=d.x,y=d.y,z=d.z,xx=x*x,yy=y*y,zz=z*z,xy=x*y,yz=y*z,xz=x*z;vec3 r=vec3(0.0);
  int row=e/u_shCols, b=(e-row*u_shCols)*15;   // tile (col,row): coeff k at column b+k
  r+=-0.4886025119*y*texelFetch(u_sh,ivec2(b+0,row),0).rgb; r+=0.4886025119*z*texelFetch(u_sh,ivec2(b+1,row),0).rgb; r+=-0.4886025119*x*texelFetch(u_sh,ivec2(b+2,row),0).rgb;
@@ -179,6 +193,7 @@ vec3 shRest(vec3 d,int e){float x=d.x,y=d.y,z=d.z,xx=x*x,yy=y*y,zz=z*z,xy=x*y,yz
  r+=0.3731763326*z*(2.0*zz-3.0*xx-3.0*yy)*texelFetch(u_sh,ivec2(b+11,row),0).rgb; r+=-0.4570457995*x*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+12,row),0).rgb; r+=1.4453057213*z*(xx-yy)*texelFetch(u_sh,ivec2(b+13,row),0).rgb; r+=-0.5900435899*x*(xx-3.0*yy)*texelFetch(u_sh,ivec2(b+14,row),0).rgb;
  return r;}
 void main(){uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10),0);vec3 wp=uintBitsToFloat(cen.xyz);
+ vPhase=clamp((u_waveR-distance(wp,u_seed))/u_waveW,0.0,1.0);   // assigned before every early return
  vec4 cam=u_view*vec4(wp,1.0);vec4 p=u_proj*cam;float clip=1.2*p.w;
  if(p.z<-clip||p.x<-clip||p.x>clip||p.y<-clip||p.y>clip){gl_Position=vec4(0.,0.,2.,1.);return;}
  uvec4 cov=texelFetch(u_tex,ivec2(((i&0x3ffu)<<1)|1u,i>>10),0);vec2 u1=unpackHalf2x16(cov.x),u2=unpackHalf2x16(cov.y),u3=unpackHalf2x16(cov.z);
@@ -189,18 +204,28 @@ void main(){uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10)
  float mid=(cov2d[0][0]+cov2d[1][1])/2.0;
  float rad=length(vec2((cov2d[0][0]-cov2d[1][1])/2.0,cov2d[0][1]));float l1=mid+rad,l2=mid-rad;if(l2<0.0)return;
  vec2 dv=normalize(vec2(cov2d[0][1],l1-cov2d[0][0]));vec2 maj=min(sqrt(2.0*l1),1024.0)*dv;vec2 mn=min(sqrt(2.0*l2),1024.0)*vec2(dv.y,-dv.x);
+ float sq=mix(1.0,u_squeeze,vPhase);maj*=sq;mn*=sq;   // the squeeze: the quad spans +/-2 std-devs, so scaling it IS scaling the radius
  vec3 base=vec3(float((cov.w)&0xffu),float((cov.w>>8)&0xffu),float((cov.w>>16)&0xffu))/255.0;float al=float((cov.w>>24)&0xffu)/255.0;
  if(u_hasSH)base=clamp(base+shRest(normalize(wp-u_campos),int(cen.w)),0.0,1.0);   // view-dependent specular: the varnish
  vColor=clamp(p.z/p.w+1.0,0.0,1.0)*vec4(base,al);
  vPos=a_pos;vec2 c=vec2(p)/p.w;gl_Position=vec4(c+a_pos.x*maj/u_viewport+a_pos.y*mn/u_viewport,0.0,1.0);}`;
 const FRAG=`#version 300 es
-precision highp float;uniform float u_opacity;in vec4 vColor;in vec2 vPos;out vec4 frag;
-void main(){float d2=dot(vPos,vPos);float A=-d2;if(A<-4.0)discard;float B=exp(A)*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);}`;
+precision highp float;uniform float u_opacity,u_hardR;uniform bool u_egg;in vec4 vColor;in vec2 vPos;flat in float vPhase;out vec4 frag;
+void main(){float d2=dot(vPos,vPos);
+ // The egg's branch is on a UNIFORM, not on vPhase: fwidth() is undefined in non-uniform control
+ // flow, and a per-splat varying is exactly that. Idle, the shader is the line below and nothing more.
+ if(u_egg){float d=sqrt(d2),aa=max(fwidth(d),1e-4);
+  // soft EWA footprint -> the ellipsoid's hard silhouette out to u_hardR std-devs (1px AA), mixed
+  // by how long ago the front passed. Same hard-edge form as the SMV viewer's ellipsoid control.
+  float A=mix(exp(-d2),1.0-smoothstep(u_hardR-aa,u_hardR+aa,d),vPhase);
+  if(d2>4.0||A<=0.0)discard;float B=A*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);return;}
+ float A=-d2;if(A<-4.0)discard;float B=exp(A)*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);}`;
 function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
 const prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VERT));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(prog);
 if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));gl.useProgram(prog);
 const u_proj=gl.getUniformLocation(prog,'u_proj'),u_view=gl.getUniformLocation(prog,'u_view'),u_focal=gl.getUniformLocation(prog,'u_focal'),u_viewport=gl.getUniformLocation(prog,'u_viewport'),u_op=gl.getUniformLocation(prog,'u_opacity'),u_texL=gl.getUniformLocation(prog,'u_tex'),u_lowpassL=gl.getUniformLocation(prog,'u_lowpass');
 const u_shL=gl.getUniformLocation(prog,'u_sh'),u_camposL=gl.getUniformLocation(prog,'u_campos'),u_hasSHL=gl.getUniformLocation(prog,'u_hasSH'),u_shColsL=gl.getUniformLocation(prog,'u_shCols');
+const u_eggL=gl.getUniformLocation(prog,'u_egg'),u_seedL=gl.getUniformLocation(prog,'u_seed'),u_waveRL=gl.getUniformLocation(prog,'u_waveR'),u_waveWL=gl.getUniformLocation(prog,'u_waveW'),u_squeezeL=gl.getUniformLocation(prog,'u_squeeze'),u_hardRL=gl.getUniformLocation(prog,'u_hardR');
 const MAX_TEX=gl.getParameter(gl.MAX_TEXTURE_SIZE);
 const shTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,shTex);
 gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,1,1,0,gl.RGBA,gl.FLOAT,new Float32Array(4));   // 1×1 placeholder so it's texture-complete
@@ -277,6 +302,11 @@ const norm3=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const cam={yaw:0,pitch:0,dist:6,target:[0,0,0]};
 let home={yaw:0,pitch:0,dist:6,target:[0,0,0]};
+// The picture's own plane, kept because frameScene() is the only place it can be known: the cloud
+// is a slab, so its smallest principal axis IS the canvas normal. The easter egg drops the press
+// point onto this plane to seed its wave, which is what makes the wave start where you pressed
+// rather than at the centre of a bounding box.
+let planeN=[0,0,-1],planeP=[0,0,0];
 let _e1=[1,0,0],_e2=[0,0,1];
 function setUp(up){const n=norm3(up);UP[0]=n[0];UP[1]=n[1];UP[2]=n[2];
   const ref=Math.abs(dot3(UP,[0,0,1]))<0.9?[0,0,1]:[1,0,0];
@@ -341,6 +371,7 @@ function frameScene(){if(!N)return;
  halfW=(whi-wlo)/2;halfH=(hhi-hlo)/2;
  const mw=(whi+wlo)/2,mh=(hhi+hlo)/2;                  // recentre on the picture, not on the mean splat
  const target=[cx+w[0]*mw+h[0]*mh,cy+w[1]*mw+h[1]*mh,cz+w[2]*mw+h[2]*mh];
+ planeN=nr.slice();planeP=target.slice();
  setUp(up);
  fitBase=fitDist();panMax=0.5*Math.max(halfW,halfH);
  home={yaw:Math.atan2(dot3(nr,_e1),dot3(nr,_e2)),pitch:Math.asin(clamp(dot3(nr,UP),-1,1)),dist:fitBase,target};
@@ -384,10 +415,17 @@ canvas.addEventListener('pointerdown',e=>{
  focusQuiet();canvas.setPointerCapture(e.pointerId);canvas.classList.add('drag');
  _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
  if(_ptrs.size===1){_mode=(e.shiftKey||e.button===2)?'pan':'orbit';lx=e.clientX;ly=e.clientY;}
- else if(_ptrs.size===2){_mode='pinch';_pinch0=_spread();_dist0=cam.dist;[lx,ly]=_mid();}});
+ else if(_ptrs.size===2){_mode='pinch';_pinch0=_spread();_dist0=cam.dist;[lx,ly]=_mid();}
+ // Arm the easter egg on a plain single press only — a shift- or right-press is a pan, and a second
+ // finger is a pinch. A second finger AFTER it has fired is left alone, so you can pinch into it.
+ if(_ptrs.size===1&&_mode==='orbit')eggArm(e.clientX,e.clientY);else eggDisarm();});
 canvas.addEventListener('pointermove',e=>{
  if(!_ptrs.has(e.pointerId))return;
  _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ // Measured from where the press STARTED, not per event: jitter accumulates, so a per-event
+ // threshold would let a slow drag through. Only the arming window cares — once the egg has fired,
+ // dragging turns the dissolved cloud like anything else, which is half the fun of it.
+ if(eggArmed&&(Math.abs(e.clientX-eggX)>EGG_MOVE_TOL||Math.abs(e.clientY-eggY)>EGG_MOVE_TOL))eggDisarm();
  if(_mode==='pinch'&&_ptrs.size>=2){zoomTo(_dist0*_pinch0/_spread());
    const[mx,my]=_mid();panBy(mx-lx,my-ly);lx=mx;ly=my;markTouched();return;}
  if(_ptrs.size!==1)return;
@@ -396,17 +434,78 @@ canvas.addEventListener('pointermove',e=>{
  else{cam.yaw=clamp(cam.yaw+dx*0.006,home.yaw-LIM,home.yaw+LIM);
       cam.pitch=clamp(cam.pitch-dy*0.006,home.pitch-LIM,home.pitch+LIM);}
  markTouched();});
-const _drop=e=>{_ptrs.delete(e.pointerId);
+const _drop=e=>{_ptrs.delete(e.pointerId);eggDisarm();
  if(_ptrs.size===1){_mode='orbit';const v=[..._ptrs.values()][0];lx=v.x;ly=v.y;}
- else if(!_ptrs.size){_mode=null;canvas.classList.remove('drag');}};
+ else if(!_ptrs.size){_mode=null;canvas.classList.remove('drag');eggRelease();}};
 canvas.addEventListener('pointerup',_drop);canvas.addEventListener('pointercancel',_drop);
 canvas.addEventListener('contextmenu',e=>e.preventDefault());     // right-drag is pan, not a menu
 canvas.addEventListener('dblclick',()=>resetView());
-canvas.addEventListener('wheel',e=>{e.preventDefault();zoomTo(cam.dist*Math.exp(e.deltaY*0.001));markTouched();},{passive:false});
+canvas.addEventListener('wheel',e=>{e.preventDefault();eggDisarm();zoomTo(cam.dist*Math.exp(e.deltaY*0.001));markTouched();},{passive:false});
 // Keyboard: the same bounded turn, so the painting is reachable without a pointer at all.
 canvas.addEventListener('keydown',e=>{const A=0.06,K={ArrowLeft:[-A,0],ArrowRight:[A,0],ArrowUp:[0,A],ArrowDown:[0,-A]}[e.key];
  if(K){cam.yaw=clamp(cam.yaw+K[0],home.yaw-LIM,home.yaw+LIM);cam.pitch=clamp(cam.pitch+K[1],home.pitch-LIM,home.pitch+LIM);markTouched();e.preventDefault();return;}
  if(e.key==='0'||e.key==='Home'){resetView();e.preventDefault();}});
+// ===== the easter egg: hold, and the painting comes apart =====
+// Press and hold anywhere on the picture, without moving, and it dissolves into the gaussians it is
+// actually made of: each splat hardens from its soft EWA footprint into the ellipsoid's silhouette
+// and is squeezed, spreading out from the exact point you pressed until it has crossed the whole
+// picture. It stays for as long as the press does; letting go runs the front back the way it came
+// and the painting reassembles. Nothing on the page mentions it, which is the point.
+// It is deliberately cheap: the wave is world-space and the geometry never changes, so there is no
+// re-sort, no texture rewrite and no per-frame CPU work — four uniforms and a flat varying.
+const EGG_HOLD_MS=2000;    // how long the press has to last
+const EGG_MOVE_TOL=6;      // CSS px of slop while arming; a resting finger is never actually still
+const EGG_OUT_MS=1300;     // the front's travel time across the whole cloud, and
+const EGG_BACK_MS=900;     // back again, a little quicker — a release should feel like a release
+const EGG_FRONT=0.22;      // thickness of the front, as a fraction of the picture's half-diagonal
+const EGG_SQUEEZE=0.45;    // what the radius is squeezed to. Below ~0.3 the splats go sub-pixel and
+                           // sparkle instead of reading as ellipsoids; at 1.0 only the edge hardens.
+const EGG_HARD_R=1.0;      // hard-edge radius in std-devs, as in the SMV viewer's ellipsoid control
+const EGG_REDUCE=matchMedia('(prefers-reduced-motion:reduce)');
+let eggOn=false,eggDir=0,eggR=0,eggTravel=0,eggW=1,eggLast=0,eggTimer=0,eggArmed=false,eggX=0,eggY=0;
+const eggSeed=[0,0,0];
+// The press point, dropped onto the picture plane. Ray directions are built from the camera basis
+// rather than by inverting the projection: this renderer's u points DOWN the screen (the projection
+// flips Y), so the two have to agree, and building it from camBasis() is how they cannot disagree.
+function eggUnproject(clientX,clientY){
+  const b=canvas.getBoundingClientRect();
+  const nx=(clientX-b.left)/(b.width||1)*2-1,ny=1-(clientY-b.top)/(b.height||1)*2;
+  const fy=0.5*canvas.height/Math.tan(FOVY/2),fx=fy;
+  const{eye,f,u,r}=camBasis(),sx=nx*canvas.width/(2*fx),sy=-ny*canvas.height/(2*fy);
+  const dir=[0,0,0];for(let c=0;c<3;c++)dir[c]=r[c]*sx+u[c]*sy+f[c];
+  const den=dot3(planeN,dir);
+  if(Math.abs(den)<1e-6)return cam.target.slice();
+  const t=(dot3(planeN,planeP)-dot3(planeN,eye))/den;
+  return t>0?[eye[0]+dir[0]*t,eye[1]+dir[1]*t,eye[2]+dir[2]*t]:cam.target.slice();}
+function eggDisarm(){if(eggTimer){clearTimeout(eggTimer);eggTimer=0;}eggArmed=false;}
+function eggArm(x,y){eggDisarm();if(!N)return;eggArmed=true;eggX=x;eggY=y;
+  eggTimer=setTimeout(()=>{eggTimer=0;if(eggArmed)eggFire(x==null?cam.target.slice():eggUnproject(x,y));},EGG_HOLD_MS);}
+function eggFire(seed){
+  eggSeed[0]=seed[0];eggSeed[1]=seed[1];eggSeed[2]=seed[2];
+  const step=Math.max(1,N/20000|0);let mx=0;
+  for(let i=0;i<N;i+=step){const dx=baseCenter[3*i]-seed[0],dy=baseCenter[3*i+1]-seed[1],dz=baseCenter[3*i+2]-seed[2];
+   const d=dx*dx+dy*dy+dz*dz;if(d>mx)mx=d;}
+  mx=Math.sqrt(mx);
+  // Under reduced motion the front is made as wide as the cloud, so the change arrives everywhere
+  // at once: the same reveal, without a wave travelling across the page. The duration is fixed
+  // either way, since the speed is derived from the distance actually to be covered.
+  eggW=Math.max(1e-3,EGG_REDUCE.matches?mx:EGG_FRONT*Math.hypot(halfW,halfH));
+  eggTravel=mx+eggW;eggOn=true;eggDir=1;eggLast=performance.now();}
+// Release. Reversing the same scalar retreats the front the way it came — the far side reassembles
+// first and the point under your finger last — and it works just as well from a wave that was only
+// half way out, so letting go early is not a special case.
+function eggRelease(){if(eggOn&&eggDir>=0){eggDir=-1;eggLast=performance.now();}}
+function eggStep(){if(!eggDir)return;
+  const now=performance.now(),dt=Math.min(50,now-eggLast);eggLast=now;   // clamped: a backgrounded tab must not jump the front
+  eggR+=eggDir*eggTravel*dt/(eggDir>0?EGG_OUT_MS:EGG_BACK_MS);
+  if(eggR>=eggTravel){eggR=eggTravel;eggDir=0;}
+  else if(eggR<=0){eggR=0;eggDir=0;eggOn=false;}}
+// Reachable without a pointer, like the turn is: hold the space bar. There is no press point to
+// unproject, so it seeds at the centre of what is on screen.
+canvas.addEventListener('keydown',e=>{if(e.key===' '&&!e.repeat&&!eggOn){e.preventDefault();eggArm(null,null);}});
+canvas.addEventListener('keyup',e=>{if(e.key===' '){eggDisarm();eggRelease();}});
+addEventListener('blur',()=>{eggDisarm();eggRelease();});
+
 function resize(){const dpr=Math.min(devicePixelRatio||1,2);
  canvas.width=Math.max(1,Math.floor(stage.clientWidth*dpr));canvas.height=Math.max(1,Math.floor(stage.clientHeight*dpr));
  if(!N)return;
@@ -419,6 +518,7 @@ addEventListener('resize',resize);
 let started=false,lastView=null;
 function frame(){requestAnimationFrame(frame);
  if(!N)return;
+ eggStep();   // the wave moves the front, not the splats: no re-sort, no texture rewrite
  const fy=0.5*canvas.height/Math.tan(FOVY/2),fx=fy;
  const view=viewMatrix(),proj=projMatrix(canvas.width,canvas.height,fx,fy);
  let moved=!lastView;if(lastView)for(let i=0;i<16;i++)if(Math.abs(view[i]-lastView[i])>1e-6)moved=true;lastView=view.slice();
@@ -430,6 +530,8 @@ function frame(){requestAnimationFrame(frame);
  gl.uniformMatrix4fv(u_proj,false,proj);gl.uniformMatrix4fv(u_view,false,view);
  gl.uniform2f(u_focal,fx,fy);gl.uniform2f(u_viewport,canvas.width,canvas.height);gl.uniform1f(u_op,1.0);
  gl.uniform1f(u_lowpassL,1.2);   // 0.3px screen-space low-pass, in this renderer's units
+ gl.uniform1i(u_eggL,eggOn?1:0);gl.uniform3fv(u_seedL,eggSeed);gl.uniform1f(u_waveRL,eggR);
+ gl.uniform1f(u_waveWL,eggW);gl.uniform1f(u_squeezeL,EGG_SQUEEZE);gl.uniform1f(u_hardRL,EGG_HARD_R);
  gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,N);gl.activeTexture(gl.TEXTURE0);}
 
 // ===== load =====

@@ -112,6 +112,52 @@ offset streams, so nothing on this page touches wasm.
   canvas deliberately carries **no `role="img"`** (it is focusable and drag-turnable; a static image
   role would say the opposite) and `#status[hidden]{display:none}` is load-bearing — `display:flex`
   on the author rule would otherwise outrank the UA's `[hidden]`.
+- **There is an easter egg, and it is NOT documented on the page.** Press and hold for two seconds
+  without moving and the picture comes apart into the gaussians it is made of: each splat hardens
+  from its soft EWA footprint to the ellipsoid's silhouette and is squeezed to `EGG_SQUEEZE` of its
+  radius, spreading out from the press point until it has crossed the whole picture. It holds while
+  the press does; releasing runs the front back the way it came and the painting reassembles. Do
+  **not** add it to the `.hints` row or the canvas's `aria-label` — that row is the visitor-facing
+  contract for the controls, and an egg named in it is not an egg. Everything tunable is a named
+  constant in one block (`EGG_HOLD_MS`, `EGG_OUT_MS`/`EGG_BACK_MS`, `EGG_FRONT`, `EGG_SQUEEZE`,
+  `EGG_HARD_R`); `EGG_SQUEEZE` is the one to nudge if the dissolved state reads wrong — too low and
+  the splats go sub-pixel and sparkle, at 1.0 only the edge hardens. What is load-bearing:
+  - **It is free when idle, so the uniforms LOOK dead and are not.** `u_waveR` is 0, so every
+    splat's phase clamps to 0 and the squeeze is 1 — the picture is bit-identical to before the egg
+    existed. Do not delete `u_seed`/`u_waveR`/`u_waveW`/`u_squeeze` as unused, and do not fold the
+    phase into a CPU pass: nothing about the scene changes, so there is no re-sort, no texture
+    rewrite and no per-frame CPU work at all.
+  - **The fragment branch is on the `u_egg` UNIFORM, never on `vPhase`.** `fwidth()` is undefined in
+    non-uniform control flow and a per-splat varying is exactly that, so the hard-edge term cannot be
+    computed under `if(vPhase>0.0)`. Same hard-edge form as the SMV viewer's ellipsoid control;
+    `vPhase` is `flat` on both sides and nothing here checks that they stay in step.
+  - **The squeeze is `maj`/`mn` scaled in the vertex shader**, which is the radius: the quad spans
+    ±2 std-devs, so scaling the quad scales the footprint. It squeezes past the screen-space
+    low-pass too, which is what makes the splats separate instead of merely hardening.
+  - **The wave is seeded on the PICTURE PLANE, not in screen space** — the press point is
+    unprojected onto `planeN`/`planeP`, which `frameScene()` stores from the same principal axis the
+    opening view is derived from. The ray is built from `camBasis()` rather than by inverting the
+    projection, because this renderer's `u` points *down* the screen and the two have to agree.
+    **Checked**: round-tripped against the renderer's own projection over 2000 random poses, tilted
+    planes and non-square canvases — worst error 1.6e-14 world units. Re-check it the same way if it
+    is touched; a sign error seeds a mirrored point and still looks like a wave.
+  - **Movement cancels the ARMING only.** The threshold is measured from where the press started,
+    not per event (jitter accumulates, and a per-event test lets a slow drag through), and once the
+    egg has fired dragging turns the dissolved cloud like anything else — which is half the point of
+    it. A second finger disarms the wait but is left alone after it has fired, so you can pinch in.
+  - **Under `prefers-reduced-motion` the front is widened to the whole cloud**, so the change
+    arrives everywhere at once: the same reveal without a wave travelling across the page. The
+    duration is unchanged either way, since the speed is derived from the distance to be covered.
+  - **The four `-webkit-touch-callout`/`user-select`/`tap-highlight` declarations on `#gl` are part
+    of the feature.** A two-second press is also what a touch OS reads as *select this*, and it
+    raised iOS's callout and magnifier over the painting; `preventDefault()` on `pointerdown` does
+    not stop it. Android's long-press menu is refused by the `contextmenu` handler that was already
+    there for right-drag. Same lesson, same four declarations, as the SMV viewer's movement pad.
+  - Holding **space** does the same thing from the keyboard, seeded at the centre of what is on
+    screen since there is no press point to unproject.
+  - **The shaders are NOT glslangValidator-checked** — there was no network on the box, as with
+    `knots.html`. A compile error here throws at module top level and leaves the page sitting on
+    *Loading the painting…* for ever, so run the validator over both if you touch them.
 - **Keep it a card, not a paper.** The page had a paragraph under the picture stating the capture
   and compression numbers; it was deleted on purpose — this is a shelf item, and a methods note
   turns it into a project page. So the numbers live in this file, and the page carries only the
