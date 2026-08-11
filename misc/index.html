@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miscellany — Mingyang Song</title>
+<link rel="icon" type="image/png" sizes="64x64" href="../assets/web_icon.png">
+<link rel="apple-touch-icon" href="../assets/web_icon.png">
+<meta name="description" content="Miscellany — odds and ends from Mingyang Song: things that are worth keeping but belong to no project.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="theme-color" content="#f4f2ec"><!-- must track --bg; Safari tints its chrome from this -->
+
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  /* Fourth palette in the family, and the only one that is NOT a project page — so it borrows the
+     landing page's warm paper (#f4f2ec) verbatim rather than picking a temperature of its own. A
+     shelf of odds and ends is a continuation of the personal site, not a new destination, and the
+     seam between them should be invisible. What it does get to itself is the accent: a muted plum,
+     off the blue the landing page uses and off Grain's amber, and the one colour in the card cover
+     that isn't gold. Bones are the project pages' (Fraunces display serif, the back pill, the card
+     radius, the section rhythm), so it still reads as this site. */
+  :root{
+    /* Fixed light palette, so pin color-scheme rather than leaving it `normal` — otherwise the UA
+       canvas, scrollbars and Safari's overscroll area stay white while the page is tinted. Keep the
+       theme-color meta above in sync with --bg. */
+    color-scheme:light;
+    --bg:#f4f2ec; --surface:#fdfbf6; --ink:#16181d; --muted:#5f6672;
+    --line:#e6e2d8; --accent:#6f4468; --shadow:rgba(16,24,40,.16);
+    /* the drawn shelf: a board's lit top edge, its front edge, and the light it keeps off the
+       compartment below. One step warmer and darker than --line so the boards read as boards
+       rather than as more hairlines; see the .shelf block for what is drawn with them. */
+    --board-top:#e2dccd; --board-face:#c8c0ab; --board-cast:rgba(88,74,48,.14);
+  }
+  *{box-sizing:border-box}
+  /* background on html too — only html's paints the overscroll area Safari rubber-bands into */
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .inner{max-width:760px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{background:linear-gradient(180deg,#fbf9f4,#f1efe8);border-bottom:1px solid var(--line);padding:32px 0 26px}
+  /* back to the personal site. '../' not an absolute path, so it resolves correctly whether the
+     site is served from a user-site root or a project-site subpath. */
+  .back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:rgba(255,255,255,.6);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:#fff;text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+
+  h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(30px,4.4vw,46px);line-height:1.05;letter-spacing:-.018em;color:var(--ink)}
+  .subtitle{margin:10px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
+            font-size:clamp(15px,2vw,21px);color:var(--ink);opacity:.9;line-height:1.25}
+  main{padding:34px 0 0}
+  h2{font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;margin:0 0 14px;color:var(--ink)}
+  p{margin:0 0 14px}
+
+  /* Shelf items are TYPE, not tiles. A bordered box with a heading, a line of prose and an arrow is
+     exactly the landing page's card, and repeating it here made the shelf read as a fourth section
+     of published work rather than as a shelf. So the item has no box at all: the title is set at
+     display size and IS the object, ruled above and below like a wall text, and the only chrome is
+     the rule and the arrow. Nothing here is borrowed from .card — no surface, no gradient border,
+     no lift. Each new item is another .marquee in the list. */
+  /* THE SHELF, drawn rather than just named — and drawn in CSS, so it is vector: no asset, crisp at
+     any zoom, and it takes its colours from the palette instead of baking them into a file.
+     Three parts: two hairline uprights (the case), a board under each item, and a soft contact
+     shadow below each board. The detail that makes it read as SHELVING rather than as a table or
+     another bordered box is that the boards OVERHANG the uprights by 5px — a box's edges meet at
+     the corner, a shelf's board runs past its sides. Boards are warm and one step darker than
+     --line, with a light top edge and a darker front edge, which is a plank seen very slightly from
+     above. Deliberately suggested, not rendered: no wood texture, no bevel, no drop shadow on the
+     case. Every item adds its own board, so the case grows a compartment per entry with no extra
+     markup. */
+  .shelf{position:relative;display:grid;gap:0;padding:0 20px;
+         border-left:1px solid var(--line);border-right:1px solid var(--line)}
+  /* the underside of the board above — thinner, because you are seeing its edge, not its top */
+  .shelf::before{content:"";position:absolute;left:-6px;right:-6px;top:0;height:2px;
+                 background:linear-gradient(180deg,var(--board-top),var(--board-face))}
+  .marquee{display:block;position:relative;color:inherit;padding:26px 0 30px}
+  /* the board this item rests on */
+  .marquee::after{content:"";position:absolute;left:-26px;right:-26px;bottom:0;height:3px;
+                  border-radius:1.5px;background:linear-gradient(180deg,var(--board-top),var(--board-face))}
+  /* and the light it keeps off the compartment below */
+  .marquee::before{content:"";position:absolute;left:-22px;right:-22px;bottom:-10px;height:10px;
+                   pointer-events:none;background:linear-gradient(180deg,var(--board-cast),transparent)}
+  .marquee:hover,.marquee:focus-visible{text-decoration:none}
+  .mkick{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
+  .mtitle{display:block;margin:.18em 0 0;font-family:'Fraunces','Palatino Linotype',Georgia,serif;
+          font-weight:600;font-size:clamp(34px,7.5vw,64px);line-height:1;letter-spacing:-.022em;
+          color:var(--ink);-webkit-text-fill-color:var(--ink);
+          transition:color .32s ease,-webkit-text-fill-color .32s ease}
+  .mdesc{display:block;max-width:52ch;margin:.7em 0 0;font-size:14px;color:var(--muted)}
+  .mgo{display:block;margin-top:.8em;font-size:13px;font-weight:600;color:var(--accent)}
+  .mgo .arrow{display:inline-block;transition:transform .18s}
+  .marquee:hover .mgo .arrow,.marquee:focus-visible .mgo .arrow{transform:translateX(5px)}
+  /* The reveal: the title's letterforms are a window onto the thing they link to — a render of the
+     actual reconstruction, clipped to the glyphs. Both the image and the clip live inside @supports,
+     because without background-clip the image would paint as a plain RECTANGLE behind the words; and
+     the resting state keeps an opaque fill over it, so the picture appears only on hover or focus.
+     The fill was blended toward --ink and measured against this page's paper before shipping: worst
+     pixel 3.5:1, median 10.3:1, so every glyph clears the 3:1 bar large text has to meet even at the
+     brightest point of the painting. Re-measure if the render is ever replaced. */
+  @supports ((-webkit-background-clip:text) or (background-clip:text)){
+    .mtitle{background-image:url(../assets/museum_type.jpg);background-size:cover;
+            background-position:center 44%;-webkit-background-clip:text;background-clip:text}
+    .marquee:hover .mtitle,.marquee:focus-visible .mtitle{color:transparent;-webkit-text-fill-color:transparent}
+    /* No hover on a touch screen, so there the picture is simply always in the letters. */
+    @media(hover:none){.mtitle{color:transparent;-webkit-text-fill-color:transparent}}
+  }
+
+  footer{border-top:1px solid var(--line);margin-top:44px;padding:26px 0 48px;color:var(--muted);font-size:13px}
+  :where(a):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){
+    .back,.back .barrow{transition:none}
+    .back:hover .barrow{transform:none}
+    /* The reveal still happens — it is the affordance, not decoration — it just stops fading in. */
+    .marquee,.mtitle,.mgo .arrow{transition:none}
+    .marquee:hover .mgo .arrow,.marquee:focus-visible .mgo .arrow{transform:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <a class="back" href="../"><span class="barrow" aria-hidden="true">←</span> Mingyang Song</a>
+    <h1>Miscellany</h1>
+    <p class="subtitle">Odds and ends that belong to no project, kept anyway.</p>
+  </div>
+</header>
+
+<main class="inner">
+  <h2>The shelf</h2>
+  <div class="shelf">
+    <a class="marquee" href="museum/">
+      <span class="mkick">Now showing</span>
+      <h3 class="mtitle">Digital Museum</h3>
+      <span class="mdesc">Paintings filmed in a gallery, fitted as 3D Gaussians.</span>
+      <span class="mgo">Walk in <span class="arrow" aria-hidden="true">→</span></span>
+    </a>
+  </div>
+</main>
+
+<footer>
+  <!-- Every page on this site carries the line; nothing here is offered under an open licence.
+       /LICENSE at the repo root carries the scope. No third-party clause: unlike the project
+       pages, this one ships no external code or datasets — add it here if that ever changes. -->
+  <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved.</div>
+</footer>
+</body>
+</html>

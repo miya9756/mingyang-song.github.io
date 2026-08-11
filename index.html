@@ -169,16 +169,23 @@
   .minilbl{display:block;font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:.3em}
   .minival{display:block;font-size:.95rem;color:var(--fg);overflow-wrap:anywhere;transition:color .18s}
   .card.mini:hover .minival,.card.mini:focus-visible .minival{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
-  /* Pixiv card, decorated with "last_moment". The artwork is dark on the left and blows out to a
-     warm pool on the right, so the scrim is a left-to-right ramp: heavy where the text sits, almost
-     absent over the lit desks. Image lives on ::before rather than as the card's own background, so
-     the gradient-border trick on .card:hover still works instead of overwriting it. */
+  /* Image-backed cards under Elsewhere. The base carries the Pixiv cover, "last_moment": the artwork
+     is dark on the left and blows out to a warm pool on the right, so the scrim is a left-to-right
+     ramp — heavy where the text sits, almost absent over the lit desks. Image lives on ::before
+     rather than as the card's own background, so the gradient-border trick on .card:hover still
+     works instead of overwriting it. A second cover is a modifier that overrides the two paint
+     properties only (image + focal point); everything else — the scrim, the drift, the text colours
+     — is shared, which is what keeps the two reading as one shelf rather than two inventions. */
   .card.art{position:relative;overflow:hidden;min-height:170px;padding:18px 20px;
             display:flex;flex-direction:column;justify-content:flex-end;
             border-color:rgba(255,255,255,.14);color:#fff}
   .card.art::before{content:"";position:absolute;inset:0;z-index:0;
             background:url(assets/last_moment.jpg) center 58%/cover no-repeat;
             transition:transform .55s cubic-bezier(.2,.7,.2,1)}
+  /* Miscellany cover. Longhands, not the `background` shorthand: the base rule already sets
+     size/repeat and the transition, and a shorthand here would reset both. 62% shows the band with
+     the gilt frame running through it and keeps the dark stripes on the left, under the text. */
+  .card.art.misc::before{background-image:url(assets/misc_card.jpg);background-position:center 62%}
   .card.art::after{content:"";position:absolute;inset:0;z-index:1;
             background:linear-gradient(90deg,rgba(6,5,4,.9) 0%,rgba(6,5,4,.66) 46%,rgba(6,5,4,.12) 100%)}
   .card.art>*{position:relative;z-index:2}
@@ -247,6 +254,19 @@
     </div>
   </a>
 
+  <h2>Elsewhere</h2>
+  <a class="card art" href="https://www.pixiv.net/users/40188711" target="_blank" rel="noopener">
+    <span class="artlbl">Pixiv</span>
+    <span class="artval">Digital illustration</span>
+    <span class="artcta">View gallery <span class="arrow" aria-hidden="true">→</span></span>
+  </a>
+
+  <a class="card art misc" href="misc/">
+    <span class="artlbl">Miscellany</span>
+    <span class="artval">#Random</span>
+    <span class="artcta">Have a look <span class="arrow" aria-hidden="true">→</span></span>
+  </a>
+
   <h2>Contact</h2>
   <div class="cards2">
     <a class="card mini" href="mailto:misong9756@gmail.com">
@@ -258,13 +278,6 @@
       <span class="minival">mingyang.song@inf.ethz.ch</span>
     </a>
   </div>
-
-  <h2>Elsewhere</h2>
-  <a class="card art" href="https://www.pixiv.net/users/40188711" target="_blank" rel="noopener">
-    <span class="artlbl">Pixiv</span>
-    <span class="artval">Digital illustration</span>
-    <span class="artcta">View gallery <span class="arrow" aria-hidden="true">→</span></span>
-  </a>
 
   <!-- Copyright is automatic, so this line is not what creates it — it is here to say plainly
        that nothing is offered under an open licence, since a public repo with no statement is

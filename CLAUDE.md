@@ -14,6 +14,143 @@ The landing page is `index.html` at the root, and it links three project pages:
 `projects/smv/` — a 100 % client-side player for compressed dynamic 3D-Gaussian
 ("4D-GS") scenes, the results site for *SmoothMotionVectors* (SIGGRAPH 2026).
 
+Under *Elsewhere* it also links two image-backed cards: the external Pixiv gallery and
+`misc/` (**Miscellany**), a shelf for things that belong to no project. That page is not a
+project page — it borrows the landing page's warm paper rather than picking a temperature of
+its own, since it is a continuation of the personal site rather than a new destination, and it
+carries only the family bones (Fraunces headings, back pill, footer). It holds a shelf whose one
+item is `misc/museum/` (**Digital Museum**, below); a second item is another `.marquee` anchor in
+that list and nothing else.
+
+**The shelf is drawn, and it is drawn in CSS.** `.shelf` is a case: two hairline uprights, a thin
+board at the top (its underside — you see the edge, not the top), a 3px board under every item, and
+a soft cast shadow below each board. Three tokens carry it (`--board-top`, `--board-face`,
+`--board-cast`), so it follows the palette rather than baking colours into an asset, and it stays
+crisp at any zoom. **The boards overhang the uprights by 5px and that is the whole trick** — a box's
+edges meet at the corner, a shelf's board runs past its sides, and without the overhang the case
+reads as one more bordered rectangle. The overhang is 5px on both the top board (`left/right:-6px`
+off `.shelf`'s padding box) and the item boards (`-26px` off `.marquee`'s, which is inset a further
+20px by the case's padding) — change one and you must change the other or the case goes crooked.
+Every item brings its own board, so the case grows a compartment per entry with no extra markup.
+Kept deliberately suggested: no wood texture, no bevel, no shadow under the case itself.
+
+**A shelf item is TYPE, not a tile — do not give it back the card chrome.** It was a bordered box
+with an `<h3>`, a line of prose and an arrow, which is precisely the landing page's `.card`, and
+repeating it here made the shelf read as a fourth section of published work. A `.marquee` has no
+box, no surface and no lift: hairline rules above and below, a small uppercase kicker, and the
+title set at `clamp(34px,7.5vw,64px)` Fraunces so the words *are* the object.
+
+The title's letterforms are a **window onto what they link to**: `assets/museum_type.jpg`, a render
+of the actual reconstruction, clipped to the glyphs with `background-clip:text` and revealed on
+hover or focus (always visible under `@media(hover:none)`, since a touch screen has no hover).
+Three things are load-bearing:
+
+- **Both the image and the clip live inside `@supports`.** Without `background-clip:text` the image
+  would paint as a plain rectangle behind the words — the failure is ugly rather than absent, which
+  is why the landing page's unguarded gradient-text usage is not the model to copy here.
+- **The resting state keeps an opaque `-webkit-text-fill-color`** over the clipped image, so the
+  picture appears only on the reveal; both `color` and `-webkit-text-fill-color` are set and
+  transitioned, per the site rule that Safari ignores `color` alone on clipped text.
+- **The fill was measured as TEXT before shipping**, because every pixel of it is a glyph on
+  `#f4f2ec` paper: blended toward `--ink` at 0.45 with saturation restored, it comes out at worst
+  **3.5:1**, median **10.3:1**, so it clears the 3:1 bar large text must meet even at the brightest
+  point of the painting. Re-measure if the render is replaced — the raw render was 1.9:1 and would
+  have failed. It is built by the offline preview renderer, not by the page. Its cover is
+`assets/misc_card.jpg`, applied by a `.card.art.misc` modifier that overrides the image and focal
+point only — the scrim, the hover drift and the text colours stay shared with the Pixiv card.
+
+## `misc/museum/` — one painting, hung on the page
+
+A **static** Gaussian-splat capture of a framed Bellotto in a gallery, shown and nothing else.
+Provenance, since none of it is stated on the page any more (see the *keep it a card* note below):
+a **33.6 s handheld video** (`/cluster/scratch/misong/datasets/my_static/kunst.mp4`) → 200 frames
+sampled, blurriest 15 % dropped, **170 registered** by COLMAP (all of them; `preprocess_meta.json`
+records this) → **94,148 gaussians fitted, 86,277 after pruning** the wall away → **2.4 MB**
+(`reference.npz`, 2,396,760 bytes). Do not describe the capture as photographs; it is one video pass. Ported on 2026-08-11 from
+`~/4d-relight/web/demo/` (`index.html` + `build_demo.py`), scene staged from
+`/cluster/scratch/misong/4dre/static/kunst/bundle_pruned_packed`. The renderer core (shaders,
+`RGBA32UI` splat texture, full-range bucket sort) is that page's verbatim; the **decode path is
+imported, not copied** — `../../projects/smv/decode.js`, whose own `./vendor/fflate.js` resolves
+module-relative, so there is one copy on disk. No ffmpeg: a static bundle is one GOP with no
+offset streams, so nothing on this page touches wasm.
+
+- **The bundle is the PRUNED one — the gallery wall was removed before packing.** That is what the
+  whole page design rests on: the splats stop at the gilt frame's outer edge, so the painting can
+  hang on the paper with **no canvas frame at all** — no border, no radius, no dark viewport box.
+  The GL context is `alpha:true` + `premultipliedAlpha:true` cleared to `(0,0,0,0)`, for the reason
+  `field.html` documents: the splat blend is a front-to-back `under` operator, so an opaque clear
+  leaves `DST_ALPHA` at 1 and multiplies every splat by zero. Staging an unpruned bundle here would
+  put a rectangle of wall back on the page and the design would have to change with it.
+- **The opening view is derived FROM THE PAINTING, not from a dataset camera**, which is why
+  `scene.json` carries `"camera": null` and none has to be embedded or kept in step. The pruned
+  cloud is a slab (measured on the shipped scene: std **2.28 × 1.65 × 0.12**), so its principal
+  axes *are* the picture plane: the largest two span the picture, the smallest is its normal.
+  `frameScene()` runs a **cyclic Jacobi eigensolver on the 3×3 covariance** (`eig3`) and reads the
+  up axis, the normal, the 0.5/99.5-percentile extents and hence the fit distance off it. Signs are
+  fixed by the capture: world up is `-y` for these COLMAP scenes, and the photographer stood on the
+  `-z` side of the wall. **`eig3` was checked against numpy's SVD on the shipped cloud — axes agree
+  to 0.0000°.** Re-check it the same way if it is touched; a wrong basis opens the page on the
+  painting's edge and nothing else would catch it.
+- **The turn is clamped to ±45° on both axes** about that opening view (`LIM`), and zoom
+  (0.42–2.4× fit) and pan (`panMax`) are bounded too. The capture is a shallow arc in front of one
+  wall: a free turntable spends most of its range showing the back of a slab no photograph ever
+  saw. It was 60° first and came down after looking at it — at 60 the floaters off the frame's edge
+  come into view, so the limit is set by where the reconstruction stops holding up, not by a round
+  number. **It is not the edge of what was observed, and the page must not claim that it is** — that
+  claim was on the page and was wrong. Measured on the 22 held-out views: the pass covers **±71° of
+  yaw** but only **+21°/−35° of pitch**, always close in (3.1–6.4 units from the picture centre,
+  against an opening distance of 6.3). So yaw is bounded well inside the observed arc and pitch is
+  the axis that actually runs out. Re-measure if the scene is re-captured or re-pruned.
+- **`FIT` (1.40) is the opening framing and is deliberately loose.** It was 1.12, i.e. the picture
+  just filling the canvas, and that clipped the silhouette: the outermost splats are large and
+  nearly transparent, so they reach well past the 99.5-percentile extents the fit is computed from,
+  and the canvas edge cut them off in a straight line. 1.40 opens that out by a further 25% — the
+  picture arrives at 80% of the size it did — so the soft edge falls off on paper instead. It is a
+  framing constant, not a property of the scene, which is why it is not folded into the extents. `resetView()` is the counterpart — bound to the *reset view* button, double-click, `0` and
+  `Home` — and `touched` is what makes `resize()` refit only while the visitor has not moved yet.
+- Keyboard arrows turn it under the same clamp, so the object is reachable without a pointer. The
+  canvas deliberately carries **no `role="img"`** (it is focusable and drag-turnable; a static image
+  role would say the opposite) and `#status[hidden]{display:none}` is load-bearing — `display:flex`
+  on the author rule would otherwise outrank the UA's `[hidden]`.
+- **Keep it a card, not a paper.** The page had a paragraph under the picture stating the capture
+  and compression numbers; it was deleted on purpose — this is a shelf item, and a methods note
+  turns it into a project page. So the numbers live in this file, and the page carries only the
+  wall label, the hints and the credits. Do not put a technical paragraph back.
+- **Deliberately not ported from the demo:** the dark viewport, the loader ring and timer, the
+  fullscreen button, the fps line, and the render-settings bar (specular SH degree, hard ellipsoids,
+  radius). SH is simply always full `l3` — `u_shBands` and the hard-ellipsoid branch are gone from
+  the shaders rather than left unreachable. This page is a wall, not an instrument.
+- **The wall label comes from the catalogue records, not from the plaque.** It was first transcribed
+  off the gallery plaque visible in the capture frames, and that version was wrong in the ways a
+  half-legible photograph will be: the German title as the primary one, no date, no dimensions, no
+  inventory number and the foundation mistaken for the owning institution. It is now
+  Bernardo Bellotto (1721 Venice – 1780 Warsaw), *Rovine della Kreuzkirche di Dresda* / *The Ruins
+  of the Kreuzkirche in Dresden*, 1765, oil on canvas, 84.5 × 107.3 cm, **Kunsthaus Zürich, The
+  Betty and David Koetser Foundation, 1994, Inv. KS 70** — reconciled against the two records the
+  page links under the label ([collection.kunsthaus.ch item 471](https://collection.kunsthaus.ch/en/collection/item/471/)
+  and Google Arts & Culture). Edit that text from the record, never from the capture frames. The
+  two links under the label are titled by their **source** (*Kunsthaus Zürich*, *Google Arts &
+  Culture*) rather than by what they are, so the label cites where its data came from.
+  As a sanity check the reconstruction agrees with the record: the cloud's in-plane extents are
+  1.261:1 against the catalogue canvas's 107.3 : 84.5 = 1.270:1, the small shortfall being the
+  ornate frame, which is included in the cloud and slightly squarer than the canvas.
+  The painting is long out of copyright;
+  the footer's reserved-rights line covers the capture, the code and the text, and the *Built with*
+  block (fflate, antimatter15's `splat`, EWA splatting, 3DGS) is load-bearing beside it.
+
+Re-stage the scene with the demo's builder, then copy it in — there is no `scenes.json` here, the
+page names its one scene in `SCENE_URL`:
+
+```bash
+conda run -n 4dre python ~/4d-relight/web/demo/build_demo.py \
+  --bundle /cluster/scratch/misong/4dre/static/kunst/bundle_pruned_packed
+# then copy web/demo/scenes/kunst/ -> misc/museum/scenes/kunst/
+```
+
+Do **not** pass `--scene_config`: embedding a held-out camera would override nothing (the page
+ignores `scene.camera`) but it would suggest the framing comes from the dataset when it does not.
+`reference.npz` is Git LFS, per the repo-wide `*.npz` rule.
+
 The viewer pipeline, all in the browser:
 1. keyframe `reference.npz` → unzipped + dequantised with **fflate** (`decode.js`)
 2. per-GOP HEVC motion streams (`xyz_u.mkv`, `rot_v.mkv`) → **ffmpeg.wasm** (`decode_motion.js`)

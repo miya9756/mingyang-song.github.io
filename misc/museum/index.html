@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Museum — Mingyang Song</title>
+<link rel="icon" type="image/png" sizes="64x64" href="../../assets/web_icon.png">
+<link rel="apple-touch-icon" href="../../assets/web_icon.png">
+<meta name="description" content="A painting captured as 3D Gaussians and hung on a web page: Bernardo Bellotto's ruins of the Kreuzkirche, filmed in a gallery, compressed to 2.4 MB and rasterised in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="theme-color" content="#f4f2ec"><!-- must track --bg; Safari tints its chrome from this -->
+
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  /* Miscellany's palette, inherited deliberately: this is a room inside that shelf, not a new
+     destination. See ../index.html for why it borrows the landing page's warm paper. */
+  :root{
+    color-scheme:light;
+    --bg:#f4f2ec; --surface:#fdfbf6; --ink:#16181d; --muted:#5f6672;
+    --line:#e6e2d8; --accent:#6f4468; --shadow:rgba(16,24,40,.16);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .inner{max-width:860px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{padding:30px 0 0}
+  .back{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:rgba(255,255,255,.6);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:#fff;text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+  h1{margin:16px 0 0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(28px,4.2vw,42px);line-height:1.05;letter-spacing:-.018em}
+  .subtitle{margin:9px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
+            font-size:clamp(15px,2vw,20px);opacity:.9;line-height:1.3}
+
+  /* THE PAINTING HANGS ON THE PAGE — there is deliberately no canvas frame here: no border, no
+     radius, no plate, no dark viewport box. The scene is a pruned capture (the gallery wall was
+     removed before packing), so the splats end exactly at the gilt frame's outer edge and the
+     paper shows through everywhere else. That only works because the GL context is alpha:true +
+     premultipliedAlpha:true and clears to (0,0,0,0): the splat blend is a front-to-back `under`
+     operator, so clearing to an opaque colour would leave DST_ALPHA at 1 and multiply every splat
+     by zero — a blank canvas. Same contract as projects/spdef/field.html. */
+  .stage{position:relative;width:min(60vw,1000px);aspect-ratio:4/3;margin:44px auto 0}
+  #gl{position:absolute;inset:0;width:100%;height:100%;display:block;
+      touch-action:none;cursor:grab;outline:none}
+  #gl.drag{cursor:grabbing}
+  /* Keyboard focus must stay visible — it is the only way anyone navigating by key can tell the
+     picture is the thing they are about to turn. But POINTER focus must not show it: the script
+     focuses the canvas on pointerdown so the arrow keys work straight after a drag, and a browser
+     that matches :focus-visible on a programmatic focus() then draws a 2px rectangle around the
+     picture the moment you touch it — which on this page reads as exactly the frame the whole
+     design removes. `.quiet` is set for pointer focus and cleared on the next key or blur. */
+  #gl:focus-visible{outline:2px solid var(--accent);outline-offset:6px}
+  #gl.quiet:focus-visible{outline:none}
+  /* On a phone 60vw is a postage stamp, and the page has nothing else competing for the width. */
+  @media(max-width:760px){.stage{width:min(92vw,560px);margin-top:28px}}
+
+  /* Status sits OVER the stage rather than above it, so nothing reflows when it goes away —
+     a caption that jumps 24px the moment the scene lands reads as a bug. */
+  #status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+          text-align:center;padding:0 20px;color:var(--muted);font-size:13.5px;
+          font-variant-numeric:tabular-nums}
+  #status.err{color:#a3352b}
+  #status[hidden]{display:none}
+
+  /* The wall label. A museum caption, so it is set like one: centred, small, the title in italic
+     display serif, the technical line last and quietest. */
+  .label{margin:26px auto 0;max-width:560px;text-align:center}
+  .label .who{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+  .label .what{margin:.35em 0 0;font-family:'Fraunces',Georgia,serif;font-style:italic;font-size:19px;line-height:1.35}
+  .label .med{margin:.35em 0 0;font-size:13px;color:var(--muted)}
+  .label .prov{margin:.5em 0 0;font-size:12.5px;color:var(--muted)}
+  /* The two catalogue references. Same size as the provenance line and directly under it, because
+     they are the source of it rather than further reading. */
+  .label .refs{margin:.5em 0 0;font-size:12.5px}
+  .hints{margin:22px auto 0;max-width:620px;display:flex;flex-wrap:wrap;gap:8px 18px;
+         justify-content:center;font-size:12.5px;color:var(--muted)}
+  .hints b{color:var(--ink);font-weight:600}
+  .hints kbd{font:inherit;font-size:11px;background:#efece4;border:1px solid var(--line);border-bottom-width:2px;
+             border-radius:5px;padding:1px 6px;color:var(--ink)}
+  .hints .reset{font:inherit;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;
+                text-decoration:underline;text-underline-offset:2px}
+  .hints .reset:disabled{color:var(--muted);text-decoration:none;cursor:default;opacity:.6}
+
+  main{padding-bottom:10px}
+  footer{border-top:1px solid var(--line);margin-top:46px;padding:26px 0 48px;color:var(--muted);font-size:13px}
+  footer p{margin:0 0 8px}
+  :where(a,button):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){.back,.back .barrow{transition:none}.back:hover .barrow{transform:none}}
+</style>
+</head>
+<body>
+<header class="inner">
+  <a class="back" href="../"><span class="barrow" aria-hidden="true">←</span> Miscellany</a>
+  <h1>Digital Museum</h1>
+  <p class="subtitle">One painting, carried out of the gallery as 3D Gaussians and hung here instead.</p>
+</header>
+
+<main>
+  <div class="stage">
+    <!-- No role="img": the script makes this focusable and drag-turnable, and a static image role
+         would tell a screen reader the opposite. The label describes what is on it; the turn is
+         reachable from the keyboard (arrows, 0 to reset) for anyone who cannot drag. -->
+    <canvas id="gl"
+            aria-label="A gilt-framed oil painting of the ruined Kreuzkirche in Dresden, reconstructed in 3D. Drag, or use the arrow keys, to turn it; press 0 to reset the view."></canvas>
+    <div id="status">Loading the painting…</div>
+  </div>
+
+  <!-- The label was transcribed off the gallery's plaque, then reconciled against the two records
+       linked below: the collection entry is what supplies the date, the dimensions, the inventory
+       number and the museum's own preferred (Italian) title, none of which the plaque photographs
+       show in full. Keep the two in step — if this text is ever edited, edit it from the record. -->
+  <div class="label">
+    <div class="who">Bernardo Bellotto · 1721 Venice – 1780 Warsaw</div>
+    <p class="what">Rovine della Kreuzkirche di Dresda<br>The Ruins of the Kreuzkirche in Dresden</p>
+    <p class="med">1765 · oil on canvas · 84.5 × 107.3 cm</p>
+    <p class="prov">Kunsthaus Zürich, The Betty and David Koetser Foundation, 1994 · Inv. KS 70</p>
+    <p class="refs"><a href="https://collection.kunsthaus.ch/en/collection/item/471/" target="_blank" rel="noopener">Kunsthaus Zürich</a>
+       · <a href="https://artsandculture.google.com/asset/the-ruins-of-the-kreuzkirche-in-dresden-bernardo-bellotto/MwGFEGKLmmoojQ?hl=en" target="_blank" rel="noopener">Google Arts&nbsp;&amp;&nbsp;Culture</a></p>
+  </div>
+
+  <div class="hints">
+    <span><b>drag</b> to turn</span>
+    <span><b>scroll</b> or pinch to zoom</span>
+    <span><kbd>Shift</kbd>-drag or two fingers to pan</span>
+    <button class="reset" id="reset" disabled>reset view</button>
+  </div>
+</main>
+
+<footer class="inner">
+  <p>Built with <a href="https://github.com/101arrowz/fflate" target="_blank" rel="noopener">fflate</a>;
+     the WebGL2 splat rasteriser is adapted from antimatter15's
+     <a href="https://github.com/antimatter15/splat" target="_blank" rel="noopener">splat</a>, after
+     <a href="https://www.cs.umd.edu/~zwicker/publications/EWASplatting-TVCG02.pdf" target="_blank" rel="noopener">EWA splatting</a>
+     (Zwicker et al. 2002) and
+     <a href="https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/" target="_blank" rel="noopener">3D Gaussian Splatting</a>
+     (Kerbl et al. 2023).</p>
+  <!-- The reserved-rights line covers Mingyang's own capture, code and text. The painting itself is
+       long out of copyright, and the label above is the museum's own catalogue data, credited and
+       linked to it — which is why there is no separate permission line here. -->
+  <p>&copy; 2026 Mingyang Song &middot; All rights reserved. Third-party code remains under its own licence.</p>
+</footer>
+
+<script type="module">
+// One compressed STATIC scene, hung on the page and nothing else. Renderer core (shaders, RGBA32UI
+// splat texture, bucketed depth sort) is web/demo/index.html's verbatim, itself after
+// antimatter15/splat; the decode path is shared with the SMV viewer — a static bundle's
+// reference.npz is byte-identical in layout to a GOP keyframe, so decode.js is imported rather than
+// copied, and its own './vendor/fflate.js' resolves module-relative to projects/smv/.
+// What is NOT ported from the demo: the dark viewport, the loader ring, the fullscreen button and
+// the render-settings bar. This page is a wall, not an instrument.
+import { parseNpz, buildKeyframe } from '../../projects/smv/decode.js';
+
+const SCENE_URL = 'scenes/kunst/scene.json';
+const canvas=document.getElementById('gl'),stage=document.querySelector('.stage'),statusEl=document.getElementById('status'),resetBtn=document.getElementById('reset');
+function say(msg,err){statusEl.hidden=false;statusEl.textContent=msg;statusEl.classList.toggle('err',!!err);}
+const gl=canvas.getContext('webgl2',{antialias:false,premultipliedAlpha:true,alpha:true});
+if(!gl){say('This page needs WebGL2, which this browser did not provide.',true);throw new Error('no webgl2');}
+
+const VERT=`#version 300 es
+precision highp float;precision highp int;uniform highp usampler2D u_tex;uniform highp sampler2D u_sh;uniform mat4 u_proj,u_view;uniform vec2 u_focal,u_viewport;uniform vec3 u_campos;uniform bool u_hasSH;uniform float u_lowpass;
+uniform int u_shCols;   // SH codebook entries per texture row (2D-tiled so height stays within MAX_TEXTURE_SIZE)
+in vec2 a_pos;in uint a_index;out vec4 vColor;out vec2 vPos;
+vec3 shRest(vec3 d,int e){float x=d.x,y=d.y,z=d.z,xx=x*x,yy=y*y,zz=z*z,xy=x*y,yz=y*z,xz=x*z;vec3 r=vec3(0.0);
+ int row=e/u_shCols, b=(e-row*u_shCols)*15;   // tile (col,row): coeff k at column b+k
+ r+=-0.4886025119*y*texelFetch(u_sh,ivec2(b+0,row),0).rgb; r+=0.4886025119*z*texelFetch(u_sh,ivec2(b+1,row),0).rgb; r+=-0.4886025119*x*texelFetch(u_sh,ivec2(b+2,row),0).rgb;
+ r+=1.0925484306*xy*texelFetch(u_sh,ivec2(b+3,row),0).rgb; r+=-1.0925484306*yz*texelFetch(u_sh,ivec2(b+4,row),0).rgb; r+=0.3153915653*(2.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+5,row),0).rgb;
+ r+=-1.0925484306*xz*texelFetch(u_sh,ivec2(b+6,row),0).rgb; r+=0.5462742153*(xx-yy)*texelFetch(u_sh,ivec2(b+7,row),0).rgb;
+ r+=-0.5900435899*y*(3.0*xx-yy)*texelFetch(u_sh,ivec2(b+8,row),0).rgb; r+=2.8906114426*xy*z*texelFetch(u_sh,ivec2(b+9,row),0).rgb; r+=-0.4570457995*y*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+10,row),0).rgb;
+ r+=0.3731763326*z*(2.0*zz-3.0*xx-3.0*yy)*texelFetch(u_sh,ivec2(b+11,row),0).rgb; r+=-0.4570457995*x*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+12,row),0).rgb; r+=1.4453057213*z*(xx-yy)*texelFetch(u_sh,ivec2(b+13,row),0).rgb; r+=-0.5900435899*x*(xx-3.0*yy)*texelFetch(u_sh,ivec2(b+14,row),0).rgb;
+ return r;}
+void main(){uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10),0);vec3 wp=uintBitsToFloat(cen.xyz);
+ vec4 cam=u_view*vec4(wp,1.0);vec4 p=u_proj*cam;float clip=1.2*p.w;
+ if(p.z<-clip||p.x<-clip||p.x>clip||p.y<-clip||p.y>clip){gl_Position=vec4(0.,0.,2.,1.);return;}
+ uvec4 cov=texelFetch(u_tex,ivec2(((i&0x3ffu)<<1)|1u,i>>10),0);vec2 u1=unpackHalf2x16(cov.x),u2=unpackHalf2x16(cov.y),u3=unpackHalf2x16(cov.z);
+ mat3 Vrk=mat3(u1.x,u1.y,u2.x,u1.y,u2.y,u3.x,u2.x,u3.x,u3.y);
+ mat3 J=mat3(u_focal.x/cam.z,0.,-(u_focal.x*cam.x)/(cam.z*cam.z),0.,-u_focal.y/cam.z,(u_focal.y*cam.y)/(cam.z*cam.z),0.,0.,0.);
+ mat3 T=transpose(mat3(u_view))*J;mat3 cov2d=transpose(T)*Vrk*T;
+ cov2d[0][0]+=u_lowpass;cov2d[1][1]+=u_lowpass;   // screen-space low-pass (gsplat/3DGS eps2d=0.3)
+ float mid=(cov2d[0][0]+cov2d[1][1])/2.0;
+ float rad=length(vec2((cov2d[0][0]-cov2d[1][1])/2.0,cov2d[0][1]));float l1=mid+rad,l2=mid-rad;if(l2<0.0)return;
+ vec2 dv=normalize(vec2(cov2d[0][1],l1-cov2d[0][0]));vec2 maj=min(sqrt(2.0*l1),1024.0)*dv;vec2 mn=min(sqrt(2.0*l2),1024.0)*vec2(dv.y,-dv.x);
+ vec3 base=vec3(float((cov.w)&0xffu),float((cov.w>>8)&0xffu),float((cov.w>>16)&0xffu))/255.0;float al=float((cov.w>>24)&0xffu)/255.0;
+ if(u_hasSH)base=clamp(base+shRest(normalize(wp-u_campos),int(cen.w)),0.0,1.0);   // view-dependent specular: the varnish
+ vColor=clamp(p.z/p.w+1.0,0.0,1.0)*vec4(base,al);
+ vPos=a_pos;vec2 c=vec2(p)/p.w;gl_Position=vec4(c+a_pos.x*maj/u_viewport+a_pos.y*mn/u_viewport,0.0,1.0);}`;
+const FRAG=`#version 300 es
+precision highp float;uniform float u_opacity;in vec4 vColor;in vec2 vPos;out vec4 frag;
+void main(){float d2=dot(vPos,vPos);float A=-d2;if(A<-4.0)discard;float B=exp(A)*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);}`;
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+const prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VERT));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));gl.useProgram(prog);
+const u_proj=gl.getUniformLocation(prog,'u_proj'),u_view=gl.getUniformLocation(prog,'u_view'),u_focal=gl.getUniformLocation(prog,'u_focal'),u_viewport=gl.getUniformLocation(prog,'u_viewport'),u_op=gl.getUniformLocation(prog,'u_opacity'),u_texL=gl.getUniformLocation(prog,'u_tex'),u_lowpassL=gl.getUniformLocation(prog,'u_lowpass');
+const u_shL=gl.getUniformLocation(prog,'u_sh'),u_camposL=gl.getUniformLocation(prog,'u_campos'),u_hasSHL=gl.getUniformLocation(prog,'u_hasSH'),u_shColsL=gl.getUniformLocation(prog,'u_shCols');
+const MAX_TEX=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+const shTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,shTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,1,1,0,gl.RGBA,gl.FLOAT,new Float32Array(4));   // 1×1 placeholder so it's texture-complete
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+let shData=null,shHas=false,shIdx=null,shCols=1;
+function uploadSH(cb){   // cb: Float32Array(entries*45) coeff-major, or null to disable SH
+  if(!cb){shHas=false;return;}
+  const K=cb.length/45|0,maxRows=Math.max(1,(MAX_TEX/2)|0);
+  shCols=Math.max(1,Math.ceil(K/maxRows));while(shCols*15>MAX_TEX)shCols--;
+  const rows=Math.ceil(K/shCols),W=shCols*15;
+  if(!shData||shData.length!==W*rows*4)shData=new Float32Array(W*rows*4);else shData.fill(0);
+  for(let e=0;e<K;e++){const col=e%shCols,row=(e/shCols)|0,ob=e*45,rb=(row*W+col*15)*4;
+    for(let k=0;k<15;k++){const o=rb+k*4,c=ob+k*3;shData[o]=cb[c];shData[o+1]=cb[c+1];shData[o+2]=cb[c+2];}}
+  gl.bindTexture(gl.TEXTURE_2D,shTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,W,rows,0,gl.RGBA,gl.FLOAT,shData);shHas=true;}
+const vao=gl.createVertexArray();gl.bindVertexArray(vao);
+const qb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,qb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-2,-2,2,-2,2,2,-2,2]),gl.STATIC_DRAW);
+const a_pos=gl.getAttribLocation(prog,'a_pos');gl.enableVertexAttribArray(a_pos);gl.vertexAttribPointer(a_pos,2,gl.FLOAT,false,0,0);
+const a_index=gl.getAttribLocation(prog,'a_index');const ib=gl.createBuffer();gl.enableVertexAttribArray(a_index);gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.vertexAttribIPointer(a_index,1,gl.UNSIGNED_INT,0,0);gl.vertexAttribDivisor(a_index,1);
+const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);gl.blendEquation(gl.FUNC_ADD);
+const _f=new Float32Array(1),_i=new Int32Array(_f.buffer);
+function toHalf(v){_f[0]=v;const x=_i[0];let b=(x>>16)&0x8000,m=(x>>12)&0x07ff,e=(x>>23)&0xff;if(e<103)return b;if(e>142){b|=0x7c00;b|=((e==255)?0:1)&&(x&0x007fffff);return b;}if(e<113){m|=0x0800;b|=(m>>(114-e))+((m>>(113-e))&1);return b;}b|=((e-112)<<10)|(m>>1);b+=m&1;return b;}
+function packHalf2(a,b){return (toHalf(a)|(toHalf(b)<<16))>>>0;}
+function quatRotMat(w,x,y,z){return[1-2*(y*y+z*z),2*(x*y-w*z),2*(x*z+w*y),2*(x*y+w*z),1-2*(x*x+z*z),2*(y*z-w*x),2*(x*z-w*y),2*(y*z+w*x),1-2*(x*x+y*y)];}
+let N=0,baseCenter,baseScale,baseQuat,baseColor,texW,texH,texU32,texF32,depthIndex,needSort=false;
+function writeSplat(i,cx,cy,cz,quat,rgba){const o=8*i;texF32[o]=cx;texF32[o+1]=cy;texF32[o+2]=cz;
+ const R=quatRotMat(quat[0],quat[1],quat[2],quat[3]);const sx=baseScale[3*i],sy=baseScale[3*i+1],sz=baseScale[3*i+2];
+ const M=[R[0]*sx,R[1]*sy,R[2]*sz,R[3]*sx,R[4]*sy,R[5]*sz,R[6]*sx,R[7]*sy,R[8]*sz];
+ const s0=M[0]*M[0]+M[1]*M[1]+M[2]*M[2],s1=M[0]*M[3]+M[1]*M[4]+M[2]*M[5],s2=M[0]*M[6]+M[1]*M[7]+M[2]*M[8];
+ const s3=M[3]*M[3]+M[4]*M[4]+M[5]*M[5],s4=M[3]*M[6]+M[4]*M[7]+M[5]*M[8],s5=M[6]*M[6]+M[7]*M[7]+M[8]*M[8];
+ texU32[o+3]=shIdx?shIdx[i]:0;     // per-splat SH codebook index (shader reads cen.w)
+ texU32[o+4]=packHalf2(4*s0,4*s1);texU32[o+5]=packHalf2(4*s2,4*s3);texU32[o+6]=packHalf2(4*s4,4*s5);texU32[o+7]=rgba;}
+function buildTexture(){texW=2048;texH=Math.ceil(N/1024);texU32=new Uint32Array(texW*texH*4);texF32=new Float32Array(texU32.buffer);
+ for(let i=0;i<N;i++)writeSplat(i,baseCenter[3*i],baseCenter[3*i+1],baseCenter[3*i+2],baseQuat.subarray(4*i,4*i+4),baseColor[i]);}
+function uploadTexture(){gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32UI,texW,texH,0,gl.RGBA_INTEGER,gl.UNSIGNED_INT,texU32);}
+let counts=new Uint32Array(65536),sortSamp=null,sortDepth=null,sortBucket=null;
+// 65 536-bucket counting sort over float depths, bucket range from a 0.5–99.5 percentile sample;
+// the two saturated end buckets are re-sorted exactly.
+function sortSplats(view){if(!depthIndex||depthIndex.length!==N)depthIndex=new Uint32Array(N);
+ if(!sortDepth||sortDepth.length!==N){sortDepth=new Float32Array(N);sortBucket=new Int32Array(N);}
+ if(!N)return;
+ const v2=view[2],v6=view[6],v10=view[10],v14=view[14],P=texF32,dz=sortDepth,bk=sortBucket;
+ for(let i=0;i<N;i++){const o=8*i;const z=v2*P[o]+v6*P[o+1]+v10*P[o+2]+v14;dz[i]=z===z?z:-Infinity;}
+ const step=Math.max(1,N/8192|0),ns=Math.ceil(N/step);if(!sortSamp||sortSamp.length!==ns)sortSamp=new Float32Array(ns);
+ for(let s=0,i=0;i<N;i+=step)sortSamp[s++]=dz[i];
+ sortSamp.sort();let dlo=sortSamp[Math.floor(ns*0.005)],dhi=sortSamp[Math.floor(ns*0.995)];
+ if(!(dhi>dlo)){dlo=sortSamp[0];dhi=sortSamp[ns-1];}
+ const sc=65535/((dhi-dlo)||1);counts.fill(0);
+ for(let i=0;i<N;i++){const t=(dz[i]-dlo)*sc;const b=t>=0?(t<=65535?t|0:65535):0;bk[i]=b;counts[b]++;}
+ const st=new Uint32Array(65536);for(let i=1;i<65536;i++)st[i]=st[i-1]+counts[i-1];
+ const off0=st[0],offN=st[65535];
+ for(let i=0;i<N;i++)depthIndex[st[bk[i]]++]=i;
+ const cmp=(p,q)=>dz[p]<dz[q]?-1:dz[p]>dz[q]?1:0;
+ if(counts[0]>1)depthIndex.subarray(off0,off0+counts[0]).sort(cmp);
+ if(counts[65535]>1)depthIndex.subarray(offN,offN+counts[65535]).sort(cmp);
+ gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.bufferData(gl.ARRAY_BUFFER,depthIndex,gl.DYNAMIC_DRAW);}
+
+// ===== camera =====
+// Orbit turntable, as in web/demo — but where that page takes its up axis and opening pose from the
+// dataset's held-out camera, this one takes them FROM THE PAINTING. The bundle is pruned to the
+// canvas and its frame, so the cloud is a slab: its principal axes ARE the picture plane (measured
+// on the shipped scene: std 2.28 × 1.65 × 0.12 world units). The largest two span the picture, the
+// smallest is its normal — so a dead-on, level, centred opening view is derivable and no camera
+// block has to be embedded or kept in step. Signs are fixed by the capture: world up is -y for
+// these COLMAP scenes and the photographer stood on the -z side of the wall.
+const UP=[0,-1,0];
+let camPos=[0,0,0],halfW=1,halfH=1,fitBase=6,panMax=1;
+const cross3=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const norm3=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];};
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const cam={yaw:0,pitch:0,dist:6,target:[0,0,0]};
+let home={yaw:0,pitch:0,dist:6,target:[0,0,0]};
+let _e1=[1,0,0],_e2=[0,0,1];
+function setUp(up){const n=norm3(up);UP[0]=n[0];UP[1]=n[1];UP[2]=n[2];
+  const ref=Math.abs(dot3(UP,[0,0,1]))<0.9?[0,0,1]:[1,0,0];
+  _e1=norm3(cross3(UP,ref));_e2=cross3(UP,_e1);}
+setUp(UP);
+// Cyclic Jacobi on a symmetric 3×3 packed as [a00,a01,a02,a11,a12,a22]; returns the eigenvectors as
+// columns, ordered by descending eigenvalue. Checked against numpy's SVD on the shipped cloud (axes
+// agree to 0.0000°) — a wrong basis here would open the page on a view of the painting's edge.
+function eig3(a){const A=[[a[0],a[1],a[2]],[a[1],a[3],a[4]],[a[2],a[4],a[5]]],V=[[1,0,0],[0,1,0],[0,0,1]];
+ for(let it=0;it<12;it++){let p=0,q=1,off=0;
+  for(let i=0;i<3;i++)for(let j=i+1;j<3;j++)if(Math.abs(A[i][j])>off){off=Math.abs(A[i][j]);p=i;q=j;}
+  if(off<1e-12)break;
+  const th=(A[q][q]-A[p][p])/(2*A[p][q]),t=(th>=0?1:-1)/(Math.abs(th)+Math.sqrt(th*th+1)),c=1/Math.sqrt(t*t+1),s=t*c;
+  for(let k=0;k<3;k++){const kp=A[k][p],kq=A[k][q];A[k][p]=c*kp-s*kq;A[k][q]=s*kp+c*kq;}
+  for(let k=0;k<3;k++){const pk=A[p][k],qk=A[q][k];A[p][k]=c*pk-s*qk;A[q][k]=s*pk+c*qk;}
+  for(let k=0;k<3;k++){const kp=V[k][p],kq=V[k][q];V[k][p]=c*kp-s*kq;V[k][q]=s*kp+c*kq;}}
+ const ord=[0,1,2].sort((i,j)=>A[j][j]-A[i][i]);
+ return ord.map(i=>[V[0][i],V[1][i],V[2][i]]);}
+function camBasis(){
+ const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch),cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+ const eye=[0,0,0];
+ for(let c=0;c<3;c++)eye[c]=cam.target[c]+cam.dist*(cp*(sy*_e1[c]+cy*_e2[c])+sp*UP[c]);
+ const f=norm3([cam.target[0]-eye[0],cam.target[1]-eye[1],cam.target[2]-eye[2]]);
+ const u=norm3([-(UP[0]-f[0]*dot3(UP,f)),-(UP[1]-f[1]*dot3(UP,f)),-(UP[2]-f[2]*dot3(UP,f))]);
+ return{eye,f,u,r:cross3(u,f)};}
+function viewMatrix(){const{eye,f,r,u}=camBasis();camPos=eye;
+ return[r[0],u[0],f[0],0,r[1],u[1],f[1],0,r[2],u[2],f[2],0,-dot3(r,eye),-dot3(u,eye),-dot3(f,eye),1];}
+function projMatrix(w,h,fx,fy){const zn=Math.min(0.5,Math.max(0.02,cam.dist*0.02)),zf=cam.dist*20+100;
+ return[2*fx/w,0,0,0,0,-2*fy/h,0,0,0,0,zf/(zf-zn),1,0,0,-(zf*zn)/(zf-zn),0];}
+const FOVY=1.1;
+// How far back the opening view stands, as a multiple of "the picture exactly fills the canvas".
+// 1.12 was the first value and it framed the picture tightly — too tightly: the splats at the
+// silhouette are large and nearly transparent, so they extend well past the frame's nominal edge
+// (the 99.5-percentile extents this fit is built from deliberately exclude them) and the canvas
+// clipped them into a straight cut. 1.40 is that 1.12 opened up by a further 25%, i.e. the picture
+// opens at 80% of the size it used to — enough paper around it for the soft edge to fall off on its
+// own. It is a framing choice, so it lives here rather than in the extents.
+const FIT=1.40;
+// Distance at which the whole picture fits, for the canvas's CURRENT aspect: the vertical half-angle
+// is fixed, the horizontal one follows the canvas, so a narrow phone needs to stand further back.
+function fitDist(){const a=(canvas.width/canvas.height)||1,tv=Math.tan(FOVY/2);
+ return Math.max(halfH/tv,halfW/(a*tv))*FIT;}
+function frameScene(){if(!N)return;
+ const step=Math.max(1,N/20000|0);let n=0,cx=0,cy=0,cz=0;
+ for(let i=0;i<N;i+=step){cx+=baseCenter[3*i];cy+=baseCenter[3*i+1];cz+=baseCenter[3*i+2];n++;}
+ cx/=n;cy/=n;cz/=n;
+ const m=[0,0,0,0,0,0];
+ for(let i=0;i<N;i+=step){const dx=baseCenter[3*i]-cx,dy=baseCenter[3*i+1]-cy,dz=baseCenter[3*i+2]-cz;
+  m[0]+=dx*dx;m[1]+=dx*dy;m[2]+=dx*dz;m[3]+=dy*dy;m[4]+=dy*dz;m[5]+=dz*dz;}
+ for(let k=0;k<6;k++)m[k]/=n;
+ const ax=eig3(m);
+ let up=ax[1].slice(),nr=ax[2].slice();
+ if(up[1]>0)up=up.map(v=>-v);      // world up is -y for these captures
+ if(nr[2]>0)nr=nr.map(v=>-v);      // the camera side of the wall
+ // Extents in that frame, at the 0.5/99.5 percentiles — a handful of pruning survivors off the
+ // frame's edge would otherwise set the framing and push the painting into the middle third.
+ const w=ax[0],h=ax[1],lenS=Math.ceil(N/step),pw=new Float32Array(lenS),ph=new Float32Array(lenS);
+ let s=0;for(let i=0;i<N;i+=step){const dx=baseCenter[3*i]-cx,dy=baseCenter[3*i+1]-cy,dz=baseCenter[3*i+2]-cz;
+  pw[s]=dx*w[0]+dy*w[1]+dz*w[2];ph[s]=dx*h[0]+dy*h[1]+dz*h[2];s++;}
+ const pct=(arr,q)=>{const a=arr.slice(0,s).sort();return a[Math.min(s-1,Math.max(0,Math.floor(s*q)))];};
+ const wlo=pct(pw,0.005),whi=pct(pw,0.995),hlo=pct(ph,0.005),hhi=pct(ph,0.995);
+ halfW=(whi-wlo)/2;halfH=(hhi-hlo)/2;
+ const mw=(whi+wlo)/2,mh=(hhi+hlo)/2;                  // recentre on the picture, not on the mean splat
+ const target=[cx+w[0]*mw+h[0]*mh,cy+w[1]*mw+h[1]*mh,cz+w[2]*mw+h[2]*mh];
+ setUp(up);
+ fitBase=fitDist();panMax=0.5*Math.max(halfW,halfH);
+ home={yaw:Math.atan2(dot3(nr,_e1),dot3(nr,_e2)),pitch:Math.asin(clamp(dot3(nr,UP),-1,1)),dist:fitBase,target};
+ resetView();}
+// The turn is bounded to ±45° about the opening view on BOTH axes, which is the page's one real
+// interaction rule: the capture is one pass across the front of a picture on a wall, so a free
+// turntable spends most of its range behind a slab that was never filmed at all.
+// 45 is NOT "the edge of what was observed" — measured on the 22 held-out views, the pass covers
+// ±71° of yaw but only +21°/−35° of pitch, always close in (3.1–6.4 units from the picture centre).
+// It is where the result stops holding up: at 60 the picture is oblique enough that the floaters
+// off the frame's edge come into view, and the low-elevation coverage means pitch runs out first.
+// Zoom and pan are bounded for the same reason — you cannot lose the painting off the page.
+const LIM=45*Math.PI/180;
+let touched=false;
+function markTouched(){if(!touched){touched=true;resetBtn.disabled=false;}}
+function resetView(){cam.yaw=home.yaw;cam.pitch=home.pitch;cam.dist=home.dist;cam.target=home.target.slice();
+ touched=false;resetBtn.disabled=true;}
+// Focus follows the pointer so the arrow keys work straight after a drag — but the focus RING is
+// suppressed for that path (see the .quiet rule in the CSS) and restored the moment a key is used
+// or focus leaves. Tabbing in still shows it, which is the only thing the outline exists for.
+let quietFocus=false;
+function focusQuiet(){quietFocus=true;canvas.classList.add('quiet');canvas.focus();}
+function loudFocus(){if(quietFocus){quietFocus=false;canvas.classList.remove('quiet');}}
+canvas.addEventListener('keydown',loudFocus,true);
+canvas.addEventListener('blur',loudFocus);
+resetBtn.onclick=()=>{resetView();focusQuiet();};
+
+// ===== pointer input =====
+let lx=0,ly=0;
+canvas.tabIndex=0;
+const _ptrs=new Map();let _mode=null,_pinch0=0,_dist0=0;
+const _mid=()=>{const v=[..._ptrs.values()];return[(v[0].x+v[1].x)/2,(v[0].y+v[1].y)/2];};
+const _spread=()=>{const v=[..._ptrs.values()];return Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y)||1;};
+function panBy(dx,dy){const{r,u}=camBasis(),s=cam.dist*0.0015;
+ const t=[0,0,0];for(let c=0;c<3;c++)t[c]=cam.target[c]-r[c]*dx*s-u[c]*dy*s;   // u is screen-down, hence -u
+ const o=[t[0]-home.target[0],t[1]-home.target[1],t[2]-home.target[2]],l=Math.hypot(o[0],o[1],o[2]);
+ const k=l>panMax?panMax/l:1;
+ for(let c=0;c<3;c++)cam.target[c]=home.target[c]+o[c]*k;}
+function zoomTo(d){cam.dist=clamp(d,fitBase*0.42,fitBase*2.4);}
+canvas.addEventListener('pointerdown',e=>{
+ focusQuiet();canvas.setPointerCapture(e.pointerId);canvas.classList.add('drag');
+ _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(_ptrs.size===1){_mode=(e.shiftKey||e.button===2)?'pan':'orbit';lx=e.clientX;ly=e.clientY;}
+ else if(_ptrs.size===2){_mode='pinch';_pinch0=_spread();_dist0=cam.dist;[lx,ly]=_mid();}});
+canvas.addEventListener('pointermove',e=>{
+ if(!_ptrs.has(e.pointerId))return;
+ _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(_mode==='pinch'&&_ptrs.size>=2){zoomTo(_dist0*_pinch0/_spread());
+   const[mx,my]=_mid();panBy(mx-lx,my-ly);lx=mx;ly=my;markTouched();return;}
+ if(_ptrs.size!==1)return;
+ const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;
+ if(_mode==='pan')panBy(dx,dy);
+ else{cam.yaw=clamp(cam.yaw+dx*0.006,home.yaw-LIM,home.yaw+LIM);
+      cam.pitch=clamp(cam.pitch-dy*0.006,home.pitch-LIM,home.pitch+LIM);}
+ markTouched();});
+const _drop=e=>{_ptrs.delete(e.pointerId);
+ if(_ptrs.size===1){_mode='orbit';const v=[..._ptrs.values()][0];lx=v.x;ly=v.y;}
+ else if(!_ptrs.size){_mode=null;canvas.classList.remove('drag');}};
+canvas.addEventListener('pointerup',_drop);canvas.addEventListener('pointercancel',_drop);
+canvas.addEventListener('contextmenu',e=>e.preventDefault());     // right-drag is pan, not a menu
+canvas.addEventListener('dblclick',()=>resetView());
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoomTo(cam.dist*Math.exp(e.deltaY*0.001));markTouched();},{passive:false});
+// Keyboard: the same bounded turn, so the painting is reachable without a pointer at all.
+canvas.addEventListener('keydown',e=>{const A=0.06,K={ArrowLeft:[-A,0],ArrowRight:[A,0],ArrowUp:[0,A],ArrowDown:[0,-A]}[e.key];
+ if(K){cam.yaw=clamp(cam.yaw+K[0],home.yaw-LIM,home.yaw+LIM);cam.pitch=clamp(cam.pitch+K[1],home.pitch-LIM,home.pitch+LIM);markTouched();e.preventDefault();return;}
+ if(e.key==='0'||e.key==='Home'){resetView();e.preventDefault();}});
+function resize(){const dpr=Math.min(devicePixelRatio||1,2);
+ canvas.width=Math.max(1,Math.floor(stage.clientWidth*dpr));canvas.height=Math.max(1,Math.floor(stage.clientHeight*dpr));
+ if(!N)return;
+ const f=fitDist();
+ // Refit only while the view is untouched: after the visitor has moved, the framing is theirs.
+ if(!touched){fitBase=f;cam.dist=f;home.dist=f;}else fitBase=f;}
+addEventListener('resize',resize);
+
+// ===== draw loop =====
+let started=false,lastView=null;
+function frame(){requestAnimationFrame(frame);
+ if(!N)return;
+ const fy=0.5*canvas.height/Math.tan(FOVY/2),fx=fy;
+ const view=viewMatrix(),proj=projMatrix(canvas.width,canvas.height,fx,fy);
+ let moved=!lastView;if(lastView)for(let i=0;i<16;i++)if(Math.abs(view[i]-lastView[i])>1e-6)moved=true;lastView=view.slice();
+ if(moved||needSort){sortSplats(view);needSort=false;}
+ gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.viewport(0,0,canvas.width,canvas.height);
+ gl.useProgram(prog);gl.bindVertexArray(vao);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(u_texL,0);
+ gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,shTex);gl.uniform1i(u_shL,1);
+ gl.uniform3fv(u_camposL,camPos);gl.uniform1i(u_hasSHL,shHas?1:0);gl.uniform1i(u_shColsL,shCols);
+ gl.uniformMatrix4fv(u_proj,false,proj);gl.uniformMatrix4fv(u_view,false,view);
+ gl.uniform2f(u_focal,fx,fy);gl.uniform2f(u_viewport,canvas.width,canvas.height);gl.uniform1f(u_op,1.0);
+ gl.uniform1f(u_lowpassL,1.2);   // 0.3px screen-space low-pass, in this renderer's units
+ gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,N);gl.activeTexture(gl.TEXTURE0);}
+
+// ===== load =====
+async function fetchBuf(url){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);
+ const total=+r.headers.get('content-length')||0;const rd=r.body.getReader();const chunks=[];let recv=0;
+ for(;;){const{done,value}=await rd.read();if(done)break;chunks.push(value);recv+=value.length;
+  say(total?`Loading the painting… ${Math.round(recv/total*100)}%`:`Loading the painting… ${(recv/1e6).toFixed(1)} MB`);}
+ const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}return out;}
+
+(async function open(){
+  try{
+    const scene=await (await fetch(SCENE_URL)).json();
+    const g=scene.gops&&scene.gops[0];
+    if(!g)throw new Error('scene.json has no GOPs');
+    // A static bundle is one GOP with no offset streams. Anything animated belongs in the SMV
+    // viewer; this page has no timeline and would silently show frame 0 for ever.
+    if(scene.num_frames>1||scene.gops.length>1||Object.keys(g.streams||{}).length)
+      throw new Error('not a static bundle');
+    const rb=await fetchBuf(SCENE_URL.replace(/[^/]*$/,'')+g.reference_path);
+    say('Unpacking…');
+    // Same decode as compression/decoder.py: dequantise, VQ-SH lookup, DC -> rgba.
+    const kf=buildKeyframe(parseNpz(rb),null,0);
+    baseCenter=kf.center;baseScale=kf.scale;baseQuat=kf.quat;baseColor=kf.color;
+    N=kf.numTotal;shIdx=kf.shIndex||null;uploadSH(kf.shCodebook||null);
+    buildTexture();uploadTexture();resize();frameScene();needSort=true;
+    statusEl.hidden=true;
+    if(!started){started=true;requestAnimationFrame(frame);}
+  }catch(e){console.error(e);say('The painting could not be loaded: '+(e.message||e),true);}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+{"name": "kunst", "num_frames": 1, "overlap_frames": 0, "has_shared_statics": false, "shared_statics_path": null, "shared_attrs_path": null, "camera": null, "gops": [{"gop_id": 0, "start_frame": 0, "end_frame": 1, "num_local_frames": 1, "reference_path": "gop_0/reference.npz", "dynamic_idx": 86277, "num_shared_statics": null, "streams": {}}]}
