@@ -100,11 +100,37 @@
                 text-decoration:underline;text-underline-offset:2px}
   .hints .reset:disabled{color:var(--muted);text-decoration:none;cursor:default;opacity:.6}
 
+  /* The room selector. Two works on one wall, so this is a label, not a control panel: text only,
+     the hung one in ink and the other muted, sized like the hints it sits above. */
+  .picks{display:flex;flex-wrap:wrap;gap:6px 20px;justify-content:center;margin:24px auto 0}
+  .pick{font:inherit;font-size:13px;letter-spacing:.02em;color:var(--muted);background:none;border:0;
+        padding:2px 0 4px;cursor:pointer;border-bottom:1.5px solid transparent;
+        transition:color .18s,border-color .18s}
+  .pick:hover{color:var(--ink)}
+  .pick[aria-pressed=true]{color:var(--ink);font-weight:600;border-bottom-color:var(--accent);cursor:default}
+  .pick[disabled]{opacity:.5;cursor:progress}
+
+  /* SWAPPING BETWEEN WORKS. The wait is a real fetch + decode of 0.8–2.4 MB, so the transition is
+     NOT one timed animation across it: it is a fixed exit, an indeterminate hold, and a fixed
+     entrance fired by the load actually finishing. Only opacity and transform are animated — both
+     compositor-only, so nothing here costs the renderer a frame — and the stage keeps its size, so
+     the label below cannot jump while the picture changes. The new work's framing is computed while
+     the canvas is at zero opacity, which is what makes a hard camera cut invisible.
+     .swap's duration and SWAP_MS in the script are a PAIR; change one and change the other. */
+  #gl,.label{transition:opacity .38s ease,transform .38s ease}
+  #gallery.swap #gl{opacity:0;transform:scale(.99)}
+  #gallery.swap .label{opacity:0}
   main{padding-bottom:10px}
   footer{border-top:1px solid var(--line);margin-top:46px;padding:26px 0 48px;color:var(--muted);font-size:13px}
   footer p{margin:0 0 8px}
   :where(a,button):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  @media(prefers-reduced-motion:reduce){.back,.back .barrow{transition:none}.back:hover .barrow{transform:none}}
+  @media(prefers-reduced-motion:reduce){
+    .back,.back .barrow{transition:none}.back:hover .barrow{transform:none}
+    /* The swap still hides the old work while the new one loads — that is the point of it, not
+       decoration — it just cuts instead of fading, and never scales. */
+    #gl,.label{transition:none}
+    #gallery.swap #gl{transform:none}
+  }
 </style>
 </head>
 <body>
@@ -114,7 +140,7 @@
   <p class="subtitle">One painting, carried out of the gallery as 3D Gaussians and hung here instead.</p>
 </header>
 
-<main>
+<main id="gallery">
   <div class="stage">
     <!-- No role="img": the script makes this focusable and drag-turnable, and a static image role
          would tell a screen reader the opposite. The label describes what is on it; the turn is
@@ -124,18 +150,14 @@
     <div id="status">Loading the painting…</div>
   </div>
 
-  <!-- The label was transcribed off the gallery's plaque, then reconciled against the two records
-       linked below: the collection entry is what supplies the date, the dimensions, the inventory
-       number and the museum's own preferred (Italian) title, none of which the plaque photographs
-       show in full. Keep the two in step — if this text is ever edited, edit it from the record. -->
-  <div class="label">
-    <div class="who">Bernardo Bellotto · 1721 Venice – 1780 Warsaw</div>
-    <p class="what">Rovine della Kreuzkirche di Dresda<br>The Ruins of the Kreuzkirche in Dresden</p>
-    <p class="med">1765 · oil on canvas · 84.5 × 107.3 cm</p>
-    <p class="prov">Kunsthaus Zürich, The Betty and David Koetser Foundation, 1994 · Inv. KS 70</p>
-    <p class="refs"><a href="https://collection.kunsthaus.ch/en/collection/item/471/" target="_blank" rel="noopener">Kunsthaus Zürich</a>
-       · <a href="https://artsandculture.google.com/asset/the-ruins-of-the-kreuzkirche-in-dresden-bernardo-bellotto/MwGFEGKLmmoojQ?hl=en" target="_blank" rel="noopener">Google Arts&nbsp;&amp;&nbsp;Culture</a></p>
-  </div>
+  <!-- Which work is hung. Two buttons rather than a <select>: there are two of them, they are the
+       page's only real choice, and a native menu would hide half of it behind a click. -->
+  <div class="picks" role="group" id="picks" aria-label="Choose a work"></div>
+
+  <!-- The label is BUILT FROM THE SCENES TABLE, not written here, because it swaps with the work.
+       Its text comes from the catalogue record where there is one and from the gallery's own wall
+       label where there is not — see the table for which is which, and edit it there. -->
+  <div class="label" id="label"></div>
 
   <div class="hints">
     <span><b>drag</b> to turn</span>
@@ -169,8 +191,42 @@
 // the render-settings bar. This page is a wall, not an instrument.
 import { parseNpz, buildKeyframe } from '../../projects/smv/decode.js';
 
-const SCENE_URL = 'scenes/kunst/scene.json';
+// The works on the wall. Everything that differs between them lives here — the bundle, the picker
+// name, the canvas's accessible description and the whole wall label — so hanging a third one is an
+// entry in this array and nothing else.
+//
+// PROVENANCE OF THE LABEL TEXT DIFFERS BETWEEN THE TWO, and that is why `refs` is per-work:
+// the Bellotto is in the museum's online catalogue and the label is reconciled against it, so it
+// cites the record. The van de Velde pair is a private loan — not in the catalogue, and not in
+// Google Arts & Culture either (both were searched) — so its label can only be the gallery's own
+// wall text, and it says so instead of linking. Do not invent an inventory number for it.
+const SCENES=[
+  {id:'kunst', url:'scenes/kunst/scene.json', pick:'Bellotto',
+   aria:'A gilt-framed oil painting of the ruined Kreuzkirche in Dresden, reconstructed in 3D.',
+   who:'Bernardo Bellotto · 1721 Venice – 1780 Warsaw',
+   what:['Rovine della Kreuzkirche di Dresda','The Ruins of the Kreuzkirche in Dresden'],
+   med:'1765 · oil on canvas · 84.5 × 107.3 cm',
+   prov:'Kunsthaus Zürich, The Betty and David Koetser Foundation, 1994 · Inv. KS 70',
+   refs:[['Kunsthaus Zürich','https://collection.kunsthaus.ch/en/collection/item/471/'],
+         ['Google Arts & Culture','https://artsandculture.google.com/asset/the-ruins-of-the-kreuzkirche-in-dresden-bernardo-bellotto/MwGFEGKLmmoojQ?hl=en']]},
+  {id:'kunst_02', url:'scenes/kunst_02/scene.json', pick:'van de Velde',
+   aria:'Two small octagonal oil panels by Esaias van de Velde, hung side by side, reconstructed in 3D.',
+   who:'Esaias van de Velde · 1587–1630',
+   what:['Dorfszene mit Brücke und Kirche, 1622',
+         'Landschaft mit Gehöft und Landweg, 1625'],
+   // +1.77° clockwise: the principal axes level the cloud, the panels' own centres are 1.77° off it.
+   // Measured, not eyeballed — support-function centres, stable to ±0.08° over 0.5–2% thresholds.
+   roll:1.77,
+   // …and then look at the midpoint of the two panels rather than at the middle of their bounding
+   // box: the right panel is the larger one (outline radius 1.51 against 1.30), so the box centre
+   // sits 0.087 to its side. Vertical is 0.000 — the roll above already levelled that.
+   centre:[-0.087,0],
+   med:'oil on oak · a pair, hung side by side',
+   prov:'On loan from a Swiss private collection, 2016 · Kunsthaus Zürich',
+   refs:[], note:'Transcribed from the gallery label'},
+];
 const canvas=document.getElementById('gl'),stage=document.querySelector('.stage'),statusEl=document.getElementById('status'),resetBtn=document.getElementById('reset');
+const labelEl=document.getElementById('label'),picksEl=document.getElementById('picks');
 function say(msg,err){statusEl.hidden=false;statusEl.textContent=msg;statusEl.classList.toggle('err',!!err);}
 const gl=canvas.getContext('webgl2',{antialias:false,premultipliedAlpha:true,alpha:true});
 if(!gl){say('This page needs WebGL2, which this browser did not provide.',true);throw new Error('no webgl2');}
@@ -296,6 +352,8 @@ function sortSplats(view){if(!depthIndex||depthIndex.length!==N)depthIndex=new U
 // these COLMAP scenes and the photographer stood on the -z side of the wall.
 const UP=[0,-1,0];
 let camPos=[0,0,0],halfW=1,halfH=1,fitBase=6,panMax=1;
+let roll=0;      // degrees, per work; set from the SCENES entry just before frameScene() reads it
+let centre=null; // [dw,dh] in the picture plane, likewise — see the framing block in frameScene()
 const cross3=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 const norm3=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];};
@@ -361,15 +419,33 @@ function frameScene(){if(!N)return;
  let up=ax[1].slice(),nr=ax[2].slice();
  if(up[1]>0)up=up.map(v=>-v);      // world up is -y for these captures
  if(nr[2]>0)nr=nr.map(v=>-v);      // the camera side of the wall
- // Extents in that frame, at the 0.5/99.5 percentiles — a handful of pruning survivors off the
- // frame's edge would otherwise set the framing and push the painting into the middle third.
- const w=ax[0],h=ax[1],lenS=Math.ceil(N/step),pw=new Float32Array(lenS),ph=new Float32Array(lenS);
+ // A ROLL about the normal, in degrees, for the one thing the principal axes cannot know: what the
+ // work itself says is level. PCA levels the point CLOUD, and for a pair of panels the second axis
+ // is set by how the mass happens to sit, not by the line through their centres — on kunst_02 the
+ // two disagree by 1.8°, which is small enough to look like a mistake and large enough to see.
+ // Positive rolls the picture clockwise on screen (Rodrigues about nr, which points at the viewer,
+ // turns the camera's up anticlockwise and so the scene the other way). Measured per work, offline,
+ // from the panels' support-function centres — never guessed by eye; see CLAUDE.md.
+ if(roll){const a=roll*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a),cr=cross3(nr,up);
+  up=norm3([up[0]*ca+cr[0]*sa,up[1]*ca+cr[1]*sa,up[2]*ca+cr[2]*sa]);}
+ // Extents in the frame the camera will actually use — derived from the rolled up axis rather than
+ // from the raw principal axes, so a roll cannot leave the fit measuring a box the view is not in.
+ const w=norm3(cross3(up,nr)),h=up,lenS=Math.ceil(N/step),pw=new Float32Array(lenS),ph=new Float32Array(lenS);
  let s=0;for(let i=0;i<N;i+=step){const dx=baseCenter[3*i]-cx,dy=baseCenter[3*i+1]-cy,dz=baseCenter[3*i+2]-cz;
   pw[s]=dx*w[0]+dy*w[1]+dz*w[2];ph[s]=dx*h[0]+dy*h[1]+dz*h[2];s++;}
  const pct=(arr,q)=>{const a=arr.slice(0,s).sort();return a[Math.min(s-1,Math.max(0,Math.floor(s*q)))];};
  const wlo=pct(pw,0.005),whi=pct(pw,0.995),hlo=pct(ph,0.005),hhi=pct(ph,0.995);
- halfW=(whi-wlo)/2;halfH=(hhi-hlo)/2;
- const mw=(whi+wlo)/2,mh=(hhi+hlo)/2;                  // recentre on the picture, not on the mean splat
+ // Where the camera looks. The extents midpoint centres the picture's BOUNDING BOX, which is not
+ // what the eye centres on when a work is two panels of unequal size: the bigger one drags the box
+ // toward it, and the pair reads as sitting off to one side. `centre` shifts the view onto what the
+ // work is actually about — for kunst_02, the midpoint of the two panels' own centres, which is
+ // 0.087 to the left of the box centre. Measured with the same support-function fit as `roll`.
+ let mw=(whi+wlo)/2,mh=(hhi+hlo)/2;
+ if(centre){mw+=centre[0];mh+=centre[1];}
+ // Half-extents are then measured ABOUT THAT CENTRE rather than as half the box, so an offset
+ // centre cannot push the far side of the picture outside the fit. With no offset the two are the
+ // same number by construction, which is why this changes nothing for a work that needs no shift.
+ halfW=Math.max(whi-mw,mw-wlo);halfH=Math.max(hhi-mh,mh-hlo);
  const target=[cx+w[0]*mw+h[0]*mh,cy+w[1]*mw+h[1]*mh,cz+w[2]*mw+h[2]*mh];
  planeN=nr.slice();planeP=target.slice();
  setUp(up);
@@ -496,6 +572,10 @@ function eggFire(seed){
 // first and the point under your finger last — and it works just as well from a wave that was only
 // half way out, so letting go early is not a special case.
 function eggRelease(){if(eggOn&&eggDir>=0){eggDir=-1;eggLast=performance.now();}}
+// Swapping works clears the wave outright instead of letting it retreat: eggTravel and eggW were
+// measured on the OLD cloud, so carrying them across would animate a front sized for a picture that
+// is no longer there. The canvas is already at zero opacity by then, so nothing is seen to cut.
+function eggReset(){eggDisarm();eggOn=false;eggDir=0;eggR=0;}
 function eggStep(){if(!eggDir)return;
   const now=performance.now(),dt=Math.min(50,now-eggLast);eggLast=now;   // clamped: a backgrounded tab must not jump the front
   eggR+=eggDir*eggTravel*dt/(eggDir>0?EGG_OUT_MS:EGG_BACK_MS);
@@ -536,32 +616,95 @@ function frame(){requestAnimationFrame(frame);
  gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,N);gl.activeTexture(gl.TEXTURE0);}
 
 // ===== load =====
-async function fetchBuf(url){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);
+// `gen` is the swap generation this fetch belongs to: a superseded download keeps draining (aborting
+// mid-stream would poison the HTTP cache for the reload that usually follows) but stops narrating,
+// so it cannot write progress for a work the visitor has already clicked away from.
+async function fetchBuf(url,gen){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);
  const total=+r.headers.get('content-length')||0;const rd=r.body.getReader();const chunks=[];let recv=0;
  for(;;){const{done,value}=await rd.read();if(done)break;chunks.push(value);recv+=value.length;
-  say(total?`Loading the painting… ${Math.round(recv/total*100)}%`:`Loading the painting… ${(recv/1e6).toFixed(1)} MB`);}
+  if(gen===swapGen)say(total?`Loading the painting… ${Math.round(recv/total*100)}%`:`Loading the painting… ${(recv/1e6).toFixed(1)} MB`);}
  const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}return out;}
 
-(async function open(){
+// The wall label, rebuilt per work. Text nodes rather than innerHTML: the titles carry an ampersand
+// and non-ASCII, and only the refs need markup at all.
+function renderLabel(s){
+  labelEl.textContent='';
+  const add=(tag,cls,txt)=>{const el=document.createElement(tag);el.className=cls;if(txt!=null)el.textContent=txt;labelEl.appendChild(el);return el;};
+  add('div','who',s.who);
+  const what=add('p','what');
+  s.what.forEach((line,i)=>{if(i)what.appendChild(document.createElement('br'));what.appendChild(document.createTextNode(line));});
+  add('p','med',s.med);
+  add('p','prov',s.prov);
+  if(s.refs&&s.refs.length){
+    const p=add('p','refs');
+    s.refs.forEach(([name,href],i)=>{
+      if(i)p.appendChild(document.createTextNode(' · '));
+      const a=document.createElement('a');a.href=href;a.target='_blank';a.rel='noopener';a.textContent=name;p.appendChild(a);});
+  }else if(s.note)add('p','refs',s.note);
+  canvas.setAttribute('aria-label',s.aria+' Drag, or use the arrow keys, to turn it; press 0 to reset the view.');
+}
+
+const gallery=document.getElementById('gallery');
+const SWAP_MS=380;          // paired with the .swap transition duration in the CSS above
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let current=-1,swapGen=0;
+
+async function loadScene(i,firstTime){
+  const s=SCENES[i],gen=++swapGen;
+  picks.forEach(b=>b.disabled=true);
+  if(!firstTime){
+    // Exit: fixed and short. Everything after this point happens behind a canvas at zero opacity,
+    // which is what lets the camera cut to the new work's framing without anyone seeing it.
+    eggReset();
+    gallery.classList.add('swap');
+    say('Hanging the other work…');
+    await sleep(SWAP_MS);
+    if(gen!==swapGen)return;
+  }
   try{
-    const scene=await (await fetch(SCENE_URL)).json();
+    const scene=await (await fetch(s.url)).json();
+    if(gen!==swapGen)return;
     const g=scene.gops&&scene.gops[0];
     if(!g)throw new Error('scene.json has no GOPs');
     // A static bundle is one GOP with no offset streams. Anything animated belongs in the SMV
     // viewer; this page has no timeline and would silently show frame 0 for ever.
     if(scene.num_frames>1||scene.gops.length>1||Object.keys(g.streams||{}).length)
       throw new Error('not a static bundle');
-    const rb=await fetchBuf(SCENE_URL.replace(/[^/]*$/,'')+g.reference_path);
+    const rb=await fetchBuf(s.url.replace(/[^/]*$/,'')+g.reference_path,gen);
+    if(gen!==swapGen)return;
     say('Unpacking…');
     // Same decode as compression/decoder.py: dequantise, VQ-SH lookup, DC -> rgba.
     const kf=buildKeyframe(parseNpz(rb),null,0);
     baseCenter=kf.center;baseScale=kf.scale;baseQuat=kf.quat;baseColor=kf.color;
     N=kf.numTotal;shIdx=kf.shIndex||null;uploadSH(kf.shCodebook||null);
+    roll=s.roll||0;centre=s.centre||null;
     buildTexture();uploadTexture();resize();frameScene();needSort=true;
+    if(gen!==swapGen)return;
+    current=i;
+    renderLabel(s);
+    picks.forEach((b,k)=>{b.setAttribute('aria-pressed',String(k===i));b.disabled=false;});
     statusEl.hidden=true;
     if(!started){started=true;requestAnimationFrame(frame);}
-  }catch(e){console.error(e);say('The painting could not be loaded: '+(e.message||e),true);}
-})();
+    // Entrance: fired by the load finishing, never by a timer that guessed how long it would take.
+    gallery.classList.remove('swap');
+  }catch(e){
+    console.error(e);
+    if(gen!==swapGen)return;
+    // A failed swap leaves the previous work hanging rather than an empty wall: the old cloud is
+    // still resident, so bringing the canvas back shows it, and only the message is new.
+    picks.forEach((b,k)=>{b.setAttribute('aria-pressed',String(k===current));b.disabled=false;});
+    if(N){gallery.classList.remove('swap');say('That one could not be loaded: '+(e.message||e),true);}
+    else say('The painting could not be loaded: '+(e.message||e),true);
+  }
+}
+
+const picks=SCENES.map((s,i)=>{
+  const b=document.createElement('button');
+  b.className='pick';b.type='button';b.textContent=s.pick;b.setAttribute('aria-pressed','false');
+  b.addEventListener('click',()=>{if(i!==current)loadScene(i,false);});
+  picksEl.appendChild(b);return b;});
+
+loadScene(0,true);
 </script>
 </body>
 </html>

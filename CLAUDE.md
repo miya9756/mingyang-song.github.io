@@ -59,7 +59,52 @@ Three things are load-bearing:
 `assets/misc_card.jpg`, applied by a `.card.art.misc` modifier that overrides the image and focal
 point only — the scrim, the hover drift and the text colours stay shared with the Pixiv card.
 
-## `misc/museum/` — one painting, hung on the page
+## `misc/museum/` — two works, hung one at a time
+
+**`SCENES` is the wall.** Everything that differs between works — the bundle URL, the picker name,
+the canvas's `aria-label` and the entire wall label — is one entry in that array at the top of the
+module, and the label is *built* from it (`renderLabel`) rather than written in the markup. Hanging
+a third work is an entry and nothing else. The two currently hung:
+
+| | `kunst` | `kunst_02` |
+| --- | --- | --- |
+| work | Bellotto, *Ruins of the Kreuzkirche*, 1765 | Esaias van de Velde, a **pair** of octagonal panels, 1622 & 1625 |
+| capture | 33.6 s video, 170 frames registered | video, 170 of 200 frames registered |
+| gaussians | 94,148 fitted → **86,277** pruned | **24,719** pruned |
+| bundle | 2.4 MB | 0.77 MB |
+| roll | none | +1.77° (panel centres) |
+| label source | the museum's catalogue records | **the gallery's wall label only** |
+
+**A third work was staged and then dropped.** `kunst_03` (Jan van Goyen, *Fischerboote beim Abrüsten
+am Abend*, 1655, 42,877 gaussians, 1.25 MB, from
+`/cluster/scratch/misong/4dre/static/kunst_03/bundle_pruned_packed`) was hung on 2026-08-12 and
+removed the same day: the capture itself is deficient, not the framing. The bundle is still in
+scratch, so re-staging is the usual two commands if it is ever re-captured — but do not put the old
+capture back.
+
+**`kunst_02` is a private loan, and that is why it carries no links.** Its plaque reads *Leihgabe
+Schweizer Privatsammlung, 2016*, and the Kunsthaus's own site explains what that is: the **Knecht
+Collection**, 45 Dutch and Flemish old masters that came to the museum in 2016 as a permanent loan
+from a private collection and hang in the Moser building. It does **not** name the individual works,
+and the museum's online catalogue lists what it *owns* — so this pair cannot be cited from a record,
+and its label is the gallery's wall text, marked as such. Do not upgrade that inference into a
+citation. (The same line was on the dropped `kunst_03` plaque, so expect it again on that wall.)
+
+**The labels are sourced differently and the page says so.** The Bellotto is in the Kunsthaus
+online catalogue, so its label is reconciled against it and cites it. The van de Velde pair is
+*Leihgabe Schweizer Privatsammlung, 2016* — a private loan, which is **not** in the museum's online
+collection (that lists owned works) and **not** in Google Arts & Culture either; both were searched
+on 2026-08-12 and neither has it. So that entry carries `refs:[]` and a `note` reading *Transcribed
+from the gallery label*, which `renderLabel` shows in place of the links. **Do not invent an
+inventory number for it** — a web search will offer a plausible-looking `D.2016-…` accession that no
+primary source confirms.
+
+Two smaller things about that label: the German titles' first words (*Dorf*szene, *Landsch*aft) are
+**reconstructed** — every capture frame cuts the plaque's left edge — from the visible fragments plus
+the English lines beside them, and the reading is consistent but not photographed. And the pair is
+**public domain regardless of the loan**: van de Velde died in 1630, and owning a panel is not owning
+a copyright in it. What a loan can carry is the gallery's *photography policy*, which is house rules
+between the visitor and the museum, not a licensing question the page can settle.
 
 A **static** Gaussian-splat capture of a framed Bellotto in a gallery, shown and nothing else.
 Provenance, since none of it is stated on the page any more (see the *keep it a card* note below):
@@ -91,6 +136,53 @@ offset streams, so nothing on this page touches wasm.
   `-z` side of the wall. **`eig3` was checked against numpy's SVD on the shipped cloud — axes agree
   to 0.0000°.** Re-check it the same way if it is touched; a wrong basis opens the page on the
   painting's edge and nothing else would catch it.
+- **`roll` is the one thing the principal axes cannot know, and it is measured, not eyeballed.**
+  PCA levels the point *cloud*; for a pair of panels the second axis is set by how the mass happens
+  to sit, so it can disagree with the line through the panels' own centres — on `kunst_02` by
+  **1.77°**, small enough to read as a mistake and large enough to see. The `SCENES` entry carries
+  `roll` in degrees and `frameScene()` rotates the up axis about the normal (Rodrigues) before
+  anything else is derived from it, so the extents and the fit follow the rolled frame rather than
+  measuring a box the view is not in. **Positive is clockwise on screen** — `nr` points at the
+  viewer, so turning the camera's up anticlockwise turns the scene the other way.
+  **How the number is obtained depends on what the work is, and there are two recipes.**
+
+  *A single rectangular frame — the recipe to use for the next one, validated on the dropped
+  `kunst_03`:* measure the frame's own edges, by sweeping the rotation and taking the angle whose
+  robust (0.5/99.5) bounding box has the **smallest area** — a rectangle's own axes are the ones
+  that bound it tightest. A second, independent estimator agreed to the sample step there: the angle
+  maximising the share of the outline lying within a thin band of the box edges. At that angle the
+  box was **13.2 % tighter** than at the PCA angle, i.e. PCA was 7.8° out — deep carved mouldings
+  put a frame's mass nowhere near its silhouette, which is exactly when PCA fails. The minimum was
+  sharp to about ±0.5°, and applying the roll returned a residual of +0.000° (against −15.650° with
+  the sign flipped). A single rectangle needs no `centre`: once level, the extents midpoint and the
+  fitted rectangle's centre agreed to 0.0001.
+
+  *A pair of panels (`kunst_02`, +1.77°):* there is no single rectangle to fit, so use the line
+  through the two panels' centres. Split the cloud at the widest gap along the wide axis, then fit
+  each panel's centre by its **support function** (the midpoint of the projection onto each of 36
+  directions, least-squares solved). That is content-independent,
+  which matters — a brightness centroid is pulled by whichever painting has more sky, and the plain
+  centroid is pulled by whichever has more frame; on this pair those two estimators give +0.3° and
+  −0.05° against the true 1.77°. **Verified by applying the page's own roll block and re-measuring:**
+  +1.77° leaves a residual of 0.013° (0.05 px), 0° leaves 1.774° (7.6 px), and the wrong sign
+  doubles it to 3.54°. At `roll:0` the new derivation reproduces the old half-extents to 4e-16 on
+  both works, so adding this changed nothing about the Bellotto.
+- **`centre` is its counterpart for where the camera LOOKS**, and it exists for the same reason: the
+  extents midpoint centres the picture's bounding *box*, which is not what the eye centres on when a
+  work is two panels of unequal size. `kunst_02`'s right panel is the larger (outline radius 1.51
+  against 1.30), so the box centre sits **0.087 to its side** of the midpoint between the two
+  panels' own centres; `centre:[-0.087,0]` shifts the view onto that midpoint. The vertical
+  component is 0.000 — `roll` had already levelled it. Same support-function measurement, stable to
+  ±0.003 over 0.5–2% thresholds. **Verified end to end**: with both applied, the midpoint of the two
+  panel centres lands on the canvas centre to **0.0 px**, against (−6.8, +3.5) px with neither.
+  Two things about the implementation:
+  - **The half-extents are measured about the view centre, not as half the box**
+    (`max(hi-m, m-lo)`), so an offset centre can never push the far side of the picture outside the
+    fit. With no offset the two expressions are equal by construction, which is why this is inert on
+    a work that needs no shift.
+  - That does cost a little framing: `kunst_02`'s halfW goes 2.893 → 2.980 and the camera stands
+    back 4.95 → 5.10, i.e. the pair arrives about 3 % smaller. That is the correct trade — it is
+    what guarantees nothing clips — and not a number to tune out.
 - **The turn is clamped to ±45° on both axes** about that opening view (`LIM`), and zoom
   (0.42–2.4× fit) and pan (`panMax`) are bounded too. The capture is a shallow arc in front of one
   wall: a free turntable spends most of its range showing the back of a slab no photograph ever
@@ -158,6 +250,30 @@ offset streams, so nothing on this page touches wasm.
   - **The shaders are NOT glslangValidator-checked** — there was no network on the box, as with
     `knots.html`. A compile error here throws at module top level and leaves the page sitting on
     *Loading the painting…* for ever, so run the validator over both if you touch them.
+- **The swap is three phases, not one animation, because the wait is a real download.** Changing
+  works fetches and decodes 0.8–2.4 MB, so a single timed transition would either end on an empty
+  wall or sit there after the work was ready. `loadScene()` is: a **fixed exit** (`SWAP_MS`, paired
+  with the `.swap` transition in the CSS — change one, change the other), an **indeterminate hold**
+  during which the status line narrates the download, and an **entrance fired by the load finishing**.
+  Only `opacity`/`transform` are animated, both compositor-only, so the transition costs the
+  renderer nothing. Four things fall out of it and are load-bearing:
+  - **The camera cut happens at zero opacity.** `frameScene()` re-frames on the new work's own
+    principal axes, which is a hard jump; it is invisible because it runs while the canvas is
+    faded out. Never move it after the fade-in.
+  - **`swapGen` guards every await.** Clicking the other work mid-load must not let the abandoned
+    one write into the page. A superseded fetch is left to drain rather than aborted (aborting
+    mid-stream poisons the HTTP cache for the reload that usually follows) but stops narrating —
+    hence `fetchBuf(url, gen)`.
+  - **A failed swap leaves the previous work hanging.** The old cloud is still resident, so the
+    catch removes `.swap` and shows the message over it, rather than emptying the wall.
+  - **`eggReset()` runs at the swap, not `eggRelease()`.** `eggTravel`/`eggW` were measured on the
+    old cloud; letting the wave retreat across the new one would animate a front sized for a
+    picture that is no longer there.
+- **The easter egg is deliberately NOT the swap transition.** Dissolving the old work into its
+  gaussians and assembling the new one out of them is the obvious and prettiest thing to do here,
+  and it would spend the egg: a discovery that fires on every click stops being one. If that trade
+  is ever judged worth it, the swap is the only place to change — hold the dispersed state through
+  the load instead of fading, i.e. `eggFire()` on exit and let the return pass play on entry.
 - **Keep it a card, not a paper.** The page had a paragraph under the picture stating the capture
   and compression numbers; it was deleted on purpose — this is a shelf item, and a methods note
   turns it into a project page. So the numbers live in this file, and the page carries only the
@@ -184,13 +300,41 @@ offset streams, so nothing on this page touches wasm.
   the footer's reserved-rights line covers the capture, the code and the text, and the *Built with*
   block (fflate, antimatter15's `splat`, EWA splatting, 3DGS) is load-bearing beside it.
 
-Re-stage the scene with the demo's builder, then copy it in — there is no `scenes.json` here, the
-page names its one scene in `SCENE_URL`:
+Re-stage a scene with the demo's builder, then copy it in — there is no `scenes.json` here, the page
+names its scenes in the `SCENES` table:
 
 ```bash
+# NAME=PATH pins the staged folder name, which matters when re-staging a work from a differently
+# named bundle: kunst_02 is on its SECOND prune (bundle_pruned_02_packed, floaters off the picture
+# plane removed), and without the prefix the builder would slug a new folder from the bundle dir.
 conda run -n 4dre python ~/4d-relight/web/demo/build_demo.py \
-  --bundle /cluster/scratch/misong/4dre/static/kunst/bundle_pruned_packed
-# then copy web/demo/scenes/kunst/ -> misc/museum/scenes/kunst/
+  --bundle kunst_02=/cluster/scratch/misong/4dre/static/kunst_02/bundle_pruned_02_packed
+# then copy web/demo/scenes/<name>/ -> misc/museum/scenes/<name>/ and add a SCENES entry
+```
+
+**Re-pruning a work means re-checking its framing**, since the opening view is derived from the
+0.5/99.5-percentile extents and pruning moves them. For this re-prune the fit came out at 4.95
+against the previous 4.96 (half-extents 2.890 × 1.464, was 2.898 × 1.547), i.e. no visible change —
+but a heavier prune could shift it enough to be worth a look.
+
+**A new work must be checked against the two sign conventions before it is hung**, since the opening
+view is derived rather than embedded: world up is `-y`, and the camera stood on the `-z` side. The
+second is the one that can fail — verify it by dumping the dataset's camera centres and comparing
+them with the cloud's centroid along the normal (for `kunst_02`: cameras at z ∈ [−4.4, 1.4] against
+panels at z = 5.14 ✓). Get the sign wrong and the page opens on the back of the panels.
+
+**There is no `node` on this box, so the module is syntax-checked with `esprima`** — a top-level
+syntax error throws before anything renders and leaves the page on *Loading the painting…* for ever,
+which no other check here would catch:
+
+```bash
+pip install --target /tmp/pylibs esprima
+PYTHONPATH=/tmp/pylibs python3 - <<'PY'
+import re, esprima
+src = open('misc/museum/index.html', encoding='utf-8').read()
+code = re.search(r'<script type="module">(.*?)</script>', src, re.S).group(1)
+esprima.parseModule(code); print('module ok')
+PY
 ```
 
 Do **not** pass `--scene_config`: embedding a held-out camera would override nothing (the page
