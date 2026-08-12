@@ -456,7 +456,8 @@ canvas.addEventListener('keydown',e=>{const A=0.06,K={ArrowLeft:[-A,0],ArrowRigh
 const EGG_HOLD_MS=2000;    // how long the press has to last
 const EGG_MOVE_TOL=6;      // CSS px of slop while arming; a resting finger is never actually still
 const EGG_OUT_MS=1300;     // the front's travel time across the whole cloud, and
-const EGG_BACK_MS=900;     // back again, a little quicker — a release should feel like a release
+const EGG_BACK_MS=2500;    // back again, at three quarters of that speed — the picture reassembling
+                           // is the part worth watching, so it is the slower half of the gesture
 const EGG_FRONT=0.22;      // thickness of the front, as a fraction of the picture's half-diagonal
 const EGG_SQUEEZE=0.45;    // what the radius is squeezed to. Below ~0.3 the splats go sub-pixel and
                            // sparkle instead of reading as ellipsoids; at 1.0 only the edge hardens.
