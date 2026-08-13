@@ -32,6 +32,14 @@
        compartment below. One step warmer and darker than --line so the boards read as boards
        rather than as more hairlines; see the .shelf block for what is drawn with them. */
     --board-top:#e2dccd; --board-face:#c8c0ab; --board-cast:rgba(88,74,48,.14);
+    /* The books standing on the board (see the .books block). Sampled off the pile in the
+       top-right corner of assets/grain_example.jpg — the plums, wines and slate-violets are what
+       that painting's covers actually are, which is why they land so close to this page's --accent
+       and need no reconciling. Kept as tokens for the same reason the boards are: the drawing is
+       in the document, so retinting the shelf must not mean editing shapes. */
+    --bk-plum:#6f4a5e; --bk-wine:#7d5560; --bk-slate:#4a4453; --bk-ink:#3b3442; --bk-rose:#b49aa0;
+    --bk-page:#efe6d5; --bk-page-lit:#f2ebdb; --bk-cloth:#e6d9c0;
+    --bk-gold:#c9a06a; --bk-line:#2f2a36;
   }
   *{box-sizing:border-box}
   /* background on html too — only html's paints the overscroll area Safari rubber-bands into */
@@ -96,6 +104,45 @@
           color:var(--ink);-webkit-text-fill-color:var(--ink);
           transition:color .32s ease,-webkit-text-fill-color .32s ease}
   .mdesc{display:block;max-width:52ch;margin:.7em 0 0;font-size:14px;color:var(--muted)}
+  /* SOMETHING ON THE SHELF. One compartment holding one line of type read as a diagram of a shelf
+     rather than as a shelf, so the empty right-hand end gets the pile of books from the top-right
+     corner of assets/grain_example.jpg — Mingyang's own illustration, already in this repo as the
+     Grain playground's sample image. A stack of flat volumes, a row of spines, and one leaning
+     against the short one at the end.
+
+     DRAWN, NOT CROPPED, and that is the decision worth keeping. Lifting the corner out of the
+     painting is the obvious route and is wrong twice over: the case beside it is vector, takes its
+     colours from --board-*, and is crisp at any zoom, so a raster would be the one part of the
+     shelf that softens on a retina screen and the one part that ignores the palette; and that
+     corner is densely rendered and busy, which next to a case drawn in five hairlines reads as two
+     illustrations arguing rather than as one page. So the books are reduced exactly as the boards
+     are — flat colour, one hairline of ink, a single light-to-dark sweep for roundness, no texture
+     and no bevel. What is borrowed from the painting is the palette and the arrangement, not pixels.
+
+     Inline SVG rather than a nest of divs, because the leaning volume is a rotation about its own
+     foot landing on a neighbour's top corner: geometry, not layout. Being inline, it costs no
+     request and reads the same custom properties as everything else here.
+
+     THE LEAN IS SOLVED, NOT EYEBALLED. Its foot is at x=155 because its left edge has to pass
+     through (140,41), the top-right corner of the short book it rests on: x = 140 + 55·tan17°.
+     Change the angle, or that book's height, and the foot moves with it — the first draft did not,
+     and the volume hung in mid-air a pixel clear of everything.
+
+     THE viewBox's BOTTOM EDGE IS THE FLOOR (y=96 of 96), so `bottom:3px` — the board's own
+     thickness — stands the books on the board's top surface with no per-size fudge factor. The
+     contact shadow is an ellipse centred on that line, so the viewBox clips its lower half away;
+     the board sits immediately below and is darker, so the cut cannot be seen.
+
+     Nothing here moves on hover, so there is nothing to add to the reduced-motion block. The
+     picture appearing in the title is the affordance; the shelf is furniture, and furniture that
+     answers the cursor reads as a control. Same reason it is aria-hidden with pointer-events:none —
+     it is not the link, it says nothing a screen reader needs, and it must not become a tab stop. */
+  .books{position:absolute;right:-14px;bottom:3px;width:180px;height:101px;pointer-events:none}
+  /* Checked against .mdesc rather than guessed: the tall spines begin 80/171 of the way across the
+     vignette, which at every width above the cut-off clears both the title's last glyph and the
+     description's one line. Below it the words would run under the pile, and the words win. */
+  @media(max-width:700px){.books{right:-10px;width:132px;height:74px}}
+  @media(max-width:660px){.books{display:none}}
   .mgo{display:block;margin-top:.8em;font-size:13px;font-weight:600;color:var(--accent)}
   .mgo .arrow{display:inline-block;transition:transform .18s}
   .marquee:hover .mgo .arrow,.marquee:focus-visible .mgo .arrow{transform:translateX(5px)}
@@ -142,6 +189,87 @@
       <h3 class="mtitle">Digital Museum</h3>
       <span class="mdesc">Paintings filmed in a gallery, fitted as 3D Gaussians.</span>
       <span class="mgo">Walk in <span class="arrow" aria-hidden="true">→</span></span>
+      <!-- The books on this compartment's board. Decorative: aria-hidden, focusable="false" and
+           pointer-events:none in the CSS, so it is invisible to the accessibility tree and to the
+           pointer alike. Colours are the --bk-* tokens; the three gradients are the only defs, all
+           in objectBoundingBox units so one definition shades every volume whatever its size.
+           A second shelf item should get its OWN arrangement rather than this one repeated — a
+           shelf whose every compartment holds the same pile is a wallpaper, not a shelf. -->
+      <svg class="books" viewBox="0 0 171 96" aria-hidden="true" focusable="false">
+        <defs>
+          <!-- lit on the left, shaded on the right: a spine's roundness in one sweep -->
+          <linearGradient id="bkV" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#fff" stop-opacity=".20"/><stop offset=".34" stop-color="#fff" stop-opacity="0"/>
+            <stop offset=".74" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".18"/>
+          </linearGradient>
+          <!-- the same sweep turned through 90°, for the volumes lying down -->
+          <linearGradient id="bkH" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/>
+            <stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/>
+          </linearGradient>
+          <!-- warm, like --board-cast: this is light kept off a board, not a grey drop shadow -->
+          <radialGradient id="bkS">
+            <stop offset="0" stop-color="#584a30" stop-opacity=".30"/><stop offset="1" stop-color="#584a30" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g stroke="var(--bk-line,#2f2a36)" stroke-opacity=".5" stroke-width=".8">
+          <ellipse cx="85" cy="96" rx="84" ry="4.5" fill="url(#bkS)" stroke="none"/>
+          <!-- the flat pile: spine left, right, left, so it reads as a pile and not as a ream -->
+          <g transform="rotate(-1.5 37 89.5)">
+            <rect x="4" y="83" width="66" height="13" rx="1.6" fill="var(--bk-slate,#4a4453)"/>
+            <rect x="9.5" y="85.8" width="59" height="8.4" rx=".8" fill="var(--bk-page,#efe6d5)"/>
+            <rect x="4" y="83" width="66" height="13" rx="1.6" fill="url(#bkH)" stroke="none"/>
+          </g>
+          <g transform="rotate(2.2 38 77)">
+            <rect x="9" y="71" width="58" height="12" rx="1.6" fill="var(--bk-wine,#7d5560)"/>
+            <rect x="10.5" y="73.4" width="51.5" height="8" rx=".8" fill="var(--bk-page-lit,#f2ebdb)"/>
+            <rect x="9" y="71" width="58" height="12" rx="1.6" fill="url(#bkH)" stroke="none"/>
+          </g>
+          <g transform="rotate(-3.2 40 65.5)">
+            <rect x="16" y="60" width="48" height="11" rx="1.5" fill="var(--bk-plum,#6f4a5e)"/>
+            <rect x="20.5" y="61.4" width="42" height="8.2" rx=".8" fill="var(--bk-page,#efe6d5)"/>
+            <rect x="21" y="63.4" width="41" height="1.2" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
+            <rect x="16" y="60" width="48" height="11" rx="1.5" fill="url(#bkH)" stroke="none"/>
+          </g>
+          <!-- the upright row -->
+          <g>
+            <rect x="76" y="30" width="14" height="66" rx="1.4" fill="var(--bk-plum,#6f4a5e)"/>
+            <rect x="78" y="38" width="10" height="1.4" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
+            <rect x="78" y="48" width="10" height="13" rx=".6" fill="var(--bk-page,#efe6d5)" stroke="none"/>
+            <rect x="78" y="85" width="10" height="1.4" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
+            <rect x="76" y="30" width="14" height="66" rx="1.4" fill="url(#bkV)" stroke="none"/>
+          </g>
+          <g>
+            <rect x="91" y="21" width="10" height="75" rx="1.2" fill="var(--bk-cloth,#e6d9c0)"/>
+            <rect x="91" y="21" width="10" height="4.5" rx="1.2" fill="var(--bk-plum,#6f4a5e)" stroke="none"/>
+            <rect x="92.5" y="88" width="7" height="1.3" fill="var(--bk-plum,#6f4a5e)" stroke="none"/>
+            <rect x="91" y="21" width="10" height="75" rx="1.2" fill="url(#bkV)" stroke="none"/>
+          </g>
+          <g>
+            <rect x="102" y="33" width="16" height="63" rx="1.4" fill="var(--bk-slate,#4a4453)"/>
+            <rect x="104.5" y="42" width="11" height="1.3" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
+            <rect x="104.5" y="86" width="11" height="1.3" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
+            <rect x="102" y="33" width="16" height="63" rx="1.4" fill="url(#bkV)" stroke="none"/>
+          </g>
+          <g transform="rotate(2.6 124.5 96)">
+            <rect x="119" y="25" width="11" height="71" rx="1.3" fill="var(--bk-wine,#7d5560)"/>
+            <rect x="121" y="45" width="7" height="16" rx=".6" fill="var(--bk-page-lit,#f2ebdb)" stroke="none"/>
+            <rect x="119" y="25" width="11" height="71" rx="1.3" fill="url(#bkV)" stroke="none"/>
+          </g>
+          <!-- the short one, and the reason the leaner leans where it does -->
+          <g>
+            <rect x="131" y="41" width="9" height="55" rx="1.2" fill="var(--bk-rose,#b49aa0)"/>
+            <rect x="131" y="41" width="9" height="55" rx="1.2" fill="url(#bkV)" stroke="none"/>
+          </g>
+          <!-- the leaner: foot at 155 = 140 + 55·tan17°, so its left edge meets (140,41) above -->
+          <g transform="rotate(-17 155 96)">
+            <rect x="155" y="30" width="12" height="66" rx="1.3" fill="var(--bk-ink,#3b3442)"/>
+            <rect x="156.8" y="39" width="8.4" height="1.3" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
+            <rect x="156.8" y="84" width="8.4" height="1.3" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
+            <rect x="155" y="30" width="12" height="66" rx="1.3" fill="url(#bkV)" stroke="none"/>
+          </g>
+        </g>
+      </svg>
     </a>
   </div>
 </main>

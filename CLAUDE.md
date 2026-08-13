@@ -34,6 +34,37 @@ off `.shelf`'s padding box) and the item boards (`-26px` off `.marquee`'s, which
 Every item brings its own board, so the case grows a compartment per entry with no extra markup.
 Kept deliberately suggested: no wood texture, no bevel, no shadow under the case itself.
 
+**There are books on the board, and they are DRAWN rather than cropped out of the painting.** One
+compartment holding one line of type read as a diagram of a shelf, so the empty right-hand end
+carries the pile from the top-right corner of `assets/grain_example.jpg` — Mingyang's own
+illustration, already in the repo as the Grain playground's sample image. Cropping that corner is
+the obvious route and is wrong twice over: the case beside it is vector, palette-driven and crisp at
+any zoom, so a raster would be the one part of the shelf that softens on a retina screen and the one
+part that ignores `--board-*`; and the painting's corner is densely rendered, which next to a case
+drawn in five hairlines reads as two illustrations arguing. So the books are reduced exactly as the
+boards are — flat colour, one hairline of ink, a single light-to-dark sweep for roundness — and what
+is borrowed is the palette and the arrangement, not pixels. Ten `--bk-*` tokens carry it, sampled
+off the pile itself, which is why they land so close to this page's plum `--accent` with no
+reconciling. Inline SVG rather than divs because the leaning volume is a rotation about its own foot,
+which is geometry rather than layout. Three things are load-bearing:
+
+- **The lean is solved, not eyeballed.** The leaner's foot is at `x=155` because its left edge has to
+  pass through `(140,41)`, the top-right corner of the short book it rests on: `140 + 55·tan17°`.
+  Change the angle or that book's height and the foot moves with it — the first draft did not, and
+  the volume hung a pixel clear of everything, which reads as a bug rather than as a lean.
+- **The viewBox's bottom edge IS the floor** (`y=96` of 96), so `bottom:3px` — the board's own
+  thickness — stands the books on the board's top surface with no per-size fudge factor. The contact
+  shadow is an ellipse centred on that line and the viewBox clips its lower half; the board sits
+  immediately below and is darker, so the cut cannot be seen.
+- **Nothing moves on hover, so there is nothing to add to the reduced-motion block.** The picture
+  appearing in the title is the affordance; the shelf is furniture, and furniture that answers the
+  cursor reads as a control. Same reason it is `aria-hidden` + `pointer-events:none` inside the `<a>`.
+
+The vignette is hidden below 660px, where the description would run under it, and the breakpoints
+were checked against `.mdesc`'s rendered width rather than guessed. **A second shelf item should get
+its own arrangement rather than this one repeated** — a shelf whose every compartment holds the same
+pile is a wallpaper, not a shelf.
+
 **A shelf item is TYPE, not a tile — do not give it back the card chrome.** It was a bordered box
 with an `<h3>`, a line of prose and an arrow, which is precisely the landing page's `.card`, and
 repeating it here made the shelf read as a fourth section of published work. A `.marquee` has no
