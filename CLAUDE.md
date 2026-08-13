@@ -137,7 +137,8 @@ the English lines beside them, and the reading is consistent but not photographe
 a copyright in it. What a loan can carry is the gallery's *photography policy*, which is house rules
 between the visitor and the museum, not a licensing question the page can settle.
 
-A **static** Gaussian-splat capture of a framed Bellotto in a gallery, shown and nothing else.
+A **static** Gaussian-splat capture of a framed Bellotto in a gallery, hung and turnable — plus one
+thing it can do that a photograph cannot, which is be relit (see the bouncing-light entry below).
 Provenance, since none of it is stated on the page any more (see the *keep it a card* note below):
 a **33.6 s handheld video** (`/cluster/scratch/misong/datasets/my_static/kunst.mp4`) → 200 frames
 sampled, blurriest 15 % dropped, **170 registered** by COLMAP (all of them; `preprocess_meta.json`
@@ -278,9 +279,11 @@ offset streams, so nothing on this page touches wasm.
     there for right-drag. Same lesson, same four declarations, as the SMV viewer's movement pad.
   - Holding **space** does the same thing from the keyboard, seeded at the centre of what is on
     screen since there is no press point to unproject.
-  - **The shaders are NOT glslangValidator-checked** — there was no network on the box, as with
-    `knots.html`. A compile error here throws at module top level and leaves the page sitting on
-    *Loading the painting…* for ever, so run the validator over both if you touch them.
+  - **The shaders ARE glslangValidator-checked** (see the bouncing-light entry above; this said
+    otherwise while the box had no network). A compile error here throws at module top level and
+    leaves the page sitting on *Loading the painting…* for ever, so run the validator over all four
+    if you touch them — the Khronos release tarball is a `curl` away:
+    `curl -sL github.com/KhronosGroup/glslang/releases/download/16.5.0/glslang-16.5.0-linux-x86_64-release.tar.gz | tar xz`.
 - **The swap is three phases, not one animation, because the wait is a real download.** Changing
   works fetches and decodes 0.8–2.4 MB, so a single timed transition would either end on an empty
   wall or sit there after the work was ready. `loadScene()` is: a **fixed exit** (`SWAP_MS`, paired
@@ -300,6 +303,60 @@ offset streams, so nothing on this page touches wasm.
   - **`eggReset()` runs at the swap, not `eggRelease()`.** `eggTravel`/`eggW` were measured on the
     old cloud; letting the wave retreat across the new one would animate a front sized for a
     picture that is no longer there.
+- **THE LIGHT BOUNCES, AND THAT IS THE ONE THING ON THIS PAGE THAT IS A GAME.** *Turn off the
+  light* takes the whole room dark and leaves one point light travelling across the picture,
+  relighting it in real time — brick-breaker with nothing to break. Relighting needs **nothing new
+  on disk**: the normal is the minor axis of each gaussian's own covariance, i.e. quat + scale,
+  both of which the keyframe already carries, so `uploadNormals()` derives it on the CPU at load and
+  the two shipped scenes work unchanged. `relight()` in the vertex shader is `web/demo`'s verbatim
+  **minus its shadow cube map** — that pass is six full re-renders of the cloud, and the demo gets
+  away with it only because its light re-renders when it *moves*; here the light moves every frame.
+  What is load-bearing:
+  - **The ball lives on the PICTURE PLANE, not on the canvas.** It is a 2-D point in
+    `(planeW, planeH)` — the same axes `frameScene()` measures the extents along — bouncing inside
+    `|x| <= halfW, |y| <= halfH`, which is exactly the picture's own edges. Bouncing in screen space
+    would need reprojecting every frame and would slide off the painting the moment anyone turned
+    it. It is also free for the renderer: the splats do not move, so no re-sort and no texture
+    rewrite — the light is four uniforms.
+  - **The constants were measured, not chosen, and the falloff is the one that matters.** The
+    diffuse term uses each gaussian's minor axis as its normal, and those axes are *not* square to
+    the canvas (`|mean unit normal|` = 0.50 / 0.40), so the risk was per-splat sparkle rather than a
+    pool of light. Binned over the picture and opacity-weighted, the across-the-picture variation
+    beats the splat-to-splat variation by **3.3× at `LAMP_FALL` 0.30** and by only **1.9× at twice
+    it** — the tight pool is not a look, it is what makes it read as a light. At the shipped
+    settings (intensity 2.2, ambient 0.10) the peak is 1.55 / 1.97 × albedo with ~1 % of splats
+    clipped, the 1st-percentile floor is 0.19 on both, and moving the light from one side to the
+    other *anti*-correlates the cell brightnesses (−0.57 / −0.70), i.e. the pool genuinely travels.
+    Re-measure with the same offline script if a work is re-pruned.
+  - **The stand-off is derived, because a picture is not flat.** `planeFront` is the 99.5-percentile
+    extent along the normal (the frame's moulding), and the light stands at
+    `max(0.28·halfH, 1.6·planeFront)`. On the Bellotto the fraction wins (0.770 vs 0.454) and the
+    clause is inert; on the van de Velde pair the nominal 0.410 would sit **behind** its frontmost
+    splat at +0.417, so it lifts to 0.469 and clears it. Zero splats end in front of the light on
+    either work — verified. **The sign was checked too**: the opening eye is +1.0000 along `+nr`,
+    so `+planeN·stand` is the viewer's side. Get that backwards and the light lights the wall.
+  - **The dimmer is a ramp, not a switch**, paired with the 0.5 s colour transition on `html`/`body`
+    in the CSS — change one, change the other. `lamp.mix` interpolates ambient from **1** (the
+    captured appearance, untouched, so "off" is bit-identical to before this existed) down to
+    `LAMP_AMB`, and the light up from nothing. `u_specK` is deliberately **not** ramped: the
+    highlight is already multiplied by `u_intensity` inside `relight()`, and ramping both fades the
+    gloss in as mix².
+  - **The dark theme is on `<html>`, not `<body>`** — `html{background:var(--bg)}` resolves the
+    variable on that element, so a class on `body` leaves the page canvas behind everything warm.
+    The script switches `<meta name="theme-color">` to match, and `BG_LIT`/`BG_DARK` are a pair with
+    the two `--bg` tokens. The accent lightens to a plum at 8.7:1 on the dark ground; the light one
+    sits at 2.4:1 there.
+  - **Under `prefers-reduced-motion` the light does not travel** — it is placed and it stays, and
+    clicking is how you move it. The room still goes dark and the picture is still relit; what is
+    removed is the object that moves for ever. The dimmer cuts rather than ramping, matching how the
+    CSS transitions are switched off for the same reader.
+  - **Clicking serves it**, and the click/drag test is `_far` measured from where the press started
+    (not summed per event, and `Infinity` the moment a second finger lands). It shares `planePick()`
+    with the easter egg — the function is named for the plane rather than for either caller, because
+    both are asking the same question of the same geometry.
+  - **The shaders ARE glslangValidator-checked now** (16.5.0): all four — the splat pair and the
+    bulb pair — compile clean as `#version 300 es` and both pairs link, and a deliberate typo was
+    confirmed to fail. The note below saying otherwise applied when there was no network on the box.
 - **The easter egg is deliberately NOT the swap transition.** Dissolving the old work into its
   gaussians and assembling the new one out of them is the obvious and prettiest thing to do here,
   and it would spend the egg: a discovery that fires on every click stops being one. If that trade
@@ -312,7 +369,11 @@ offset streams, so nothing on this page touches wasm.
 - **Deliberately not ported from the demo:** the dark viewport, the loader ring and timer, the
   fullscreen button, the fps line, and the render-settings bar (specular SH degree, hard ellipsoids,
   radius). SH is simply always full `l3` — `u_shBands` and the hard-ellipsoid branch are gone from
-  the shaders rather than left unreachable. This page is a wall, not an instrument.
+  the shaders rather than left unreachable. This page is a wall, not an instrument. The demo's
+  **relight controls** are not ported either, for the same reason: the whole `#lightbar` (intensity,
+  colour, ambient, gloss, shadows, show-bulb, drag-aims-light) is one button here, and the values
+  behind it are constants at the top of the module. **Do not grow it back into a panel** — if a
+  number is wrong, measure it and change the constant.
 - **The wall label comes from the catalogue records, not from the plaque.** It was first transcribed
   off the gallery plaque visible in the capture frames, and that version was wrong in the ways a
   half-legible photograph will be: the German title as the primary one, no date, no dimensions, no
