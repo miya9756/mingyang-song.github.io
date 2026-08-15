@@ -34,36 +34,67 @@ off `.shelf`'s padding box) and the item boards (`-26px` off `.marquee`'s, which
 Every item brings its own board, so the case grows a compartment per entry with no extra markup.
 Kept deliberately suggested: no wood texture, no bevel, no shadow under the case itself.
 
-**There are books on the board, and they are DRAWN rather than cropped out of the painting.** One
-compartment holding one line of type read as a diagram of a shelf, so the empty right-hand end
-carries the pile from the top-right corner of `assets/grain_example.jpg` — Mingyang's own
-illustration, already in the repo as the Grain playground's sample image. Cropping that corner is
-the obvious route and is wrong twice over: the case beside it is vector, palette-driven and crisp at
-any zoom, so a raster would be the one part of the shelf that softens on a retina screen and the one
-part that ignores `--board-*`; and the painting's corner is densely rendered, which next to a case
-drawn in five hairlines reads as two illustrations arguing. So the books are reduced exactly as the
-boards are — flat colour, one hairline of ink, a single light-to-dark sweep for roundness — and what
-is borrowed is the palette and the arrangement, not pixels. Ten `--bk-*` tokens carry it, sampled
-off the pile itself, which is why they land so close to this page's plum `--accent` with no
-reconciling. Inline SVG rather than divs because the leaning volume is a rotation about its own foot,
-which is geometry rather than layout. Three things are load-bearing:
+**THERE IS A STILL LIFE STANDING ON THE BOARD, and it is Mingyang's own drawing.**
+`assets/misc_shelf.png` — books, a pourover, a cup, and a tablecloth over the table's edge. One
+compartment holding one line of type read as a diagram of a shelf; an object standing in it is what
+makes the case furniture. It replaced a vector pile drawn in inline SVG (plum/wine/slate spines,
+sampled off `assets/grain_example.jpg`, with a leaner whose foot was solved against its neighbour's
+top corner). That drawing and its ten `--bk-*` tokens are **gone, deliberately** — an illustration
+by the site's own author beats a pastiche of one, and it is not something to reinstate.
 
-- **The lean is solved, not eyeballed.** The leaner's foot is at `x=155` because its left edge has to
-  pass through `(140,41)`, the top-right corner of the short book it rests on: `140 + 55·tan17°`.
-  Change the angle or that book's height and the foot moves with it — the first draft did not, and
-  the volume hung a pixel clear of everything, which reads as a bug rather than as a lean.
-- **The viewBox's bottom edge IS the floor** (`y=96` of 96), so `bottom:3px` — the board's own
-  thickness — stands the books on the board's top surface with no per-size fudge factor. The contact
-  shadow is an ellipse centred on that line and the viewBox clips its lower half; the board sits
-  immediately below and is darker, so the cut cannot be seen.
-- **Nothing moves on hover, so there is nothing to add to the reduced-motion block.** The picture
-  appearing in the title is the affordance; the shelf is furniture, and furniture that answers the
-  cursor reads as a control. Same reason it is `aria-hidden` + `pointer-events:none` inside the `<a>`.
+- **THE ILLUSTRATION OVERLAPS THE TITLE ON PURPOSE.** At the widest layout the last `m` of *Museum*
+  passes behind the tablecloth and the word still reads. Two flat things that merely abut read as
+  two panels; one in front of the other reads as depth, which is cheaper and truer than any shadow.
+  The cost is real and is bounded on purpose: this is the link's own label, so the overlap is kept
+  to the tail of the last word, never a whole one, and the kicker, description and call to action
+  stay clear at every width. Measured with the real Fraunces at wght 600 and the page's `-.022em`
+  tracking, since the whole placement turns on where the title actually ends (440.6px at 64px).
+- **IT IS BIGGER THAN THE COMPARTMENT AND BREAKS THE CASE, which is the effect rather than a side
+  effect.** It overhangs the right upright by 76px and its cloth drapes over the bottom board and
+  down past the footer's rule, so the object is in FRONT of the furniture instead of parked inside
+  it. A drawing that fits neatly in its box reads as an inserted picture; one that does not fit
+  reads as a thing someone put there. Two things make it work: **`z-index:1`** (`.marquee::after`
+  is the board and is the last child, so without it the board paints over the drape and cuts it in
+  a straight line at the shelf's front edge — and since `.marquee` is `position:relative` with
+  `z-index:auto` it opens no stacking context, which is also what lets the drape cross the footer
+  rule), and **`pointer-events:none`**, now required rather than tidy — the drape hangs far outside
+  the compartment and the image lives inside the `<a>`, so without it a strip of cloth over the
+  footer would be a live link target in the middle of nowhere.
+- **The hang is 132px against the 140px between the board and the page's bottom edge.** Give it
+  more and the page grows a few pixels of scroll for a decoration: an absolutely positioned box
+  still counts toward scrollable overflow, and the footer's own padding is all that absorbs it.
+- **The PNG is cropped to its ink, which is what keeps every offset meaningful.** They are measured
+  from the cloth's real lowest fold and the drawing's rightmost ink, not from whatever transparent
+  margin the artwork carried (the master is A4, 2480x3508, with the drawing floating inside it).
+  `tools/bake_shelf_still.py` crops to the alpha bounding box and downscales to 2x the 360 CSS px
+  the page paints.
+- **It is NOT quantised, unlike `assets/web_bg.png` — do not reuse that script's FASTOCTREE step.**
+  That asset is line art, which quantises almost losslessly. This is a painting whose tablecloth is
+  a wide smooth gradient: at 192 colours the mean error is a respectable 2.1/255, but it lands
+  exactly where the eye reads a smooth surface, and the cloth breaks into blotchy contour patches
+  with the ink speckling along its edges. 532 KB unquantised is in family with the rest of
+  `assets/` (smv_teaser 564 KB, web_bg 490 KB). If the page must get lighter the answer is WebP
+  (~113 KB, same size, no banding), not fewer colours.
+- **`.marquee` is a bottom-aligned flex column** because the compartment is now taller than its
+  type (`min-height` is set by the still life): everything in a case rests on the same board rather
+  than hanging from the shelf above. Below the breakpoint that drops the vignette there is no
+  min-height in play, so `flex-end` lays out exactly as the old block did — inert on a phone rather
+  than a second layout to keep in step.
+- Widths are 360px, then 290px below 960px, then hidden below 680px. Below the top tier the object
+  shrinks AND stops escaping, because the escape is what costs page margin — the two move together.
+  Checked against the description (one ~356px line, which it must not run under) and against the
+  viewport's right edge: 33px of margin to spare at 681px, 83px at 961px, so no width in any band
+  produces a horizontal scrollbar.
+- Nothing moves on hover, so there is nothing to add to the reduced-motion block. It keeps its
+  pointer events, unlike the drawing it replaced: it sits inside the `<a>`, so the whole
+  compartment including the object is one target.
 
-The vignette is hidden below 660px, where the description would run under it, and the breakpoints
-were checked against `.mdesc`'s rendered width rather than guessed. **A second shelf item should get
-its own arrangement rather than this one repeated** — a shelf whose every compartment holds the same
-pile is a wallpaper, not a shelf.
+**The master is `assets/misc_asset_1.png` and is deliberately NOT committed** — same rule as
+`web_bg.png`'s master. It is 2.6 MB of A4 canvas; only the derived 720x955 asset ships. Move it out
+of the repo or leave it untracked, but do not `git add` it.
+
+**A second shelf item should get its own object rather than this one repeated** — a shelf whose
+every compartment holds the same still life is a wallpaper, not a shelf.
 
 **A shelf item is TYPE, not a tile — do not give it back the card chrome.** It was a bordered box
 with an `<h3>`, a line of prose and an arrow, which is precisely the landing page's `.card`, and
@@ -82,6 +113,13 @@ Three things are load-bearing:
 - **The resting state keeps an opaque `-webkit-text-fill-color`** over the clipped image, so the
   picture appears only on the reveal; both `color` and `-webkit-text-fill-color` are set and
   transitioned, per the site rule that Safari ignores `color` alone on clipped text.
+- **`padding-bottom:.16em` with `margin-bottom:-.16em` is ONE declaration in two halves, and it is
+  what keeps the `g` of *Digital* whole.** The clip paints inside the padding box; `line-height:1`
+  makes that box 1em tall against Fraunces's ~1.24em ascent-to-descent, so the bottom ~.12em of
+  every descender falls outside it and receives no image — invisible at rest, hollow on hover. The
+  padding grows the paint area, the negative margin takes the space straight back, so the
+  description below does not move. Both are in `em`, so the `clamp()`ed title carries it to every
+  width. Removing either half brings the bug back or shifts the layout.
 - **The fill was measured as TEXT before shipping**, because every pixel of it is a glyph on
   `#f4f2ec` paper: blended toward `--ink` at 0.45 with saturation restored, it comes out at worst
   **3.5:1**, median **10.3:1**, so it clears the 3:1 bar large text must meet even at the brightest

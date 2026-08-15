@@ -32,14 +32,6 @@
        compartment below. One step warmer and darker than --line so the boards read as boards
        rather than as more hairlines; see the .shelf block for what is drawn with them. */
     --board-top:#e2dccd; --board-face:#c8c0ab; --board-cast:rgba(88,74,48,.14);
-    /* The books standing on the board (see the .books block). Sampled off the pile in the
-       top-right corner of assets/grain_example.jpg — the plums, wines and slate-violets are what
-       that painting's covers actually are, which is why they land so close to this page's --accent
-       and need no reconciling. Kept as tokens for the same reason the boards are: the drawing is
-       in the document, so retinting the shelf must not mean editing shapes. */
-    --bk-plum:#6f4a5e; --bk-wine:#7d5560; --bk-slate:#4a4453; --bk-ink:#3b3442; --bk-rose:#b49aa0;
-    --bk-page:#efe6d5; --bk-page-lit:#f2ebdb; --bk-cloth:#e6d9c0;
-    --bk-gold:#c9a06a; --bk-line:#2f2a36;
   }
   *{box-sizing:border-box}
   /* background on html too — only html's paints the overscroll area Safari rubber-bands into */
@@ -90,7 +82,13 @@
   /* the underside of the board above — thinner, because you are seeing its edge, not its top */
   .shelf::before{content:"";position:absolute;left:-6px;right:-6px;top:0;height:2px;
                  background:linear-gradient(180deg,var(--board-top),var(--board-face))}
-  .marquee{display:block;position:relative;color:inherit;padding:26px 0 30px}
+  /* A column rather than a block, bottom-aligned, because the compartment is now taller than its
+     type: `min-height` is set by the still life standing in it, and everything in a case rests on
+     the same board rather than hanging from the shelf above. With no min-height in play — below the
+     breakpoint where the vignette is dropped — flex-end lays out exactly as the old block did, so
+     this is inert on a phone rather than a second layout to keep in step. */
+  .marquee{display:flex;flex-direction:column;justify-content:flex-end;position:relative;
+           color:inherit;padding:26px 0 30px;min-height:280px}
   /* the board this item rests on */
   .marquee::after{content:"";position:absolute;left:-26px;right:-26px;bottom:0;height:3px;
                   border-radius:1.5px;background:linear-gradient(180deg,var(--board-top),var(--board-face))}
@@ -99,50 +97,73 @@
                    pointer-events:none;background:linear-gradient(180deg,var(--board-cast),transparent)}
   .marquee:hover,.marquee:focus-visible{text-decoration:none}
   .mkick{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
-  .mtitle{display:block;margin:.18em 0 0;font-family:'Fraunces','Palatino Linotype',Georgia,serif;
+  /* THE PADDING AND THE NEGATIVE MARGIN ARE ONE THING, and they are what let the `g` keep its
+     tail. `background-clip:text` paints inside the PADDING BOX, and `line-height:1` makes that box
+     exactly 1em tall while Fraunces spans ~1.24em from ascent to descent — the overflow is split
+     top and bottom, so the bottom ~.12em of every descender falls outside the box and gets no
+     image at all. Invisible at rest (the opaque fill covers the whole glyph) and obvious on hover.
+     So the box is grown .16em downward and the same amount is taken straight back off the margin:
+     the paint area covers the descenders, the layout below is untouched. Delete either half and
+     the tail of the `g` goes hollow again, or the description jumps 10px. The crop barely moves —
+     the image is 900x404 against a ~440px-wide box, so `cover` is bound by WIDTH and a taller box
+     only reveals a few more rows of a 197px-tall painting. */
+  .mtitle{display:block;margin:.18em 0 -.16em;padding-bottom:.16em;
+          font-family:'Fraunces','Palatino Linotype',Georgia,serif;
           font-weight:600;font-size:clamp(34px,7.5vw,64px);line-height:1;letter-spacing:-.022em;
           color:var(--ink);-webkit-text-fill-color:var(--ink);
           transition:color .32s ease,-webkit-text-fill-color .32s ease}
   .mdesc{display:block;max-width:52ch;margin:.7em 0 0;font-size:14px;color:var(--muted)}
-  /* SOMETHING ON THE SHELF. One compartment holding one line of type read as a diagram of a shelf
-     rather than as a shelf, so the empty right-hand end gets the pile of books from the top-right
-     corner of assets/grain_example.jpg — Mingyang's own illustration, already in this repo as the
-     Grain playground's sample image. A stack of flat volumes, a row of spines, and one leaning
-     against the short one at the end.
+  /* SOMETHING ON THE SHELF: a still life of Mingyang's own, standing on the board at the right-hand
+     end of the compartment. One compartment holding one line of type read as a diagram of a shelf
+     rather than as a shelf; a drawn object in it is what makes the case furniture.
 
-     DRAWN, NOT CROPPED, and that is the decision worth keeping. Lifting the corner out of the
-     painting is the obvious route and is wrong twice over: the case beside it is vector, takes its
-     colours from --board-*, and is crisp at any zoom, so a raster would be the one part of the
-     shelf that softens on a retina screen and the one part that ignores the palette; and that
-     corner is densely rendered and busy, which next to a case drawn in five hairlines reads as two
-     illustrations arguing rather than as one page. So the books are reduced exactly as the boards
-     are — flat colour, one hairline of ink, a single light-to-dark sweep for roundness, no texture
-     and no bevel. What is borrowed from the painting is the palette and the arrangement, not pixels.
+     THE ILLUSTRATION OVERLAPS THE TITLE ON PURPOSE, and the overlap is the point rather than a
+     tolerance. The type passes behind the tablecloth — at the widest layout the last `m` of
+     *Museum* is covered and the word still reads — which is what puts the drawing IN the page
+     instead of beside it. Two flat things that merely abut read as two panels; one in front of the
+     other reads as depth, and that is cheaper and truer than any shadow. It is worth knowing what
+     it costs: this is the link's own label, so the overlap is kept to the tail of the last word,
+     never a whole one, and every other line (kicker, description, call to action) stays clear.
 
-     Inline SVG rather than a nest of divs, because the leaning volume is a rotation about its own
-     foot landing on a neighbour's top corner: geometry, not layout. Being inline, it costs no
-     request and reads the same custom properties as everything else here.
+     IT IS BIGGER THAN THE COMPARTMENT ON PURPOSE, and breaking the case is the effect rather than
+     a side effect. It overhangs the right upright by 76px, and its cloth drapes over the bottom
+     board and down past the footer's rule, so the object is in FRONT of the furniture instead of
+     parked inside it. A drawing that fits neatly in its box reads as an inserted picture; one that
+     does not fit reads as a thing someone put there. Two consequences, both load-bearing:
 
-     THE LEAN IS SOLVED, NOT EYEBALLED. Its foot is at x=155 because its left edge has to pass
-     through (140,41), the top-right corner of the short book it rests on: x = 140 + 55·tan17°.
-     Change the angle, or that book's height, and the foot moves with it — the first draft did not,
-     and the volume hung in mid-air a pixel clear of everything.
+     - `z-index:1` IS WHAT PUTS THE CLOTH OVER THE BOARD. `.marquee::after` — the board — is the
+       last child, so without it the board paints over the drape, cutting it in a straight line at
+       the shelf's front edge and making the cloth look tucked behind rather than hung over.
+       `.marquee` is `position:relative` with `z-index:auto` and so opens no stacking context,
+       which is also what lets the drape pass in front of the footer's rule further down.
+     - `pointer-events:none` IS BACK, and it is now required rather than tidy. The drape hangs a
+       long way outside the compartment and this image lives inside the `<a>`; without it, a strip
+       of cloth floating over the footer would be a live link target in the middle of nowhere. The
+       compartment is unchanged as a target and the hover reveal still fires from it.
 
-     THE viewBox's BOTTOM EDGE IS THE FLOOR (y=96 of 96), so `bottom:3px` — the board's own
-     thickness — stands the books on the board's top surface with no per-size fudge factor. The
-     contact shadow is an ellipse centred on that line, so the viewBox clips its lower half away;
-     the board sits immediately below and is darker, so the cut cannot be seen.
+     The hang is 132px against the 140px between the board and the page's bottom edge, so the drape
+     stops just inside it. Give it more and the page grows a few pixels of scroll for a decoration:
+     an absolutely positioned box still counts toward scrollable overflow even though it is out of
+     flow, and the footer's own padding is all that is absorbing it.
+
+     THE PNG IS CROPPED TO ITS INK, which is what keeps every offset here meaningful — they are
+     measured from the cloth's real lowest fold and the drawing's real right edge, not from whatever
+     transparent margin the artwork happened to carry (the master is A4 with the drawing floating
+     inside it). `tools/bake_shelf_still.py` does the cropping; do not point this at a raw master.
 
      Nothing here moves on hover, so there is nothing to add to the reduced-motion block. The
-     picture appearing in the title is the affordance; the shelf is furniture, and furniture that
-     answers the cursor reads as a control. Same reason it is aria-hidden with pointer-events:none —
-     it is not the link, it says nothing a screen reader needs, and it must not become a tab stop. */
-  .books{position:absolute;right:-14px;bottom:3px;width:180px;height:101px;pointer-events:none}
-  /* Checked against .mdesc rather than guessed: the tall spines begin 80/171 of the way across the
-     vignette, which at every width above the cut-off clears both the title's last glyph and the
-     description's one line. Below it the words would run under the pile, and the words win. */
-  @media(max-width:700px){.books{right:-10px;width:132px;height:74px}}
-  @media(max-width:660px){.books{display:none}}
+     picture appearing in the title is the affordance; the shelf is furniture. */
+  .still{position:absolute;right:-120px;bottom:-210px;width:360px;height:478px;
+         z-index:1;pointer-events:none}
+  /* Two things below the top tier, and they move together: the object shrinks AND it stops
+     escaping, because the escape is what costs page margin. Values are checked against the two
+     things that can break — the description (one ~356px line, which the vignette must not run
+     under) and the viewport's right edge. Worst case in each band: 33px of margin to spare at
+     681px, 83px at 961px. Below the last breakpoint a phone has neither the width to escape into
+     nor the room to give up, so the shelf goes back to type alone. */
+  @media(max-width:960px){.still{right:-34px;bottom:-92px;width:290px;height:385px}
+                          .marquee{min-height:315px}}
+  @media(max-width:680px){.still{display:none}.marquee{min-height:0}}
   .mgo{display:block;margin-top:.8em;font-size:13px;font-weight:600;color:var(--accent)}
   .mgo .arrow{display:inline-block;transition:transform .18s}
   .marquee:hover .mgo .arrow,.marquee:focus-visible .mgo .arrow{transform:translateX(5px)}
@@ -189,87 +210,13 @@
       <h3 class="mtitle">Digital Museum</h3>
       <span class="mdesc">Paintings filmed in a gallery, fitted as 3D Gaussians.</span>
       <span class="mgo">Walk in <span class="arrow" aria-hidden="true">→</span></span>
-      <!-- The books on this compartment's board. Decorative: aria-hidden, focusable="false" and
-           pointer-events:none in the CSS, so it is invisible to the accessibility tree and to the
-           pointer alike. Colours are the --bk-* tokens; the three gradients are the only defs, all
-           in objectBoundingBox units so one definition shades every volume whatever its size.
-           A second shelf item should get its OWN arrangement rather than this one repeated — a
-           shelf whose every compartment holds the same pile is a wallpaper, not a shelf. -->
-      <svg class="books" viewBox="0 0 171 96" aria-hidden="true" focusable="false">
-        <defs>
-          <!-- lit on the left, shaded on the right: a spine's roundness in one sweep -->
-          <linearGradient id="bkV" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stop-color="#fff" stop-opacity=".20"/><stop offset=".34" stop-color="#fff" stop-opacity="0"/>
-            <stop offset=".74" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".18"/>
-          </linearGradient>
-          <!-- the same sweep turned through 90°, for the volumes lying down -->
-          <linearGradient id="bkH" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/>
-            <stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/>
-          </linearGradient>
-          <!-- warm, like --board-cast: this is light kept off a board, not a grey drop shadow -->
-          <radialGradient id="bkS">
-            <stop offset="0" stop-color="#584a30" stop-opacity=".30"/><stop offset="1" stop-color="#584a30" stop-opacity="0"/>
-          </radialGradient>
-        </defs>
-        <g stroke="var(--bk-line,#2f2a36)" stroke-opacity=".5" stroke-width=".8">
-          <ellipse cx="85" cy="96" rx="84" ry="4.5" fill="url(#bkS)" stroke="none"/>
-          <!-- the flat pile: spine left, right, left, so it reads as a pile and not as a ream -->
-          <g transform="rotate(-1.5 37 89.5)">
-            <rect x="4" y="83" width="66" height="13" rx="1.6" fill="var(--bk-slate,#4a4453)"/>
-            <rect x="9.5" y="85.8" width="59" height="8.4" rx=".8" fill="var(--bk-page,#efe6d5)"/>
-            <rect x="4" y="83" width="66" height="13" rx="1.6" fill="url(#bkH)" stroke="none"/>
-          </g>
-          <g transform="rotate(2.2 38 77)">
-            <rect x="9" y="71" width="58" height="12" rx="1.6" fill="var(--bk-wine,#7d5560)"/>
-            <rect x="10.5" y="73.4" width="51.5" height="8" rx=".8" fill="var(--bk-page-lit,#f2ebdb)"/>
-            <rect x="9" y="71" width="58" height="12" rx="1.6" fill="url(#bkH)" stroke="none"/>
-          </g>
-          <g transform="rotate(-3.2 40 65.5)">
-            <rect x="16" y="60" width="48" height="11" rx="1.5" fill="var(--bk-plum,#6f4a5e)"/>
-            <rect x="20.5" y="61.4" width="42" height="8.2" rx=".8" fill="var(--bk-page,#efe6d5)"/>
-            <rect x="21" y="63.4" width="41" height="1.2" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
-            <rect x="16" y="60" width="48" height="11" rx="1.5" fill="url(#bkH)" stroke="none"/>
-          </g>
-          <!-- the upright row -->
-          <g>
-            <rect x="76" y="30" width="14" height="66" rx="1.4" fill="var(--bk-plum,#6f4a5e)"/>
-            <rect x="78" y="38" width="10" height="1.4" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
-            <rect x="78" y="48" width="10" height="13" rx=".6" fill="var(--bk-page,#efe6d5)" stroke="none"/>
-            <rect x="78" y="85" width="10" height="1.4" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
-            <rect x="76" y="30" width="14" height="66" rx="1.4" fill="url(#bkV)" stroke="none"/>
-          </g>
-          <g>
-            <rect x="91" y="21" width="10" height="75" rx="1.2" fill="var(--bk-cloth,#e6d9c0)"/>
-            <rect x="91" y="21" width="10" height="4.5" rx="1.2" fill="var(--bk-plum,#6f4a5e)" stroke="none"/>
-            <rect x="92.5" y="88" width="7" height="1.3" fill="var(--bk-plum,#6f4a5e)" stroke="none"/>
-            <rect x="91" y="21" width="10" height="75" rx="1.2" fill="url(#bkV)" stroke="none"/>
-          </g>
-          <g>
-            <rect x="102" y="33" width="16" height="63" rx="1.4" fill="var(--bk-slate,#4a4453)"/>
-            <rect x="104.5" y="42" width="11" height="1.3" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
-            <rect x="104.5" y="86" width="11" height="1.3" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
-            <rect x="102" y="33" width="16" height="63" rx="1.4" fill="url(#bkV)" stroke="none"/>
-          </g>
-          <g transform="rotate(2.6 124.5 96)">
-            <rect x="119" y="25" width="11" height="71" rx="1.3" fill="var(--bk-wine,#7d5560)"/>
-            <rect x="121" y="45" width="7" height="16" rx=".6" fill="var(--bk-page-lit,#f2ebdb)" stroke="none"/>
-            <rect x="119" y="25" width="11" height="71" rx="1.3" fill="url(#bkV)" stroke="none"/>
-          </g>
-          <!-- the short one, and the reason the leaner leans where it does -->
-          <g>
-            <rect x="131" y="41" width="9" height="55" rx="1.2" fill="var(--bk-rose,#b49aa0)"/>
-            <rect x="131" y="41" width="9" height="55" rx="1.2" fill="url(#bkV)" stroke="none"/>
-          </g>
-          <!-- the leaner: foot at 155 = 140 + 55·tan17°, so its left edge meets (140,41) above -->
-          <g transform="rotate(-17 155 96)">
-            <rect x="155" y="30" width="12" height="66" rx="1.3" fill="var(--bk-ink,#3b3442)"/>
-            <rect x="156.8" y="39" width="8.4" height="1.3" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
-            <rect x="156.8" y="84" width="8.4" height="1.3" fill="var(--bk-gold,#c9a06a)" stroke="none"/>
-            <rect x="155" y="30" width="12" height="66" rx="1.3" fill="url(#bkV)" stroke="none"/>
-          </g>
-        </g>
-      </svg>
+      <!-- The still life standing on this compartment's board. Decorative, so alt="" — the link
+           already has its name from the heading beside it, and a description here would only make
+           a screen reader read the shelf twice. width/height are the FILE's pixels (2x what the
+           page paints, for a retina panel); the CSS sizes it and lets it hang out of the case. Derived by tools/bake_shelf_still.py
+           from the master, which is deliberately not committed — same rule as assets/web_bg.png. -->
+      <img class="still" src="../assets/misc_shelf.png" width="720" height="955" alt=""
+           decoding="async">
     </a>
   </div>
 </main>
