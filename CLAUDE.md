@@ -8,9 +8,10 @@ Mingyang Song's personal site (GitHub Pages, user site). Fully static: **no back
 no build step, no bundler, no npm**. The only "build" is regenerating
 `projects/smv/scenes.json` from the committed scenes.
 
-The landing page is `index.html` at the root, and it links three project pages:
-`projects/smv/` (SmoothMotionVectors), `projects/spdef/` (Spline Deformation Field) and
-`projects/grain/` (camera-noise playground). The substantial piece is
+The landing page is `index.html` at the root, and it links four project pages:
+`projects/smv/` (SmoothMotionVectors), `projects/spdef/` (Spline Deformation Field),
+`projects/grain/` (camera-noise playground) and `projects/tempformer/` (the sliding-block
+machine). The substantial piece is
 `projects/smv/` — a 100 % client-side player for compressed dynamic 3D-Gaussian
 ("4D-GS") scenes, the results site for *SmoothMotionVectors* (SIGGRAPH 2026).
 
@@ -1629,6 +1630,271 @@ Note that `SAMPLE_URL` / `PARAMS_URL` are consumed through variables, so no `src
 literal ever names them; `verify.py`'s `local_refs()` grew a `_URL = '…'` pattern so a moved or
 renamed asset still fails the check instead of only failing in the browser.
 
+## `projects/tempformer/` — the sliding-block machine
+
+Results page for *TempFormer: Temporally Consistent Transformer for Video Denoising*
+(ECCV 2022, [doi:10.1007/978-3-031-19800-7_28](https://link.springer.com/chapter/10.1007/978-3-031-19800-7_28)),
+built 2026-08-16. Source repo is `~/tempformer` (`video_denoiser/`), same repo the grain page
+came out of.
+
+**Nothing is ported and nothing is published.** TempFormer++ is a 6-block spatio-temporal
+transformer with SpyNet flow and a Haar DWT — it does not run in a browser, and the checkpoints
+in `models_zoo/` are unpublishable anyway. So the page does not try. It shows **the schedule**,
+which is what the paper's temporal-consistency claim is actually about and is
+architecture-independent: five frames in and three out, windows sliding two at a time, one output
+slot poured twice, a leading inlet fed by the previous window, a label scalar, and a loss term on
+the disagreement. The renderer is a **weighted average of five numbers**, and the page says so in
+as many words. Do not "upgrade" it toward the real network.
+
+The metaphor is a bottle-filling machine: one bottle is one frame, its colour is the frame's
+content, the jitter between neighbours is the noise, and a smooth reference ribbon runs underneath
+so the jitter is legible as *error* rather than as a palette.
+
+**The wiring is `video_denoiser/train.py::recurrent_w_overlap` and `denoise.py`'s loop, checked
+against the code rather than remembered.** Two things there are easy to get wrong and both were
+got wrong on the first pass:
+
+- **Propagation feeds EVERY window, not just the second one.** `recurrent_w_overlap` replaces
+  `b1[:,:,0]` as well as `b2[:,:,0]`, and runs **both** windows at `label=[1.]`. Modelling window
+  A as a special all-noisy first block makes propagation look worse than it is and puts two
+  different tables on screen for what is one sliding machine.
+- **There is therefore ONE table in play per mode, not two.** Both windows are at the same label,
+  so the model computes the same function twice. Splitting the figure into two machine cards would
+  say the opposite of the thing being explained.
+
+**Sequences are NINE slots long and SEVEN are drawn** (drawn bottle `d` = array slot `d+2`,
+`OFF=2`). The two hidden slots on the left are what the window *before* window A reads. That is
+the price of the point above: if propagation feeds every window, window A needs a predecessor, and
+inventing one is cheaper than making A a special case. Windows are `array 2..6` → pours `3,4,5`
+and `array 4..8` → pours `5,6,7`; the shared slot is array 5 = **drawn slot 3**.
+
+- **`train.py` substitutes the CLEAN target for A's leading frame; the page runs the real unroll
+  instead, and the difference was measured.** On the scalar reference both give the same seam
+  (0.1222 vs 0.1230) but the clean substitute flatters the accuracy (err 0.2264 vs 0.2325),
+  because handing the machine the exact answer is better than any denoiser can be. So the training
+  device is a *good* stand-in — worth knowing — but the page uses the predecessor's actual pour and
+  therefore never has to caveat that it gave the machine the answer.
+- **The predecessor runs the SAME table, not a separate label-0 one.** The slide is a mid-clip
+  steady state: every window is fed by its predecessor, so window A and window B must be
+  structurally identical. Feeding A from a label-0 machine (the first draft) makes them different
+  for no reason the paper has. Both leading inlets are therefore functions of the table being
+  solved for, and the fixed point takes **~39 passes from cold** — `fitMachine`'s `W0` argument
+  warm-starts it from the previous table, which is the only reason the α slider stays live.
+- **α applies in both modes here, and the paper has no such setting.** `training_step` adds `l_ov`
+  only in the `tce_active` branch; `all_noisy` computes `ov1`/`ov2` and then never uses them. So
+  "α without propagation" is off the paper's map. The page offers it anyway — pulling the two
+  controls apart is the only way to see what each buys — and says so in the prose.
+- **The loss is L2 where the paper's is L1.** That is the one deliberate departure, and it is what
+  makes the minimiser a linear solve rather than an iteration. It is stated on the page.
+
+**The fit is a real least-squares solve, run in the browser on every control change**, not a baked
+table. 320 synthetic paths × 3 OKLab channels = 960 scalar rows; the 18×18 normal equations (15
+weights + 3 row-sum multipliers) are assembled from 5×5 covariances and solved by Gaussian
+elimination with partial pivoting. One table serves both windows, so the overlap term couples
+**row 2** (A's last pour) to **row 0** (B's first). With propagation the objective stops being
+quadratic — B's leading inlet is itself a function of the table — so the exact solve is iterated to
+a fixed point (converges in well under ten passes; the cap of 30 is a backstop).
+
+**THE SIGNAL MUST DRIFT, and this is the subtlest thing on the page.** `makePath` is a random walk
+through OKLCH — each frame is its predecessor plus a small step in hue and lightness. It was a
+four-term Fourier curve first, and that was **wrong in a way that inverted one of the page's
+conclusions**. A globally-parameterised path is pinned down by a handful of numbers, so frames
+10–14 determine frame 11 nearly as well as frames 8–12 do; the two windows then agree largely
+because they share input *noise*, and propagation — which replaces a shared noisy inlet with a
+cleaner one — **removed that spurious agreement and measurably widened the seam**, by ~20 % at
+every noise level and in every variant tried (fixed table vs refitted, mean-reverting vs not,
+noise/step ratio from 0.5 to 32). Under a drift the past carries information the future does not,
+propagation is real information transfer, and it cuts the seam by about a third. Mingyang flagged
+the symptom — "just introducing prop should reduce the seam" — and he was right. If the generator
+is ever changed, **re-run the propagation check before anything else**: a signal model that is
+merely prettier can silently reverse the physics.
+
+Two knock-ons of the drift model, both fine: the fitted kernel is **flatter** (0.24/0.27/0.20/0.16/
+0.14 rather than a sharp peak) because a drift is less predictable than a curve, and **no weight
+goes negative any more**, which is why `--neg` could be dropped with the grid. Rows still peak on
+their own outlet's inlet (1, 2, 3).
+
+**`HUE_DRIFT` = 15°/frame is a per-sequence constant rotation on top of the walk, and it is capped
+there by measurement.** The walk alone drifts only ~37° over nine frames (13·√8), so every bottle
+came out the same blue and the figure read as monochrome — Mingyang flagged it from a screenshot.
+A constant drift sweeps the sequence across the ring instead: at 15°/frame it covers **120°**.
+
+It cannot go much further, because a constant drift is a **global parameter**, and global
+predictability is exactly what inverted the propagation result once already. Measured at
+σ = 0.050, sweep 0 / 64 / 120 / 176 / 240°:
+
+| sweep | 0° | 64° | **120°** | 176° | 240° |
+| --- | --- | --- | --- | --- | --- |
+| propagation's effect on the seam | −33 % | −29 % | **−25 %** | −18 % | −3 % |
+| colour error ΔE | 4.09 | 4.17 | **4.31** | 4.49 | 4.74 |
+
+Past about 180° propagation stops doing anything. **Do not raise it to make the colours prettier.**
+
+**The two chunks can never be opposite each other, and no setting will fix that** — window A and
+window B *share bottles 2, 3 and 4*, the same water, so their contents differ by at most
+2·`HUE_DRIFT`. The identity colours (`--mA`/`--mB`) carry the opposition; the water carries the
+measurement. Asking the water to do both is asking it to lie.
+
+**THE HUE DRIFT RATE CANNOT BE USED TO MAKE THE SEAM MORE VISIBLE — it measures backwards.** The
+obvious idea is to sweep the sequence through more hue so the two windows average over visibly
+different colour regions and disagree more. It does the opposite: a faster-drifting signal makes
+neighbours less informative, the fitted kernel narrows onto the frame itself, and since *both*
+windows hold that frame they agree more. Measured at σ = 0.050, α = 0, over `HUE_STEP`
+(the random-walk step, not `HUE_DRIFT`)
+13 → 20 → 28 → 36 → 45 → 60 °/frame: the seam falls **2.98 → 2.69 → 2.30 → 1.95 → 1.66 → 1.40**
+while the denoising gain collapses **49 % → 44 % → 39 % → 34 % → 29 % → 23 %**. Both numbers get
+worse for the page. `HUE_STEP = 13` is near the sweet spot; do not raise it to "make the colours
+more different".
+
+**Fitting one table across all three OKLab channels is deliberate** — it is what makes it a
+temporal kernel rather than a colour transform, and it is what the real model does, since the
+mixing is over frames and not over channels.
+
+**There is no `node` on this box, so the covariance-form assembly was validated in Python before
+being transcribed.** `scratchpad/ref_fit.py` runs the exact scalar-loop, plain-list algorithm the
+JS uses and compares it against a verified numpy reference on an identical ensemble: agreement to
+**1.3e-14**. Re-do that rather than trusting a JS edit, and syntax-check the page with esprima the
+way the museum page documents (`esprima.parseScript`, not `parseModule` — it is a classic script).
+
+**Measured behaviour at the shipped default** (σ = 0.050, the slider's 60 % point). Re-measure with
+`scratchpad/page_check.py` if the generator or the ensemble changes:
+
+| | α = 0 | α = 0.2 | α = 1 | α = 3 |
+| --- | --- | --- | --- | --- |
+| seam ΔE, no propagation | 2.98 | 2.07 | 0.93 | 0.39 |
+| colour error ΔE, no propagation | 4.08 | 4.13 | 4.29 | 4.40 |
+| seam ΔE, **with** propagation | 2.02 | 1.27 | 0.51 | 0.20 |
+| colour error ΔE, with propagation | 3.82 | 3.85 | 3.93 | 3.98 |
+
+The noisy inputs sit **7.97 ΔE** from the truth, so the machine roughly halves the error — the
+outputs have to look visibly smoother than the inputs or the page has no first act. Row sums come
+back exactly 1 (≤2e-16). **The middle row does not move with α at all**, because it is not part of
+the seam. Nothing on the page states this any more; it is documented here only.
+
+**The default noise was raised from 0.035 to 0.050 on purpose.** At 0.035 the α = 0 seam is only
+1.54 ΔE — a couple of JNDs, visible but too subtle for the thing the page is built around. 0.050
+puts it at 2.75 and unmistakable, while staying well above the propagation crossover below. Do not
+lower it back without checking the seam is still legible on a real screen.
+
+With propagation on, the table's first row goes to **`+0.62 +0.08 +0.10 +0.12 +0.08`** — 62 % of
+the weight on the propagated inlet. That is the single most legible thing in the figure: the
+machine visibly trusts the frame it was handed.
+
+**Propagation helps at every noise level, on both numbers — there is no crossover.** Measured
+across the slider (α = 0 throughout):
+
+| σ | 0.005 | 0.015 | 0.030 | 0.050 | 0.065 | 0.080 |
+| --- | --- | --- | --- | --- | --- | --- |
+| seam, propagation off | 0.01 | 0.42 | 1.52 | 2.98 | 4.01 | 5.02 |
+| seam, propagation on | 0.01 | 0.30 | 1.03 | 2.02 | 2.75 | 3.48 |
+
+An earlier build reported a sign flip at σ ≈ 0.027 and shipped copy describing it. **That was an
+artefact of the old Fourier signal model, not a property of the schedule** — see the drift note
+above. Do not reinstate a crossover claim without re-deriving it.
+
+**What α does to the table is exact, and is now stated in prose rather than shown.** Push α up and the two *edge* rows
+collapse onto the three bottles both windows can see: at α = 3 they are mirror images,
+`+0.31 +0.35 +0.30 +0.02 +0.02` against `+0.02 +0.02 +0.30 +0.35 +0.31` — the same weights on the
+same three frames, which is precisely when the two pours of slot 3 must agree. The middle row never
+moves. With propagation on, the first row puts **+0.55** on the propagated inlet.
+
+**THE PLAYBACK LOOP IS GONE TOO** (removed 2026-08-17, same pass as the table: "the seam itself
+has told the story"). The frame swatch, the ▶ Play button, `showFrame()`, `togglePlay()` and the
+`FRAME_OF` labels are all out, along with the two control-hint paragraphs under it. What that
+costs is worth knowing before anyone reinstates it: **temporal inconsistency only exists in time**,
+and a static strip understates flicker. The seam glass and the meter carry the disagreement as a
+quantity; the loop was the only thing that showed it as an artefact. It was judged redundant, not
+wrong.
+
+**THE MIXING TABLE IS NO LONGER DISPLAYED** (removed 2026-08-17: "the table would be a bit hard to
+understand"). The 3x5 grid of weights, its two rows of inlet labels, the label-0/1 dial and the
+`drawTable()` renderer are all gone, along with the `--neg` token that only ever coloured a
+negative cell. **The fit itself is untouched** — `fitMachine()` still solves for the table on every
+control change, because the pours come from it; only the display went. Every weight quoted in this
+file is therefore still true of the shipped page, just not visible on it, and
+`tools/bake_tempformer_teaser.py` still prints the table when it runs.
+
+**Deleting a block of markup here has twice cut more than intended, and `verify.py` cannot see
+it.** Removing the playback row took `build2()`'s closing brace with it (the JS parsed as an
+unterminated function, which `verify.py` passes clean because it only checks ids, tags and CSS
+braces) and an over-broad end anchor also swallowed the *Citing this page* block from the Citation
+section. **Run the esprima check after every edit to this page** — it is the only thing between a
+bad cut and a page stuck on a blank panel. Do not put the grid back
+without a reason: it was the one element that asked the reader to interpret fifteen numbers before
+the figure paid off.
+
+**The page is the seam figure and the paper's citation, and nothing else** (trimmed 2026-08-17 at
+Mingyang's request).
+
+**There is NO self-citation, deliberately.** A *Citing this page* block with its own `@misc` entry
+was there and was removed on Mingyang's instruction: the machine is a proof of concept for the
+published work, not a separate artefact, so it is covered by citing the ECCV paper. Do not re-add
+an `@misc` for it. The Citation section is the paper link, the reference-format string and the
+`@inproceedings` entry, and that is the whole of it. (The other three project pages do carry a
+self-citation, because each of them ships something the paper does not: measured parameters, a
+compression bundle, a viewer.) A *The machine* section introducing the 5-in/3-out shape, a *What this is, and
+what it is not* section, a *Credits* section and a closing three-paragraph essay were all removed;
+the opening lede was rewritten to carry the minimum setup those had supplied, since without it
+nobody knows what the table or the ribbon are. Only the two ledes, the in-panel control hints and
+the citation survive. **Do not grow the explanations back** — if something needs saying, it goes in
+this file.
+
+**Three things make the seam legible, and none of them fakes the measurement.** The water always
+shows the true pours; the disagreement is small in absolute terms (2.98 ΔE at the default) and the
+figure has to work anyway.
+- **The two chunks are colour-coded on a rule UNDER each glass**, `--mA` for window A and `--mB`
+  for window B, with the shared glass carrying both. The identity cannot go in the water — the
+  water is the measurement — so it goes on the furniture.
+- **The shared glass is taller than its neighbours** (92 px against 72). The rig is
+  `align-items:end`, so it grows upward and every caption still sits on one line.
+- **The seam meter** (`#s2Meter`, a `scaleX` on a `--mA → --mB` ramp) is the gap against the same
+  scene with *both* controls off, so it empties as either one is applied. Readings at the default
+  noise: **100 % → 69 % (α .2) → 13 % (α 3)** with no propagation, and **68 % → 42 % → 7 %** with
+  it. `D2.ref` caches that full-scale fit per ensemble; it needs no fixed point, so it is one solve.
+
+**Palette: the first green one in the family** — pale bench-top green `#ebf0ea`, deep pine accent
+`#1c6b4b`, and it is hue-poor for the same reason Grain's is. Every saturated colour here is
+*data*, so an accent with a hue of its own competes with the thing being compared.
+
+**The two window identities are exact opposites on the ring, and low chroma** — `--mA` #3b6987 at
+h 239° and `--mB` #815939 at h 59°, **180.0° apart**, both L .50 / C .070. Equal lightness and
+equal chroma is what stops one window reading as the important one. Three things about it:
+- **Muting them raised the contrast**, because the pair they replaced was lighter: 5.90 / 6.14 on
+  `--surface` and 4.77 / 4.96 on `--panel-2`, against 5.40 / 4.37 before. All ≥ 4.5:1.
+- **The chroma drop is 30 % / 46 %** from the previous #2f6f9e / #9a4f8f. Every saturated colour on
+  this page is data; an identity that shouts competes with the water it labels.
+- **It is an accessibility fix too.** The old blue/plum sat 47° apart on the *same* side of the
+  wheel, which is the one pairing red-green colour blindness cannot separate. Blue against
+  terracotta is the standard safe opposition. Do not reintroduce a same-side pair.
+
+**THERE IS NO TEASER IMAGE. The landing card shows a text placeholder** reading *Teaser Under
+Construction*, because Mingyang is drawing one by hand and wanted the generated stand-in out of the
+way (2026-08-17). `assets/tempformer_teaser.png` was **deleted**; it is regenerable in one command
+if it is ever wanted for comparison.
+
+`.teaserwip` on the landing page occupies `.teaser`'s slot at roughly its height (min-height 128px
+against the PNG's ~137px as rendered), so dropping an `<img>` back in will not move the card or
+reflow the page. It uses dashed `--line` and `--dim` text, the same "not filled yet" language
+`.card.slot` uses, and stays transparent so the `.card:hover` gradient-border shorthand still shows
+through. Both colours are existing per-theme tokens, so it needed no new light/dark pair.
+
+**When the drawing lands:** swap `.teaserwip` for `<img class="teaser">` with the file's real pixel
+`width`/`height` and real `alt` text, and **do not re-run the bake script over it**.
+
+**Keep `tools/bake_tempformer_teaser.py` regardless.** It documents the page's OKLab and
+least-squares arithmetic in a form that runs offline, it prints the mixing table (now the only way
+to inspect it, since the page no longer draws one), and it can re-cut a figure for the page body.
+It writes a 1320x274 transparent PNG using the same colour model, the same drift generator and the
+same fit as the page, so anything it produces is a real frame of the demo rather than an
+illustration of one. Two details in it are load-bearing: the `glass()` helper pastes the right half
+from its own layer rather than drawing a second rounded rect, because overlapping two radii leaves
+a notch exactly at the midline where the figure wants a clean cut; and its `path()` must stay in
+step with the page's `makePath()`, drift included.
+
+**The shared glass has no divider line, deliberately.** Two windows pouring the same colour must
+look like one glass of water; a rule down the middle would draw a seam that is not there and would
+hide the moment α closes it. The caption under it does the naming.
+
 ## Git LFS (read before touching scenes)
 
 Scene binaries are in **Git LFS** (`.gitattributes`): `*.mkv` and `*.npz`. The
@@ -1832,8 +2098,11 @@ that no longer matches. The bundle's `parity` block is what catches that, on loa
 - `projects/smv/vendor/` is vendored third-party code (ffmpeg.wasm, fflate) — read-only.
 - This is a **public site**: ship only publishable content. The D-NeRF scenes are
   synthetic; `neur3d` has human faces and must never be committed.
-- Citation/paper metadata lives inline in `projects/smv/index.html` (search `citeAcm`
-  / `citeBib`). The SpDef page carries its own `citeAcm`/`citeBib` plus a **Datasets**
+- Citation/paper metadata lives inline in each project page (search `citeAcm` / `citeBib`);
+  `projects/tempformer/` carries the ECCV 2022 entry and, unlike the other three, **no
+  third-party-licence clause in its footer** — it ships no data, no vendored code and no
+  webfont-independent assets, so there is nothing to except. The SpDef page carries its own
+  `citeAcm`/`citeBib` plus a **Datasets**
   section crediting D-NeRF, HyperNeRF and DeformingThings4D — the three it actually uses. The
   first two are verbatim copies of the SMV viewer's; keep them in sync if either is corrected.
   A new card means a new entry here, not just new markup.

@@ -8,11 +8,16 @@ description: The design contract for this personal site — card pattern, gradie
 Hand-written CSS, no framework, no build. One inline `<style>` block per page:
 the landing page ([index.html](../../../index.html)), the SMV viewer
 ([projects/smv/index.html](../../../projects/smv/index.html)), the SpDef project page
-([projects/spdef/index.html](../../../projects/spdef/index.html)), and the camera-noise
-playground ([projects/grain/index.html](../../../projects/grain/index.html)). They are
+([projects/spdef/index.html](../../../projects/spdef/index.html)), the camera-noise
+playground ([projects/grain/index.html](../../../projects/grain/index.html)), and the
+sliding-block machine ([projects/tempformer/index.html](../../../projects/tempformer/index.html)).
+They are
 **separate design systems that rhyme** — do not try to share tokens between them. The landing
 page is theme-aware dark/light on warm paper; the viewer is a fixed warm-paper palette; SpDef
-is its deliberately cool counterpart; Grain is neutral graphite with one darkroom-amber accent.
+is its deliberately cool counterpart; Grain is neutral graphite with one darkroom-amber accent;
+TempFormer is a pale bench-top green with a deep pine one. The last two are both **hue-poor on
+purpose** — on those pages the saturated colour is the data, so an opinionated accent competes
+with the thing the reader is comparing.
 A new project page picks its own palette the same way — the only thing it inherits is the
 page-chrome trio below.
 
@@ -190,12 +195,13 @@ fails the build on root-absolute paths.
 - **GitHub link was removed** — source cannot be published. Don't re-add it.
 - **Blend is `n/a` on all shipped scenes** (`overlap_frames = 0`); an overlapped scene is
   planned, which will light it up on its own.
-- **Every page ends `© 2026 Mingyang Song · All rights reserved.`** — landing, SMV, SpDef and
-  Grain, using each page's own `footer{…}` rule. Nothing on this site is offered under an open
-  licence, and a public repo that says nothing is routinely read as an invitation; `/LICENSE`
-  at the repo root carries the scope. **The claim covers Mingyang's own text, artwork and code
-  only**, so the three project pages add "Third-party code and datasets remain under their own
-  licences" and keep their *Built with* (ffmpeg.wasm, fflate, antimatter15's `splat`) and
+- **Every page ends `© 2026 Mingyang Song · All rights reserved.`** — landing, SMV, SpDef,
+  Grain and TempFormer, using each page's own `footer{…}` rule. Nothing on this site is offered
+  under an open licence, and a public repo that says nothing is routinely read as an invitation;
+  `/LICENSE` at the repo root carries the scope. **The claim covers Mingyang's own text, artwork
+  and code only**, so the pages that ship third-party material add "Third-party code and datasets
+  remain under their own licences" and keep their *Built with* (ffmpeg.wasm, fflate,
+  antimatter15's `splat`) and
   *Datasets* / *Datasets & credits* (D-NeRF / HyperNeRF / NeRF-DS / SIDD / Kodak) blocks. Those
   attributions are load-bearing — the reserved-rights line is only honest next to them.
   (The SMV viewer page had no copyright line at all until 2026-07-29, despite this note

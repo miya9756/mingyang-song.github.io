@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TempFormer</title>
+<link rel="icon" type="image/png" sizes="64x64" href="../../assets/web_icon.png">
+<link rel="apple-touch-icon" href="../../assets/web_icon.png">
+<meta name="description" content="TempFormer (ECCV 2022) — why a video denoiser that works on sliding blocks of frames flickers at the block boundaries, and what recurrent propagation and the Overlap Loss each do about it. A bottle-filling machine you can turn the knobs on.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="theme-color" content="#ebf0ea"><!-- must track --bg; Safari tints its chrome from this -->
+
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  /* Fourth palette in the family, and the first green one. SMV is warm paper, SpDef its cool
+     counterpart, Grain neutral graphite with a darkroom amber; this one is a pale bench-top green
+     with a deep pine accent. It is hue-poor for the same reason Grain's is: every saturated colour
+     on this page is *data* — the water in the bottles is the signal being denoised — so an accent
+     with opinions of its own would compete with the thing the reader is asked to compare. Same
+     bones as the other three (Fraunces display serif, the back pill, card chrome, spacing rhythm,
+     section order), so only the temperature changes between project pages. */
+  :root{
+    /* Fixed light palette, so pin color-scheme rather than leaving it `normal` — otherwise the UA
+       canvas, scrollbars, form controls and Safari's overscroll area stay white while the page is
+       tinted. Keep the theme-color meta above in sync with --bg. */
+    color-scheme:light;
+    --bg:#ebf0ea; --surface:#ffffff; --panel-2:#e2e9e1; --ink:#151a16; --muted:#5a635c;
+    --line:#d5ded4; --accent:#1c6b4b; --accent-fg:#fff; --shadow:rgba(20,35,25,.13);
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    /* The two windows' identities are EXACTLY OPPOSITE on the OKLCH ring — 239° against 59°,
+       180.0° apart, both at L .50 and chroma .070 — so the pair reads as one warm/cool
+       opposition rather than as two arbitrary colours. Equal lightness and equal chroma is what
+       stops one of them looking like the "important" window.
+
+       They are deliberately LOW chroma (.070 against the previous pair's .099 and .130): every
+       saturated colour on this page is data, and an identity that shouts competes with the water
+       it is labelling. Muting them cost nothing legibility-wise — contrast went UP, because the
+       old pair was lighter: 5.90 / 6.14 on --surface and 4.77 / 4.96 on --panel-2, against 5.40
+       and 4.37 before. Both clear 4.5:1 on every surface they are used on.
+
+       The previous blue/plum sat only 47° apart and on the same side of the wheel, which is the
+       one pairing red-green colour blindness cannot separate. Blue against terracotta is the
+       standard safe opposition, so this is an accessibility fix as much as a design one. */
+    --mA:#3b6987; --mB:#815939;
+  }
+  *{box-sizing:border-box}
+  /* background on html too — only html's paints the overscroll area Safari rubber-bands into */
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .inner{max-width:1180px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{background:linear-gradient(180deg,#f4f8f3,#e7eee6);border-bottom:1px solid var(--line);padding:32px 0 26px}
+  /* back to the personal site. '../../' not an absolute path, so it resolves correctly whether
+     the site is served from a user-site root or a project-site subpath. */
+  .back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:rgba(255,255,255,.6);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:#fff;text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+
+  h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(30px,4.4vw,46px);line-height:1.05;letter-spacing:-.018em;color:var(--ink)}
+  .subtitle{margin:10px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
+            font-size:clamp(15px,2vw,21px);color:var(--ink);opacity:.9;line-height:1.25}
+  .byline{margin:16px 0 0;font-size:13.5px;line-height:1.8;color:var(--muted)}
+  .byline .authors{color:var(--ink);font-weight:500}
+  .byline .affil{display:block;font-size:12px}
+  .byline sup{color:var(--accent);font-size:.7em;padding:0 1px}
+  .byline .authors a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);
+                     transition:color .16s,border-color .16s}
+  .byline .authors a:hover{color:var(--accent);border-color:var(--accent)}
+
+  main{padding:30px 0 20px}
+  section{margin:0 0 40px}
+  h2{font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;margin:0 0 14px;color:var(--ink)}
+  h3{font-family:'Fraunces',Georgia,serif;font-size:16.5px;font-weight:600;margin:0 0 6px;color:var(--ink)}
+  .lede{margin:0 0 16px;font-size:14.5px;color:var(--muted);max-width:78ch}
+  .lede em{font-style:normal;font-weight:600;color:var(--ink)}
+  .hint{margin:9px 0 0;font-size:12.5px;color:var(--muted);max-width:82ch}
+  .hint em{font-style:normal;font-weight:600;color:var(--ink)}
+  code{font-family:var(--mono);font-size:.9em}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .tA{color:var(--mA)} .tB{color:var(--mB)}
+
+  /* ── the rig ──────────────────────────────────────────────────────────────
+     Everything is laid out on ONE 7-column grid, so a bottle, the bracket that takes it in, and
+     the glass it ends up in are all in the same column by construction. That is the whole figure:
+     the reader has to be able to see that windows A and B overlap on bottles 2–4, and no amount of
+     captioning does that if the two rows are independently centred. */
+  .rig{display:grid;gap:6px 8px;align-items:end}
+  .rig.w7{grid-template-columns:repeat(7,minmax(0,1fr))}
+  .cell{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+  .bot{width:100%;max-width:58px;height:auto;display:block}
+  .cap{font:600 10px/1.3 var(--mono);color:var(--muted);letter-spacing:.02em;text-align:center}
+  /* The reference ribbon. Without the true gradient under them the input bottles read as a
+     slightly odd palette rather than as a smooth signal plus noise — the jitter is only legible
+     against something straight. */
+  .ribbon{height:9px;border-radius:5px;margin-top:2px}
+  .riblbl{margin:0;font-size:11.5px;color:var(--muted)}
+
+  /* Brackets embrace the bottles ABOVE them, so the long rule is the bottom border and the ticks
+     rise from its ends. Two sub-rows, because A and B overlap and one row would collide. */
+  .brk{height:9px;border:2px solid;border-top:0;border-radius:0 0 5px 5px;margin-top:1px}
+  .brklbl{margin:3px 0 0;font:600 11px/1.2 Inter,sans-serif}
+  .bA{border-color:var(--mA)} .bB{border-color:var(--mB)}
+  .brkwrap{min-width:0}
+
+  /* ── glasses ──────────────────────────────────────────────────────────── */
+  .glwrap{display:flex;flex-direction:column;align-items:center;gap:5px;width:100%}
+  .gl{width:100%;max-width:58px;height:72px;border-radius:9px}
+  /* The shared glass is the whole point of the figure, so it is taller than its neighbours. The
+     rig is align-items:end, so it grows upward and every caption still sits on one line. */
+  .gl.big{height:92px}
+  /* Which window poured this glass, as a colour. The water cannot carry that — it is the
+     measurement — so the identity goes on a rule underneath, and the shared glass gets both. */
+  .glrim{width:100%;max-width:58px;height:4px;border-radius:3px}
+  /* The shared glass is NOT given a divider line. Two windows pouring the same colour must look
+     like one glass of water — a rule down the middle would draw a seam that is not there and would
+     hide the moment the Overlap Loss closes it. The label under it does the naming. */
+  .glcap{font:600 9.5px/1.3 Inter,sans-serif;text-align:center;color:var(--muted)}
+
+  /* ── controls ─────────────────────────────────────────────────────────── */
+  .bar{display:flex;flex-wrap:wrap;gap:14px 20px;align-items:flex-end;margin:0 0 18px}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .field>label{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+               display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  output{font-family:var(--mono);font-size:.74rem;font-variant-numeric:tabular-nums;color:var(--ink);
+         text-transform:none;letter-spacing:0;font-weight:400}
+  input[type=range]{width:186px;accent-color:var(--accent);margin:2px 0}
+  button{font:inherit;border-radius:7px;cursor:pointer;border:1px solid var(--line);
+         transition:color .14s,border-color .14s,background-color .14s}
+  .ghost{background:var(--panel-2);color:var(--ink);padding:7px 11px;font-size:.88rem}
+  .ghost:hover{color:var(--accent);border-color:var(--accent)}
+  .chk{display:inline-flex;align-items:center;gap:7px;font-size:.88rem;cursor:pointer;user-select:none;
+       padding-bottom:6px}
+  .chk input{accent-color:var(--accent);width:15px;height:15px}
+
+  /* ── readouts ─────────────────────────────────────────────────────────── */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0 0}
+  .stat{border:1px solid var(--line);border-radius:10px;padding:11px 13px;background:var(--panel-2)}
+  .statv{font:600 24px/1.1 var(--mono);font-variant-numeric:tabular-nums;color:var(--ink);
+         display:flex;align-items:baseline;gap:7px}
+  .statv small{font:400 11.5px/1 var(--mono);color:var(--muted)}
+  .statl{margin:5px 0 0;font-size:11.5px;line-height:1.5;color:var(--muted)}
+  .statl b{color:var(--ink);font-weight:600}
+  /* The seam as a length, measured against the same scene with neither control on, so the bar
+     empties as the two windows are brought into agreement. Ramped in the two window hues. */
+  .meter{margin:9px 0 2px;height:8px;border-radius:5px;background:var(--surface);
+         border:1px solid var(--line);overflow:hidden}
+  .meter i{display:block;height:100%;background:linear-gradient(90deg,var(--mA),var(--mB));
+           transform-origin:left;transform:scaleX(var(--p,1));transition:transform .2s}
+
+  .citebox{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+  .citehd{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;
+          border-bottom:1px solid var(--line);font-size:11.5px;font-weight:600;letter-spacing:.06em;
+          text-transform:uppercase;color:var(--muted)}
+  .copybtn{font:inherit;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+           padding:4px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);
+           color:var(--muted);cursor:pointer;transition:color .16s,border-color .16s}
+  .copybtn:hover{color:var(--accent);border-color:var(--accent)}
+  pre{margin:0;padding:14px;overflow-x:auto;font:12.5px/1.7 var(--mono);color:var(--ink);
+      white-space:pre-wrap;word-break:break-word}
+  .paper{font-size:14px;color:var(--muted);margin:0 0 18px;line-height:1.7}
+  .ack{margin:0 0 12px;font-size:13.5px;color:var(--muted);max-width:78ch}
+  .datacard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .ref{margin:0;font-size:12.5px;line-height:1.7;color:var(--muted)}
+  .ref strong{color:var(--ink);font-weight:600}
+  .ref+.ref{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  footer{border-top:1px solid var(--line);margin-top:20px;padding:26px 0 48px;color:var(--muted);font-size:13px}
+
+  :where(button,select,input,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){
+    .back,.back .barrow,button,.meter i{transition:none}
+    .back:hover .barrow{transform:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <a class="back" href="../../"><span class="barrow" aria-hidden="true">←</span> Mingyang Song</a>
+    <h1>TempFormer</h1>
+    <p class="subtitle">A video denoiser sees a few frames at a time. Here is why that makes it flicker, and what fixes it.</p>
+    <div class="byline">
+      <span class="authors">Mingyang Song<sup>1</sup>, <a href="https://scholar.google.com/citations?user=gwP_ARgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Yang Zhang</a><sup>2</sup>, <a href="https://scholar.google.com/citations?user=E0fxZeUAAAAJ&amp;hl=en" target="_blank" rel="noopener">Tun&ccedil; O. Ayd&#305;n</a><sup>2</sup></span>
+      <span class="affil"><sup>1</sup>ETH Zürich, Switzerland &nbsp;&nbsp; <sup>2</sup>DisneyResearch|Studios, Switzerland</span>
+    </div>
+  </div>
+</header>
+
+<main class="inner">
+
+  <section>
+    <h2>The seam</h2>
+    <p class="lede">TempFormer denoises video <em>five frames at a time</em> and returns only the <em>middle three</em>, then slides along by two. Each bottle is a frame: its colour is the frame's content, the jitter between neighbours is the noise, and the ribbon underneath is what the sequence should have been. Each outlet pours a weighted mixture of all five inlets, and those weights are not chosen but fitted: least squares over a few hundred sequences like this one, re-solved every time you move a control.</p>
+    <p class="lede">Two consecutive positions of that one machine: <span class="tA"><b>window A</b></span> takes bottles 0–4 and pours slots 1, 2, 3; <span class="tB"><b>window B</b></span> takes bottles 2–6 and pours slots 3, 4, 5. The same machine and the same weights both times, two frames apart, which is what sliding means. But <em>both of them pour slot 3.</em></p>
+    <p class="lede">They will not agree. Window A sees slot 3 at the very edge of what it can read, with no frame after it; window B sees the same slot comfortably in the middle. Same bottle, same water, different mixtures. In the finished video only one pour survives, so the sequence steps sideways exactly where the windows change over. That step is the flicker, and it is what the paper is about: a <em>sliding block strategy with recurrent architecture</em>, and a new loss term, the <em>Overlap Loss</em>.</p>
+
+    <div class="panel">
+      <div class="bar">
+        <label class="chk" for="s2Prop"><input type="checkbox" id="s2Prop"> Propagate</label>
+        <div class="field">
+          <label for="s2Alpha">Overlap Loss α <output id="s2AlphaOut">0.00</output></label>
+          <input type="range" id="s2Alpha" min="0" max="300" step="1" value="0">
+        </div>
+        <div class="field">
+          <label for="s2Noise">Noise <output id="s2NoiseOut">0.050</output></label>
+          <input type="range" id="s2Noise" min="5" max="80" step="1" value="50">
+        </div>
+        <button class="ghost" id="s2Reroll" type="button">New sequence</button>
+      </div>
+
+      <div class="rig w7" id="s2Bottles" aria-label="Seven noisy input frames and the two overlapping windows that read them"></div>
+      <div class="ribbon" id="s2Ribbon"></div>
+      <p class="riblbl">the true sequence, which neither window sees</p>
+
+      <div class="rig w7" id="s2Glasses" style="margin-top:18px" aria-label="The five output frames, the middle one poured by both windows"></div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="statv"><span id="s2Seam">—</span><small>ΔE</small></div>
+          <div class="meter"><i id="s2Meter"></i></div>
+          <p class="statl"><b>Seam.</b> How far apart the two pours of slot 3 are, and the quantity the Overlap Loss minimises. The bar is that gap against the same scene with both controls off. <span id="s2SeamBase"></span></p>
+        </div>
+        <div class="stat">
+          <div class="statv"><span id="s2Err">—</span><small>ΔE</small></div>
+          <p class="statl"><b>Colour error.</b> Mean distance from the delivered five slots to the true ribbon, which is the accuracy the seam is bought with. <span id="s2ErrBase"></span></p>
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <section>
+    <h2>Citation</h2>
+    <p class="paper">📄 <a href="https://link.springer.com/chapter/10.1007/978-3-031-19800-7_28" target="_blank" rel="noopener">TempFormer: Temporally Consistent Transformer for Video Denoising</a><br>ECCV 2022 · <a href="https://assets.studios.disneyresearch.com/app/uploads/2022/09/TempFormer-Temporally-Consistent-Transformer-for-Video-Denoising.pdf" target="_blank" rel="noopener">PDF</a> · <a href="https://studios.disneyresearch.com/2022/10/11/tempformer-temporally-consistent-transformer-for-video-denoising/" target="_blank" rel="noopener">Project page</a></p>
+    <div class="citebox">
+      <div class="citehd"><span>Reference format</span><button class="copybtn" data-target="citeAcm">Copy</button></div>
+      <pre id="citeAcm">Mingyang Song, Yang Zhang, and Tunç O. Aydın. 2022. TempFormer: Temporally Consistent Transformer for Video Denoising. In Computer Vision – ECCV 2022. Lecture Notes in Computer Science, vol 13683. Springer, Cham, 481–496. https://doi.org/10.1007/978-3-031-19800-7_28</pre>
+    </div>
+    <div class="citebox">
+      <div class="citehd"><span>BibTeX</span><button class="copybtn" data-target="citeBib">Copy</button></div>
+      <pre id="citeBib">@inproceedings{song2022tempformer,
+  author    = {Song, Mingyang and Zhang, Yang and Ayd{\i}n, Tun\c{c} O.},
+  title     = {TempFormer: Temporally Consistent Transformer for Video Denoising},
+  booktitle = {Computer Vision -- ECCV 2022},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {13683},
+  pages     = {481--496},
+  publisher = {Springer},
+  address   = {Cham},
+  year      = {2022},
+  doi       = {10.1007/978-3-031-19800-7_28}
+}</pre>
+    </div>
+
+  </section>
+
+</main>
+
+<footer>
+  <!-- The reserved-rights claim covers Mingyang's own text, figures and code. Nothing third-party
+       ships here — the page has no data files and no vendored code — so unlike the other three
+       project pages there is no licence-exception clause to add. -->
+  <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved.</div>
+</footer>
+
+<script>
+/* TempFormer — the sliding-block machine.
+ *
+ * No network, no wasm, no data files. The page's one piece of arithmetic is a least-squares fit
+ * of a 3x5 mixing table, re-run from scratch every time a control moves.
+ *
+ * Sequences are NINE slots long; SEVEN of them are drawn. Drawn bottle d is array slot d+2, and
+ * the two hidden slots at the left are what the window BEFORE window A reads — because
+ * propagation feeds every window, not only the second one, so window A must be fed by a
+ * predecessor or the figure would quietly make it a special case.
+ *
+ *   pre  : array 0..4, SAME table  -> its middle pour (array 2) feeds A's leading inlet
+ *   A    : array 2..6 (drawn 0..4)  -> pours array 3,4,5 (drawn 1,2,3)
+ *   B    : array 4..8 (drawn 2..6), inlet0 <- A's middle pour -> pours array 5,6,7 (drawn 3,4,5)
+ *   shared slot: array 5 = drawn slot 3.  ov1 = A's LAST pour, ov2 = B's FIRST pour.
+ *   L = 0.5*(|A - clean| + |B - clean|) + alpha*|ov1 - ov2|
+ *
+ * That is video_denoiser/train.py::recurrent_w_overlap's layout and denoise.py's sliding loop.
+ *
+ * One deliberate departure: train.py adds the Overlap Loss ONLY on the propagated path
+ * (`all_noisy` computes ov1/ov2 and then never uses them), so the paper has no "alpha without
+ * propagation" configuration. The page applies alpha in both modes anyway, because pulling the two
+ * apart is the only way to see what each one buys. The prose says so. See CLAUDE.md.
+ */
+'use strict';
+const $=(id)=>document.getElementById(id);
+const SEQ=9, DRAW=7, OFF=2;          /* array length, bottles drawn, index of drawn bottle 0 */
+
+/* ── OKLab. Ported from tools/bake_tempformer_teaser.py; keep the two in step. ─────────────── */
+function okCss(L,a,b){
+  const l_=L+.3963377774*a+.2158037573*b, m_=L-.1055613458*a-.0638541728*b, s_=L-.0894841775*a-1.2914855480*b;
+  const l=l_*l_*l_, m=m_*m_*m_, s=s_*s_*s_;
+  const lin=[4.0767416621*l-3.3077115913*m+.2309699292*s,
+             -1.2684380046*l+2.6097574011*m-.3413193965*s,
+             -.0041960863*l-.7034186147*m+1.7076147010*s];
+  const g=lin.map(v=>{v=Math.min(1,Math.max(0,v));
+    return Math.round(255*(v<=.0031308?12.92*v:1.055*Math.pow(v,1/2.4)-.055));});
+  return `rgb(${g[0]},${g[1]},${g[2]})`;
+}
+const dE=(p,q)=>Math.hypot(p[0]-q[0],p[1]-q[1],p[2]-q[2])*100;
+
+/* ── deterministic randomness, so a reload shows the same sequence ─────────────────────────── */
+const rnd32=(a)=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+const gauss=(r)=>{let u=0,v=0;while(u===0)u=r();while(v===0)v=r();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(6.283185307*v);};
+
+/* THE SIGNAL DRIFTS, AND THAT IS LOAD-BEARING — do not replace it with a smooth global curve.
+   The colour is a random walk through OKLCH: each frame is its predecessor plus a small step in
+   hue and lightness. Video content works the same way, and the statistics are the whole reason
+   propagation is worth anything. A globally-parameterised path (this was a four-term Fourier
+   curve first) is determined by a handful of numbers, so frames 10–14 pin down frame 11 nearly as
+   well as frames 8–12 do; the two windows then agree mostly because they share input NOISE, and
+   propagation — which replaces a shared noisy inlet with a cleaner one — measurably made the seam
+   WORSE. Under a drift the past carries information the future does not, propagation is real
+   information transfer, and it cuts the seam by about a third at every noise level. Measured both
+   ways; see CLAUDE.md. */
+/* HUE_DRIFT is a per-sequence CONSTANT rotation on top of the walk, and it exists so the figure
+   is not one colour family. The walk alone drifts only ~37° over nine frames (13·√8), which is
+   what made every bottle read as the same blue. At 15°/frame the sequence sweeps 120° instead, so
+   the two windows visibly average over different parts of the ring.
+
+   It is capped there ON PURPOSE. A constant drift is a GLOBAL parameter, and global predictability
+   is exactly what inverted the propagation result once already. Measured at σ = 0.050, sweep
+   0 / 64 / 120 / 176 / 240°: propagation's effect on the seam is −33 / −29 / −25 / −18 / −3 %, so
+   past about 180° it stops working at all. Do not raise it to make the colours prettier.
+
+   The two chunks can never be opposite each other, whatever the drift: they SHARE bottles 2, 3
+   and 4 — the same water — so their contents are 2·HUE_DRIFT apart at most. */
+const HUE_STEP=13, HUE_DRIFT=15, L_STEP=.016, CHROMA=.125;
+function makePath(r){
+  let h=r()*360, L=.66+r()*.12; const out=[], dir=r()<.5?-1:1;
+  for(let i=0;i<SEQ;i++){
+    if(i){h+=gauss(r)*HUE_STEP+dir*HUE_DRIFT; L=Math.min(.88,Math.max(.52,L+gauss(r)*L_STEP));}
+    const a=h*Math.PI/180;
+    out.push([L,CHROMA*Math.cos(a),CHROMA*Math.sin(a)]);
+  }
+  return out;
+}
+const noisify=(path,sig,r)=>path.map(q=>q.map(v=>v+gauss(r)*sig));
+
+/* ── linear algebra ────────────────────────────────────────────────────────────────────────── */
+function solveLin(M,r){
+  const n=r.length, A=M.map((row,i)=>row.concat([r[i]]));
+  for(let c=0;c<n;c++){
+    let p=c; for(let i=c+1;i<n;i++) if(Math.abs(A[i][c])>Math.abs(A[p][c])) p=i;
+    const t=A[c];A[c]=A[p];A[p]=t;
+    for(let i=c+1;i<n;i++){const f=A[i][c]/A[c][c];
+      for(let j=c;j<=n;j++) A[i][j]-=f*A[c][j];}
+  }
+  const x=new Array(n).fill(0);
+  for(let i=n-1;i>=0;i--){let s=A[i][n];
+    for(let j=i+1;j<n;j++) s-=A[i][j]*x[j];
+    x[i]=s/A[i][i];}
+  return x;
+}
+const zeros=(n)=>Array.from({length:n},()=>new Array(n).fill(0));
+const mat5=()=>Array.from({length:5},()=>new Array(5).fill(0));
+const dot5=(w,v)=>w[0]*v[0]+w[1]*v[1]+w[2]*v[2]+w[3]*v[3]+w[4]*v[4];
+
+/* ── the ensemble: the machine's training set ──────────────────────────────────────────────── */
+/* Each entry is one scalar OKLab channel of one sequence. Fitting one table across all three
+   channels is what makes it a temporal kernel rather than a colour transform — and it is what the
+   real model does, since the mixing is over frames, not over channels. */
+const ENS_PATHS=320, ENS_SEED=20220711;
+function buildEns(sig){
+  const r=rnd32(ENS_SEED), rows=[];
+  for(let n=0;n<ENS_PATHS;n++){
+    const p=makePath(r), x=noisify(p,sig,r);
+    for(let ch=0;ch<3;ch++) rows.push({c:p.map(q=>q[ch]), x:x.map(q=>q[ch])});
+  }
+  return {rows,N:rows.length,sig};
+}
+
+/* ── the fit ───────────────────────────────────────────────────────────────────────────────── */
+/* Steady state, as the slide's mid-clip snapshot shows it: EVERY window is fed by its
+   predecessor, and the predecessor runs the SAME table. So window A's leading inlet is
+   W[1] applied to the two off-screen frames plus the first three drawn ones, and window B's is
+   W[1] applied to A's inlets. Both windows are then structurally identical, which is what
+   "sliding" means — modelling A's predecessor with a separate label-0 table instead makes A and B
+   different for no reason the paper has.
+
+   Both leading inlets are functions of the table being solved for, so the exact solve is iterated
+   to a fixed point. From cold that takes ~39 passes; `W0` warm-starts it from the previously
+   fitted table, which is what keeps the α slider live — consecutive α values differ by so little
+   that the fixed point moves a couple of passes at most. A stale warm start is only a starting
+   point, never an answer, so it needs no invalidating when the ensemble changes. */
+function fitMachine(ens,alpha,prop,W0){
+  const {rows,N}=ens;
+  let W=prop?(W0||null):null;
+  for(let it=0;it<(prop?60:1);it++){
+    const A1=mat5(), A2=mat5(), A12=mat5();
+    const cA=[new Array(5).fill(0),new Array(5).fill(0),new Array(5).fill(0)];
+    const cB=[new Array(5).fill(0),new Array(5).fill(0),new Array(5).fill(0)];
+    for(const s of rows){
+      const x=s.x, b1=[x[2],x[3],x[4],x[5],x[6]], b2=[x[4],x[5],x[6],x[7],x[8]];
+      if(prop&&W){b1[0]=dot5(W[1],[x[0],x[1],x[2],x[3],x[4]]); b2[0]=dot5(W[1],b1);}
+      for(let p=0;p<5;p++){
+        for(let q=0;q<5;q++){A1[p][q]+=b1[p]*b1[q]; A2[p][q]+=b2[p]*b2[q]; A12[p][q]+=b1[p]*b2[q];}
+        for(let i=0;i<3;i++){cA[i][p]+=b1[p]*s.c[3+i]; cB[i][p]+=b2[p]*s.c[5+i];}
+      }
+    }
+    for(let p=0;p<5;p++){
+      for(let q=0;q<5;q++){A1[p][q]/=N; A2[p][q]/=N; A12[p][q]/=N;}
+      for(let i=0;i<3;i++){cA[i][p]/=N; cB[i][p]/=N;}
+    }
+    const M=zeros(18), r=new Array(18).fill(0);
+    for(let i=0;i<3;i++){
+      const s0=5*i;
+      for(let p=0;p<5;p++){
+        for(let q=0;q<5;q++) M[s0+p][s0+q]+=(A1[p][q]+A2[p][q])/3;
+        r[s0+p]+=(cA[i][p]+cB[i][p])/3;
+        M[s0+p][15+i]=1; M[15+i][s0+p]=1;                    /* the row must sum to 1 */
+      }
+      r[15+i]=1;
+    }
+    const o1=10, o2=0;                     /* the last row pours slot 3 for A, the first for B */
+    for(let p=0;p<5;p++) for(let q=0;q<5;q++){
+      M[o1+p][o1+q]+=2*alpha*A1[p][q];
+      M[o2+p][o2+q]+=2*alpha*A2[p][q];
+      M[o1+p][o2+q]-=2*alpha*A12[p][q];
+      M[o2+p][o1+q]-=2*alpha*A12[q][p];
+    }
+    const w=solveLin(M,r), P=[0,1,2].map(i=>w.slice(5*i,5*i+5));
+    const moved=W?Math.max(...P.flatMap((row,i)=>row.map((v,j)=>Math.abs(v-W[i][j])))):1;
+    W=P;
+    if(!prop||moved<1e-9) break;
+  }
+  return W;
+}
+
+/* ── running a sequence through it ─────────────────────────────────────────────────────────── */
+/* Returns each window's three pours plus the delivered sequence. Delivered is [A1, A2, B3, B4, B5]:
+   window B overwrites slot 3, exactly as denoise.py's loop does when it writes each block's frames
+   out over the previous block's. A's pour of slot 3 never reaches the file — it survives only as
+   the thing the Overlap Loss is measured against. */
+function runSeq(noisy,W,prop){
+  const A=[[],[],[]], B=[[],[],[]], lead=[];
+  for(let k=0;k<3;k++){
+    const x=noisy.map(q=>q[k]);
+    const b1=[x[2],x[3],x[4],x[5],x[6]];
+    if(prop) b1[0]=dot5(W[1],[x[0],x[1],x[2],x[3],x[4]]);   /* the window before this one */
+    lead[k]=b1[0];
+    for(let i=0;i<3;i++) A[i][k]=dot5(W[i],b1);
+    const b2=[x[4],x[5],x[6],x[7],x[8]];
+    if(prop) b2[0]=A[1][k];                                  /* A's middle pour */
+    for(let i=0;i<3;i++) B[i][k]=dot5(W[i],b2);
+  }
+  return {A,B,lead,out:[A[0],A[1],B[0],B[1],B[2]],ov1:A[2],ov2:B[0]};
+}
+
+/* ── drawing ───────────────────────────────────────────────────────────────────────────────── */
+const BOTTLE='M15,4 a3,3 0 0 1 3,-3 h4 a3,3 0 0 1 3,3 v18 c0,4 11,8 11,20 v48 a6,6 0 0 1 -6,6 '
+            +'h-20 a6,6 0 0 1 -6,-6 v-48 c0,-12 11,-16 11,-20 z';
+function bottleEl(col){
+  const NS='http://www.w3.org/2000/svg', s=document.createElementNS(NS,'svg');
+  s.setAttribute('viewBox','0 0 40 100'); s.setAttribute('class','bot'); s.setAttribute('aria-hidden','true');
+  const p=document.createElementNS(NS,'path');
+  p.setAttribute('d',BOTTLE); p.setAttribute('fill',col); s.appendChild(p);
+  return s;
+}
+function cell(node,capHtml,capCls){
+  const d=document.createElement('div'); d.className='cell'; d.appendChild(node);
+  if(capHtml){const c=document.createElement('span'); c.className=(capCls||'cap');
+    c.innerHTML=capHtml; d.appendChild(c);}
+  return d;
+}
+/* A glass plus the rule under it saying which window poured it. `colR` makes it the shared
+   glass: two pours side by side, a split rule, and taller than its neighbours. */
+const RIM_A='var(--mA)', RIM_B='var(--mB)';
+function glassEl(col,rim,colR){
+  const w=document.createElement('div'); w.className='glwrap';
+  const g=document.createElement('div'); g.className='gl'+(colR?' big':'');
+  g.style.background=colR?`linear-gradient(90deg,${col} 0 50%,${colR} 50% 100%)`:col;
+  const r=document.createElement('div'); r.className='glrim'; r.style.background=rim;
+  w.appendChild(g); w.appendChild(r);
+  return w;
+}
+/* The reference ribbon: the true sequence as one continuous gradient, so the bottles above it can
+   be read as "off" rather than merely as "different from each other". */
+function paintRibbon(el,path){
+  const n=path.length, stops=path.map((q,i)=>`${okCss(...q)} ${(100*i/(n-1)).toFixed(2)}%`);
+  el.style.background=`linear-gradient(90deg,${stops.join(',')})`;
+}
+/* ── demo 2: two windows, one shared slot ──────────────────────────────────────────────────── */
+const D2={sig:.05,seed:5,alpha:0,prop:false,ens:null,last:null,base:null,ref:null};
+function build2(){
+  if(!D2.ens||D2.ens.sig!==D2.sig){D2.ens=buildEns(D2.sig); D2.base=null; D2.ref=null;}
+  const W=fitMachine(D2.ens,D2.alpha,D2.prop,D2.last);
+  D2.last=W;
+
+  const r=rnd32(D2.seed), path=makePath(r), noisy=noisify(path,D2.sig,r);
+  const res=runSeq(noisy,W,D2.prop);
+
+  /* the same wiring at alpha = 0, so the readouts can say what alpha bought without the reader
+     having to drag the slider back and remember a number */
+  if(!D2.base||D2.base.prop!==D2.prop)
+    D2.base={prop:D2.prop,W:fitMachine(D2.ens,0,D2.prop,D2.last)};
+  const bres=runSeq(noisy,D2.base.W,D2.prop);
+  /* the meter's full scale: neither control on. Cached per ensemble, and cheap — no propagation
+     means no fixed point, so it is a single solve. */
+  if(!D2.ref) D2.ref=fitMachine(D2.ens,0,false);
+  const rres=runSeq(noisy,D2.ref,false);
+
+  /* row 1 — the seven bottles, with the two windows bracketed under them */
+  const bots=$('s2Bottles'); bots.textContent='';
+  for(let d=0;d<DRAW;d++){
+    const c=cell(bottleEl(okCss(...noisy[d+OFF])),'bottle '+d);
+    c.style.gridRow='1'; c.style.gridColumn=String(d+1); bots.appendChild(c);
+  }
+  [['1 / 6','bA','tA','2',D2.prop?'window A — inlet 0 fed by the window before it'
+                                 :'window A reads bottles 0–4'],
+   ['3 / 8','bB','tB','3',D2.prop?'window B — inlet 0 fed by window A'
+                                 :'window B reads bottles 2–6']].forEach(([col,bc,tc,row,txt])=>{
+    const w=document.createElement('div'); w.className='brkwrap';
+    w.style.gridRow=row; w.style.gridColumn=col;
+    const b=document.createElement('div'); b.className='brk '+bc;
+    const l=document.createElement('p'); l.className='brklbl '+tc; l.textContent=txt;
+    w.appendChild(b); w.appendChild(l); bots.appendChild(w);
+  });
+  paintRibbon($('s2Ribbon'),path.slice(OFF,OFF+DRAW));
+
+  /* row 3 — the glasses, slot 3 poured by both windows */
+  const gl=$('s2Glasses'); gl.textContent='';
+  gl.appendChild(document.createElement('div'));
+  ['slot 1','slot 2'].forEach((t,i)=>gl.appendChild(cell(glassEl(okCss(...res.A[i]),RIM_A),
+    t+'<br><span class="tA">window A</span>','glcap')));
+  gl.appendChild(cell(glassEl(okCss(...res.ov1),
+    `linear-gradient(90deg,${RIM_A} 0 50%,${RIM_B} 50% 100%)`,okCss(...res.ov2)),
+    'slot 3<br><span class="tA">A</span> ｜ <span class="tB">B</span>','glcap'));
+  ['slot 4','slot 5'].forEach((t,i)=>gl.appendChild(cell(glassEl(okCss(...res.B[i+1]),RIM_B),
+    t+'<br><span class="tB">window B</span>','glcap')));
+  gl.appendChild(document.createElement('div'));
+
+  /* readouts. The delivered slots are drawn 1..5, i.e. array 3..7. */
+  const seam=dE(res.ov1,res.ov2), bseam=dE(bres.ov1,bres.ov2);
+  const err=res.out.reduce((a,c,i)=>a+dE(c,path[i+OFF+1]),0)/5;
+  const berr=bres.out.reduce((a,c,i)=>a+dE(c,path[i+OFF+1]),0)/5;
+  $('s2Seam').textContent=seam.toFixed(2);
+  const ref=dE(rres.ov1,rres.ov2);
+  $('s2Meter').style.setProperty('--p',(ref>1e-9?Math.min(1,seam/ref):0).toFixed(4));
+  $('s2Err').textContent=err.toFixed(2);
+  const pct=(a,b)=>b>1e-9?Math.round(100*Math.abs(a-b)/b):0;
+  $('s2SeamBase').textContent=D2.alpha>0
+    ? `At α = 0 under the same wiring it is ${bseam.toFixed(2)} — ${pct(seam,bseam)}% ${seam<bseam?'lower':'higher'}.` : '';
+  $('s2ErrBase').textContent=D2.alpha>0
+    ? `At α = 0 it is ${berr.toFixed(2)}, so the seam costs ${pct(err,berr)}% here.` : '';
+}
+
+/* ── wiring ────────────────────────────────────────────────────────────────────────────────── */
+$('s2Reroll').onclick=()=>{D2.seed=(D2.seed*1103515245+12345)>>>8; build2();};
+$('s2Prop').onchange=(e)=>{D2.prop=e.target.checked; build2();};
+$('s2Alpha').oninput=(e)=>{
+  D2.alpha=+e.target.value/100;
+  $('s2AlphaOut').textContent=D2.alpha.toFixed(2);
+  build2();
+};
+$('s2Noise').oninput=(e)=>{
+  D2.sig=+e.target.value/1000;
+  $('s2NoiseOut').textContent=D2.sig.toFixed(3);
+  build2();
+};
+
+document.querySelectorAll('.copybtn').forEach(b=>b.onclick=()=>{
+  const el=document.getElementById(b.dataset.target);
+  navigator.clipboard.writeText(el.textContent).then(()=>{
+    const o=b.textContent; b.textContent='✓ Copied'; setTimeout(()=>{b.textContent=o;},1500);
+  }).catch(()=>{b.textContent='⚠ select & copy';});
+});
+
+build2();
+</script>
+</body>
+</html>

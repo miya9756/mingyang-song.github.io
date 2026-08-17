@@ -31,8 +31,8 @@ PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
          "projects/spdef/viewer.html", "projects/spdef/points.html",
          "projects/spdef/triplanes.html", "projects/spdef/field.html",
          "projects/spdef/knots.html", "projects/spdef/knotsplat.html",
-         "projects/grain/index.html", "misc/index.html",
-         "misc/museum/index.html"]
+         "projects/grain/index.html", "projects/tempformer/index.html",
+         "misc/index.html", "misc/museum/index.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
