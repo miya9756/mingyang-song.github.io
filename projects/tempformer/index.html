@@ -211,8 +211,8 @@
           <input type="range" id="s2Alpha" min="0" max="300" step="1" value="0">
         </div>
         <div class="field">
-          <label for="s2Noise">Noise <output id="s2NoiseOut">0.050</output></label>
-          <input type="range" id="s2Noise" min="5" max="80" step="1" value="50">
+          <label for="s2Noise">Noise <output id="s2NoiseOut">0.080</output></label>
+          <input type="range" id="s2Noise" min="5" max="80" step="1" value="80">
         </div>
         <button class="ghost" id="s2Reroll" type="button">New sequence</button>
       </div>
@@ -498,7 +498,15 @@ function paintRibbon(el,path){
   el.style.background=`linear-gradient(90deg,${stops.join(',')})`;
 }
 /* ── demo 2: two windows, one shared slot ──────────────────────────────────────────────────── */
-const D2={sig:.05,seed:5,alpha:0,prop:false,ens:null,last:null,base:null,ref:null};
+/* The opening state is chosen, not arbitrary. sig is the slider's top end: the seam is what the
+   figure is built around, and at 0.050 it opens at 2.4 dE where at 0.080 it opens at 5.7, which is
+   the difference between "I think those two halves differ" and seeing it. The seed is a display
+   choice only — the ensemble the table is fitted on has its own fixed ENS_SEED, so nothing about
+   the machine moves with it — and this one is picked for hue: its path sweeps 134 degrees against
+   the 120 the drift alone gives, so the seven bottles cross the ring instead of sitting in one
+   colour family. Its seam is at the 61st percentile over 1500 sequences, i.e. an ordinary draw
+   rather than a flattering one. Measured with scratchpad/page_check.py; see CLAUDE.md. */
+const D2={sig:.08,seed:4775864,alpha:0,prop:false,ens:null,last:null,base:null,ref:null};
 function build2(){
   if(!D2.ens||D2.ens.sig!==D2.sig){D2.ens=buildEns(D2.sig); D2.base=null; D2.ref=null;}
   const W=fitMachine(D2.ens,D2.alpha,D2.prop,D2.last);
@@ -576,6 +584,18 @@ $('s2Noise').oninput=(e)=>{
   build2();
 };
 
+/* The opening state lives in the markup and in D2, and a RELOAD is where the two come apart: a
+   browser restores a range input's and a checkbox's value without firing any event, so a visitor
+   who dragged the noise down and refreshed would see the slider at their value and the figure at
+   the default until they nudged something. So D2 is reconciled from the controls at boot rather
+   than trusted — the same rule the SpDef transport states for its speed slider: derive the cached
+   state from the control, never assume it. */
+function syncControls(){
+  D2.sig=+$('s2Noise').value/1000;  $('s2NoiseOut').textContent=D2.sig.toFixed(3);
+  D2.alpha=+$('s2Alpha').value/100; $('s2AlphaOut').textContent=D2.alpha.toFixed(2);
+  D2.prop=$('s2Prop').checked;
+}
+
 document.querySelectorAll('.copybtn').forEach(b=>b.onclick=()=>{
   const el=document.getElementById(b.dataset.target);
   navigator.clipboard.writeText(el.textContent).then(()=>{
@@ -583,6 +603,7 @@ document.querySelectorAll('.copybtn').forEach(b=>b.onclick=()=>{
   }).catch(()=>{b.textContent='⚠ select & copy';});
 });
 
+syncControls();
 build2();
 </script>
 </body>

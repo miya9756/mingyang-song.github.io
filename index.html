@@ -137,22 +137,18 @@
   .card.feat{padding:0;overflow:hidden}
   .teaser{display:block;width:100%;height:auto;padding:18px 20px 0}
   .featbody{display:block;padding:16px 22px 20px}
-  /* Stand-in for a teaser being drawn by hand. It occupies .teaser's slot at roughly its height,
-     so swapping an <img> back in will not move the card or reflow the page. Dashed + --dim is the
-     same "not filled yet" language .card.slot uses, and the background stays transparent so the
-     .card:hover gradient-border shorthand still shows through it. Both colours are existing
-     per-theme tokens, so this needs no new light/dark pair of its own. */
-  .teaserwip{display:flex;align-items:center;justify-content:center;text-align:center;
-             margin:18px 20px 0;padding:22px 18px;min-height:128px;
-             border:1px dashed var(--line);border-radius:10px;color:var(--dim);
-             font-size:clamp(17px,3.1vw,28px);font-weight:600;letter-spacing:.01em;line-height:1.25}
-  /* Split card: for a teaser that is roughly square (spdef is 1.08:1), a full-bleed banner would
-     waste most of the width, so the figure sits left and the text right, both vertically centred.
+  /* Split card: for a teaser that is roughly square (spdef is 1.08:1) or taller than it is wide
+     (tempformer is 0.75:1), a full-bleed banner would waste most of the width, and an upright one
+     would run the height of the screen. So the figure sits left and the text right, both centred.
      Collapses to one column on a phone, where a 200px-wide diagram beside text would be unreadable.
      Same card chrome as .feat — border, radius, gradient hover, tag, CTA — so the two project cards
      read as one family despite the different internal layout. */
   .card.split{display:grid;grid-template-columns:minmax(0,200px) 1fr;gap:22px;align-items:center}
   .splitfig{display:block;width:100%;height:auto}
+  /* A painted teaser is an opaque rectangle, not a diagram on a transparent ground, so it takes
+     the header photo's treatment: a small radius and a hairline --line border. Without them it
+     reads as a block dropped on the card. Same reasoning as .photo, same two declarations. */
+  .splitfig.paint{border-radius:10px;border:1px solid var(--line)}
   @media(max-width:560px){
     .card.split{grid-template-columns:1fr;gap:14px}
     .splitfig{max-width:230px;margin:0 auto}
@@ -263,13 +259,14 @@
     </div>
   </a>
 
-  <a class="card feat" href="projects/tempformer/">
-    <div class="teaserwip">Teaser Under Construction</div>
-    <div class="featbody">
+  <a class="card split" href="projects/tempformer/">
+    <img class="splitfig paint" src="assets/tempformer_teaser.jpg" width="690" height="920" decoding="async"
+         alt="A painting of a winter dusk over a city: snow on the rooftops, a few lit windows, and a green copper church spire standing against a flat grey sky.">
+    <div>
       <h3>TempFormer</h3>
       <p>A video denoiser reads five frames and returns three, then slides along. Two windows end up pouring the same frame, they disagree, and the video flickers. Turn the propagation and the Overlap Loss on and off, and watch the seam close.</p>
       <span class="cardfoot">
-        <span class="tag"><span class="live" aria-hidden="true"></span>ECCV ’22 · Conference Track</span>
+        <span class="tag"><span class="live" aria-hidden="true"></span>ECCV ’22</span>
         <span class="cta">Playground <span class="arrow" aria-hidden="true">→</span></span>
       </span>
     </div>

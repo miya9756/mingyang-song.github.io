@@ -1735,6 +1735,22 @@ window B *share bottles 2, 3 and 4*, the same water, so their contents differ by
 2·`HUE_DRIFT`. The identity colours (`--mA`/`--mB`) carry the opposition; the water carries the
 measurement. Asking the water to do both is asking it to lie.
 
+**THE OPENING SEQUENCE IS A CHOSEN SEED, and choosing one is the sanctioned way to get more colour
+out of the figure.** `D2.seed` is **4775864** (it was 5), picked on 2026-08-22 because its path
+sweeps **134°** against the 120° the drift alone gives, so the seven bottles cross the ring —
+lilac, blue, periwinkle, pink, orange, red, taupe — instead of sitting in one family. Two things
+make this safe where raising `HUE_DRIFT` is not. The ensemble the table is fitted on has its own
+fixed `ENS_SEED`, so **nothing about the machine moves with the display seed**; and the seed is not
+cherry-picked for a flattering readout, its seam sitting at the **61st percentile** over 1500
+sequences at the shipped σ. That is the rule for any future change here: pick the seed for hue, and
+check where its seam lands before shipping it. `scratchpad/page_check.py --scan` does both.
+
+The reroll chain is untouched by this — 4775864 is the value one press of *New sequence* already
+produced from the old default, so the page simply opens one step further along an LCG it walked
+anyway. Note that chain multiplies as **doubles**: past 2^53 the product is rounded before
+`>>>8` sees it, so an exact-integer replica of it silently diverges from the page after a few
+steps. `chain()` in `scratchpad/seed_scan.py` does it in float for that reason.
+
 **THE HUE DRIFT RATE CANNOT BE USED TO MAKE THE SEAM MORE VISIBLE — it measures backwards.** The
 obvious idea is to sweep the sequence through more hue so the two windows average over visibly
 different colour regions and disagree more. It does the opposite: a faster-drifting signal makes
@@ -1755,29 +1771,55 @@ being transcribed.** `scratchpad/ref_fit.py` runs the exact scalar-loop, plain-l
 JS uses and compares it against a verified numpy reference on an identical ensemble: agreement to
 **1.3e-14**. Re-do that rather than trusting a JS edit, and syntax-check the page with esprima the
 way the museum page documents (`esprima.parseScript`, not `parseModule` — it is a classic script).
+That file is **gone**, like the first `page_check.py`: neither was ever committed, and `scratchpad/`
+is not in `.gitignore`, so the two now living there are worth keeping. `seed_scan.py` holds the
+generator replica (RNG, walk, noise, OKLab) and `page_check.py` imports it and adds the ensemble,
+the fit and the run.
 
-**Measured behaviour at the shipped default** (σ = 0.050, the slider's 60 % point). Re-measure with
-`scratchpad/page_check.py` if the generator or the ensemble changes:
+**Measured behaviour at the shipped default** (σ = 0.080, now the slider's top end). Re-measure
+with `scratchpad/page_check.py` if the generator or the ensemble changes. These are means over the
+320 fitting paths, three OKLab channels combined as ΔE:
 
 | | α = 0 | α = 0.2 | α = 1 | α = 3 |
 | --- | --- | --- | --- | --- |
-| seam ΔE, no propagation | 2.98 | 2.07 | 0.93 | 0.39 |
-| colour error ΔE, no propagation | 4.08 | 4.13 | 4.29 | 4.40 |
-| seam ΔE, **with** propagation | 2.02 | 1.27 | 0.51 | 0.20 |
-| colour error ΔE, with propagation | 3.82 | 3.85 | 3.93 | 3.98 |
+| seam ΔE, no propagation | 5.00 | 3.30 | 1.40 | 0.57 |
+| colour error ΔE, no propagation | 6.29 | 6.38 | 6.65 | 6.82 |
+| seam ΔE, **with** propagation | 3.44 | 2.17 | 0.88 | 0.35 |
+| colour error ΔE, with propagation | 5.88 | 5.93 | 6.09 | 6.19 |
 
-The noisy inputs sit **7.97 ΔE** from the truth, so the machine roughly halves the error — the
+The noisy inputs sit **12.99 ΔE** from the truth, so the machine roughly halves the error. The
 outputs have to look visibly smoother than the inputs or the page has no first act. Row sums come
 back exactly 1 (≤2e-16). **The middle row does not move with α at all**, because it is not part of
 the seam. Nothing on the page states this any more; it is documented here only.
 
-**The default noise was raised from 0.035 to 0.050 on purpose.** At 0.035 the α = 0 seam is only
-1.54 ΔE — a couple of JNDs, visible but too subtle for the thing the page is built around. 0.050
-puts it at 2.75 and unmistakable, while staying well above the propagation crossover below. Do not
-lower it back without checking the seam is still legible on a real screen.
+`scratchpad/page_check.py` was rebuilt on 2026-08-22 (the earlier copy was never committed) and is
+**validated end to end against the browser**: at the shipped default it reproduces the seam and
+colour-error readouts the page renders, 5.67 and 6.41, to the last digit. That check covers the
+whole chain at once, since the RNG, the walk, the noise, the fit, the run and the OKLab conversion
+all have to be right to land on the same two numbers. Two small differences from the numbers this
+file carried before it: the no-propagation seams come out 5-7 % lower than the previous table said
+(2.78 rather than 2.98 at σ = 0.050), and below about σ = 0.02 propagation is a **dead heat**
+rather than a win (0.05 against 0.06 at σ = 0.005). Both are in regimes nothing on the page turns
+on, and the shipped default is not one of them, but do not quote a benefit at tiny σ.
 
-With propagation on, the table's first row goes to **`+0.62 +0.08 +0.10 +0.12 +0.08`** — 62 % of
-the weight on the propagated inlet. That is the single most legible thing in the figure: the
+**The default noise was raised from 0.035 to 0.050 on 2026-08-17 and from 0.050 to 0.080 on
+2026-08-22, both times for legibility.** At 0.035 the shown seam was 1.54 ΔE, a couple of JNDs.
+0.050 put it at about 2.4 on the shipped sequence, and 0.080 puts it at **5.67**, which is the
+difference between suspecting the two halves of the shared glass differ and seeing that they do.
+It now opens at the slider's maximum, deliberately: the reader explores by turning the noise
+*down*, and the page's first act needs the flicker to be unmistakable before either fix means
+anything. Do not lower it back without checking the seam is still legible on a real screen.
+
+**A default only holds if the page reads its controls at boot, which it now does.** `D2` used to
+carry the opening state and nothing ever reconciled it with the markup, so a **reload** split the
+two: a browser restores a range input's and a checkbox's value without firing an event, and the
+figure went on rendering the default under a slider showing something else until it was nudged.
+`syncControls()` runs before the first `build2()` and takes σ, α and the propagate flag from the
+controls. It is the same rule the SpDef transport states for `g.rate`: derive the cached state from
+the control, never assume it. Any new control here needs a line in it.
+
+With propagation on, the table's first row goes to **`+0.59 +0.10 +0.07 +0.13 +0.11`**, i.e. 59 %
+of the weight on the propagated inlet. That is the single most legible thing in the figure: the
 machine visibly trusts the frame it was handed.
 
 **Propagation helps at every noise level, on both numbers — there is no crossover.** Measured
@@ -1792,11 +1834,12 @@ An earlier build reported a sign flip at σ ≈ 0.027 and shipped copy describin
 artefact of the old Fourier signal model, not a property of the schedule** — see the drift note
 above. Do not reinstate a crossover claim without re-deriving it.
 
-**What α does to the table is exact, and is now stated in prose rather than shown.** Push α up and the two *edge* rows
-collapse onto the three bottles both windows can see: at α = 3 they are mirror images,
-`+0.31 +0.35 +0.30 +0.02 +0.02` against `+0.02 +0.02 +0.30 +0.35 +0.31` — the same weights on the
-same three frames, which is precisely when the two pours of slot 3 must agree. The middle row never
-moves. With propagation on, the first row puts **+0.55** on the propagated inlet.
+**What α does to the table is exact, and is now stated in prose rather than shown.** Push α up and
+the two *edge* rows collapse onto the three bottles both windows can see: at α = 3 and the shipped
+σ they are mirror images, `+0.32 +0.34 +0.31 +0.02 +0.01` against `+0.01 +0.02 +0.31 +0.33 +0.32`,
+the same weights on the same three frames, which is precisely when the two pours of slot 3 must
+agree. The middle row never moves. With propagation on, the first row puts **+0.71** on the
+propagated inlet.
 
 **THE PLAYBACK LOOP IS GONE TOO** (removed 2026-08-17, same pass as the table: "the seam itself
 has told the story"). The frame swatch, the ▶ Play button, `showFrame()`, `togglePlay()` and the
@@ -1867,19 +1910,36 @@ equal chroma is what stops one window reading as the important one. Three things
   wheel, which is the one pairing red-green colour blindness cannot separate. Blue against
   terracotta is the standard safe opposition. Do not reintroduce a same-side pair.
 
-**THERE IS NO TEASER IMAGE. The landing card shows a text placeholder** reading *Teaser Under
-Construction*, because Mingyang is drawing one by hand and wanted the generated stand-in out of the
-way (2026-08-17). `assets/tempformer_teaser.png` was **deleted**; it is regenerable in one command
-if it is ever wanted for comparison.
+**THE TEASER IS MINGYANG'S OWN PAINTING, and it is the reason the landing card is a `.card.split`
+rather than a `.card.feat`.** The generated stand-in was deleted on 2026-08-17 and the placeholder
+`.teaserwip` block replaced by the drawing on 2026-08-22: a winter dusk over the city's rooftops,
+snow, lit windows, a green copper spire. It is **portrait, 0.75:1**, and that shape is what decides
+the layout. As a full-bleed `.teaser` at the card's 672px of interior it would stand ~900px tall,
+i.e. a screen of teaser above four lines of prose. In the split card it is the spdef pattern's
+200px figure column at 267px tall, which balances the text beside it. The `.teaserwip` rule and its
+"not filled yet" dashed box are **gone with it**, since the slot it stood in no longer exists.
 
-`.teaserwip` on the landing page occupies `.teaser`'s slot at roughly its height (min-height 128px
-against the PNG's ~137px as rendered), so dropping an `<img>` back in will not move the card or
-reflow the page. It uses dashed `--line` and `--dim` text, the same "not filled yet" language
-`.card.slot` uses, and stays transparent so the `.card:hover` gradient-border shorthand still shows
-through. Both colours are existing per-theme tokens, so it needed no new light/dark pair.
+`.splitfig.paint` is the two declarations that go with a *painted* teaser: 10px radius and a
+hairline `--line` border, the same treatment `.photo` gives the header portrait. The other teasers
+are diagrams on a transparent ground and take neither. This one is an opaque rectangle, and without
+them it reads as a block dropped on the card rather than a picture sitting in it.
 
-**When the drawing lands:** swap `.teaserwip` for `<img class="teaser">` with the file's real pixel
-`width`/`height` and real `alt` text, and **do not re-run the bake script over it**.
+**The shipped asset is derived and the master is not in the repo**, the same rule as `web_bg.png`
+and `misc_shelf.png`. The master is a 3024x4032 / 11.7 MB PNG; it arrived at
+`assets/temformer_teaser.png` (note the missing *p*) on 2026-08-22 and was taken back out the same
+day, so re-baking means fetching it from wherever Mingyang keeps it. There is no bake script,
+because the transform is a plain resize and encode: 690x920 covers 3x the 230px the phone layout
+paints and 3.45x the 200px column, and JPEG rather than PNG because a painting with no transparency
+quantises badly and encodes cheaply (103 KB, in family with
+`photo.jpg` at 129 KB and `misc_card.jpg` at 264 KB):
+
+```bash
+ffmpeg -y -i <master>.png -vf "scale=690:920:flags=lanczos" -q:v 2 assets/tempformer_teaser.jpg
+```
+
+**Do not re-run `tools/bake_tempformer_teaser.py` over `assets/tempformer_teaser.jpg`.** That
+script writes the generated seam figure and would overwrite the drawing; it also writes a `.png`,
+so the two no longer even collide by name.
 
 **Keep `tools/bake_tempformer_teaser.py` regardless.** It documents the page's OKLab and
 least-squares arithmetic in a form that runs offline, it prints the mixing table (now the only way
