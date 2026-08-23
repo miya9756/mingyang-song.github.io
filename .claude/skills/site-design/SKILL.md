@@ -128,33 +128,104 @@ To promote a slot to a real project: swap `<div class="card slot">` for
 teaser `<img class="teaser">` above it with the file's real pixel `width`/`height` and real
 `alt` text. The inline comment in `index.html` says the same thing at the call site.
 
-### Backdrop drawing (`body::after`)
+### Backdrop photograph (`body::after`) and the frosted sheet (`.wrap::before`)
 
-`assets/web_bg.png` is line art on a **transparent** ground, pinned to the viewport's
-bottom-right and dissolved by a diagonal mask. Four things are load-bearing:
+A full-bleed `position:fixed` painting of Mingyang's, in two frames: `assets/zuri_bg.jpg`
+(Zurich at sunset, landscape) and `assets/bg_portrait.jpg` (the pier, portrait). They replaced
+`assets/web_bg.png`, the corner line drawing; that asset and `tools/bake_web_bg.py` are still in
+the repo but nothing references them. So is `assets/bg_landscape.jpg`, the first landscape frame.
 
-- **It composites onto `--bg` directly, so no inversion between themes.** The ink is dark warm
-  maroon: pencil on the light paper, embers on the dark surface once `brightness(2.2)` lifts it
-  off `#0e1014`. `--art-op` / `--art-filter` carry the per-theme values — both themes define
-  both, per the token rule.
+- **The pair is chosen by `@media (orientation: portrait)`, not by a width breakpoint.** The
+  query asks exactly what the crop cares about: `cover` throws away the long axis, so the 16:9
+  landscape frame arrives on a phone as a vertical slice. Orientation also gets a narrow desktop
+  window right, which a `max-width` rule would not. The url lives in `--art-img`, so only the
+  substituted one is ever fetched.
 - **`.wrap` must keep `position:relative;z-index:1`.** `body::after` is positioned, so without
-  it the drawing paints *over* the text. This is the one place on the landing page where a
-  stacking context is deliberate.
-- **The fade is baked into the PNG's alpha — do not put a CSS mask back.** It was a CSS mask
-  first, and it left a visible seam: a single `linear-gradient(to bottom right, …)` puts the
-  top-right corner *halfway* along the ramp, so the drawing met the top edge at ~50–67 % opacity
-  and got cut off in a straight horizontal line. A corner fade has to be the **product of two
-  axis-aligned ramps**, one per cut edge, which CSS can only express through `mask-composite` —
-  patchy support, and where it is missing multiple masks fall back to *union*, i.e. worse rather
-  than gracefully. Baked, it is exact, prefix-free, and empties 55 % of the canvas. The ramps
-  are smoothstep, not linear: a linear fade has a kink where it reaches full opacity, and the
-  kink is itself faintly visible.
-- **The asset is derived, not the master.** `tools/bake_web_bg.py --src <master>` rebuilds it:
-  2000 px / 3.4 MB down to 1600 px / 192 colours / 490 KB, which is 2× the 800 CSS px it is ever
-  painted at. Re-exporting from the artwork by hand puts the seam straight back and multiplies
-  the landing page's weight. Keep the master outside the repo. **`W, H` in that script and the
-  `width:` in the CSS are a pair** — raising the displayed size without re-baking means the
-  browser upscales line art, which is exactly the content that shows it.
+  it the painting paints *over* the text. This is the one place on the landing page where a
+  stacking context is deliberate, and it is also what puts `.wrap::before` above the painting.
+- **The tone is a runtime filter, not baked, because the two themes pull opposite ways** — dark
+  presses the painting down into the ink with `brightness(.4)`, light leaves it near its own
+  weight. One JPEG cannot carry both, so `--art-op` / `--art-filter` stay tokens; both themes
+  define both, per the token rule.
+- **`--art-op` and `--art-filter` are taste, and `--sheet` is legibility. Do not confuse them.**
+  The painting once ran at a quarter opacity because that was the entire contrast budget: body
+  text sat straight on it. It runs at full strength now because `.wrap::before` gives the text a
+  ground instead. Changing the picture or its filter is therefore a free choice — re-measuring
+  the sheet afterwards is not.
+
+**The frosted sheet is the answer to "the grey text is unreadable", and it is the only one that
+works here.** Over the Zurich painting, unveiled, `--fg` measures **1.18:1** against the purple
+city in light mode and `--dim` sits under 4.5:1 across half the frame in dark. No text colour
+fixes that: the picture runs from a yellow sky to a dark city *within one screen*, so any single
+colour fails on one half of it. Nor does `contrast-color()` — it resolves against a declared
+colour, never against what is actually painted behind. Five things are load-bearing:
+
+- **The veil is the legibility; the blur is the look.** `--sheet` is a translucent `--bg` and is
+  what the contrast is measured on. `--sheet-glass` (the `backdrop-filter`) only decides whether
+  the show-through reads as glass or as a picture at low opacity. That split is why the
+  `@supports` fallback raises the veil rather than simply dropping the filter.
+- **THE FILTER CHAIN FLATTENS LUMINANCE AND THEN RESTORES CHROMA, AND THAT ORDER IS THE TRICK.**
+  Contrast ratio is a function of luminance alone, so luminance variation is what breaks text —
+  and colour is what makes the painting legible *as* a painting. `contrast(.35)` crushes both,
+  `brightness(1.55)` puts the flattened result back on the paper, `saturate(3.6)` hands back only
+  the colour. Measured against the plain frosted sheet it replaced: chroma spread more than
+  **quadruples** (5.1 → 20.7 on the landscape) while luminance spread **falls** (12.3 → 8.4). More
+  picture and safer text at once — which is what paid for the veil coming down from .82 to .64 and
+  the blur from 20px to 12px. Removing either function inverts the effect. Dark needs no
+  `contrast()`, since `body::after`'s `brightness(.4)` has already crushed the range, so its chain
+  is deliberately one function shorter.
+- **The two themes need very different veils — .64 against .28 — and that is not an oversight.**
+  `body::after` already presses the painting toward `--bg` in dark, so it barely has to be
+  covered; in light it arrives at full weight over paper.
+- **The numbers are measured, over both assets, blurred and toned exactly as the CSS does it.**
+  Worst pixel under the column: `--fg` 11.6:1 / `--dim` 4.84:1 light, 10.2:1 / 4.83:1 dark; the
+  no-`backdrop-filter` fallback (.90 / .86) gives 4.99:1 / 6.57:1. **`--dim` is always the floor,
+  and it is close** — two points of veil is about .09 of contrast ratio, so .62 / .26 is the edge
+  of AA and below it is not.
+- **The rim, the sheen and the cast shadow are free, and they are most of the glass.** They paint
+  once into the element's own layer; only the `backdrop-filter` is resampled as the sheet scrolls
+  over a fixed painting. That is also the argument against going further: real edge refraction
+  needs `backdrop-filter:url(#…)` with an `feDisplacementMap`, which Chrome has and Safari and
+  Firefox do not — and an unsupported function invalidates the **whole** declaration, taking the
+  blur and therefore the contrast floor with it. **Do not add it.**
+- **`z-index:-1`, and the horizontal inset only above 900px.** The negative index keeps the sheet
+  behind `.wrap`'s content while staying inside the stacking context `.wrap` opens, which is both
+  what puts it over the painting and what lets `backdrop-filter` see the painting. `.wrap` is the
+  full viewport width on a phone, so the `-28px` overhang that makes the sheet read as an object
+  on a desktop would push a horizontal scrollbar there. Its `border-radius` is the cards' 12px,
+  not a rounder one of its own — the sheet is the ground the cards sit on, and two different
+  corner radii in one column read as two design systems. The rim reuses the card pattern's
+  gradient-border technique (veil clipped to `padding-box` over `--sheet-rim` clipped to
+  `border-box`), for the same reason the cards do: `border-color` takes no gradient and
+  `border-image` flattens the radius.
+
+**`.stamp` is the painting's caption, and it lives in the gutter.** *October 20, 2023 / 18:18
+Zürich*, fixed to the viewport's bottom-left, standing on the picture rather than on the sheet.
+Three decisions:
+
+- **White in both themes, measured not assumed.** The picture's bottom-left corner stays dark
+  under either `--art-filter`, and over the box the caption actually occupies white measures at
+  worst **5.7:1**, typically 9–19:1, across 1280×1024 / 1440×900 / 1920×1080 / 2560×1440. No
+  scrim needed. The `text-shadow` is insurance for a future painting, not what makes this one
+  legible — re-measure if the picture is swapped for a lighter one.
+- **`@media (min-width:1150px) and (orientation:landscape)`, and both halves are load-bearing.**
+  The width is the gutter: the sheet is 864px wide with its overhang, so 1150px leaves 143px a
+  side and narrower puts the caption under the glass. The orientation is the same question the
+  backdrop asks — a tall desktop window can be 1200px wide and still be showing the portrait
+  frame, which has no room for it and was never measured.
+- **`aria-hidden`**, because the painting it captions is a CSS background and does not exist for
+  a screen reader. Read aloud, a bare date and city after the footer is an orphan.
+
+**The shipped JPEGs are derived; the masters are not in the repo.** `.gitignore` names them so
+`git add assets/` cannot take them. There is no bake script because the transform is a plain
+resize and encode:
+
+```bash
+ffmpeg -y -i <landscape master>.png -vf "scale=1920:1080:flags=lanczos" -q:v 4 assets/<name>.jpg
+ffmpeg -y -i <portrait master>.png  -vf "scale=1170:2080:flags=lanczos" -q:v 4 assets/bg_portrait.jpg
+```
+
+200-350 KB each, in family with the teasers.
 
 ### Motion
 Every transition and animation must be switched off in the existing

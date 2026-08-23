@@ -15,6 +15,19 @@ machine). The substantial piece is
 `projects/smv/` — a 100 % client-side player for compressed dynamic 3D-Gaussian
 ("4D-GS") scenes, the results site for *SmoothMotionVectors* (SIGGRAPH 2026).
 
+**The landing page's backdrop is a full-bleed photograph now, and there are two of them.**
+`assets/bg_landscape.jpg` and `assets/bg_portrait.jpg` — Mingyang's own paintings of the lake —
+are picked by `@media(orientation:portrait)`, since `cover` throws away the long axis and the 16:9
+frame would arrive on a phone as a slice of water. They replaced the corner line drawing;
+`assets/web_bg.png` and `tools/bake_web_bg.py` are still in the repo but nothing references them.
+The masters (14-15 MB) are gitignored, only the derived JPEGs ship, and **the opacities are
+run at full strength, and the text's legibility is carried by a separate frosted sheet**
+(`.wrap::before`, a translucent `--bg` veil plus `backdrop-filter`) rather than by the painting's
+opacity — so `--art-op` / `--art-filter` are a taste control and `--sheet` is the measured one.
+Unveiled, `--fg` reads 1.18:1 over the painting's dark city, which is why no text colour and no
+`contrast-color()` can solve this and the text needs a ground instead. Full rationale in the
+*Backdrop photograph and the frosted sheet* section of `.claude/skills/site-design/SKILL.md`.
+
 Under *Elsewhere* it also links two image-backed cards: the external Pixiv gallery and
 `misc/` (**Miscellany**), a shelf for things that belong to no project. That page is not a
 project page — it borrows the landing page's warm paper rather than picking a temperature of

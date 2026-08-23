@@ -7,3 +7,8 @@ node_modules/
 # JVM/HotSpot crash dumps
 hs_err_pid*.log
 *.log
+
+# Backdrop-photo masters for the landing page. 14-15 MB each; only the derived
+# assets/bg_landscape.jpg / bg_portrait.jpg ship. See CLAUDE.md.
+assets/horizontal_bg.png
+assets/vertical_bg.png
