@@ -41,7 +41,16 @@ from PIL import Image
 # list can cover pages that do not share a vocabulary.
 TARGETS = [".role", ".topics li", ".stamplbl", ".stamptxt", "h1", "h2", "h3", "p",
            ".bidx", ".band h3", ".band p", ".tag", ".cta", ".clbl", ".cval", "footer",
-           ".artlbl", ".artval", ".artcta", ".minilbl", ".minival"]
+           ".artlbl", ".artval", ".artcta", ".minilbl", ".minival",
+           # The oil-paint tuner's runs. Its panes carry small monospace parameter names and an
+           # 11px stats line, which is why its veil is raised above the landing page's — these
+           # are the selectors that prove the raise was enough. Deliberately NOT `button` or
+           # `.wipe .tag`: those two sit on a photograph the visitor chose, which has no
+           # measurable ground, so including them would report a failure about someone's snapshot.
+           # the Miscellany shelf's items (the .mtitle window is skipped by the clip test below)
+           ".mkick", ".mdesc", ".mgo",
+           ".back", ".card h2", ".row .name", ".row .val", ".row .hint", ".swatch em",
+           "#stats span", ".bar-row button", "label.tog", "#status", ".fovhint", ".note li"]
 # Making the text transparent leaves its box in place, so the boxes measured before the swap
 # still address the right pixels afterwards.
 GROUND = """*{color:transparent!important;-webkit-text-fill-color:transparent!important;
@@ -70,7 +79,15 @@ def free_port():
 def measure(pw, page_path, scheme, port):
     from PIL import Image
     browser = pw.chromium.launch()
-    pg = browser.new_page(viewport={"width": 1440, "height": 900}, color_scheme=scheme)
+    # MEASURED WITH REDUCED MOTION, and that is a requirement rather than a preference. The
+    # proof below needs the page to reproduce a frame byte for byte; anything animating for
+    # ever makes that impossible, and the landing page's `.live` status dot pulses on a 2.4 s
+    # loop. Every animation on this site is switched off in its own `prefers-reduced-motion`
+    # block -- that is the site's own rule -- so asking for it is asking for a state the pages
+    # already promise, and contrast does not depend on motion. It doubles as a check of the
+    # rule: a page that will not hold still here has something moving outside that block.
+    pg = browser.new_page(viewport={"width": 1440, "height": 900}, color_scheme=scheme,
+                          reduced_motion="reduce")
     pg.goto("http://127.0.0.1:%d/%s" % (port, page_path.lstrip("/")), wait_until="networkidle")
     pg.evaluate("() => Promise.all([...document.images].map(i => i.decode().catch(() => {})))")
     for _ in range(60):
@@ -78,13 +95,39 @@ def measure(pw, page_path, scheme, port):
             break
         pg.wait_for_timeout(120)
     pg.wait_for_timeout(250)
+    # WAIT FOR THE PAGE TO STOP MOVING, which `networkidle` does not do. The oil-paint tuner
+    # renders its sample painting on the main thread's clock rather than on the network's: a
+    # draft lands at ~1 s and the refine seconds later, and the stats line it writes changes
+    # height, so EVERY panel below it shifts. Screenshot the lit page before that settles and
+    # the ground pass afterwards, and the "changed pixels" mask stops being a glyph mask and
+    # becomes the whole page -- which reads out as a spread of impossible 1.00:1 failures on
+    # runs of text that are in fact fine. Two identical frames 400 ms apart is the cheapest
+    # test that covers a render, a spinner's ticking clock and a late webfont swap at once.
+    prev, still = None, 0
+    for _ in range(150):
+        cur = pg.screenshot()
+        still = still + 1 if cur == prev else 0
+        if still >= 2:
+            break
+        prev = cur
+        pg.wait_for_timeout(400)
     els = pg.evaluate("""(sels) => {
       const seen = new Set(), out = [];
       for (const s of sels) for (const e of document.querySelectorAll(s)) {
         if (seen.has(e) || !e.textContent.trim()) continue;
         const r = e.getBoundingClientRect(); if (!r.width || !r.height) continue;
+        const cs0 = getComputedStyle(e);
+        // TEXT CLIPPED OUT OF A PICTURE CANNOT BE MEASURED THIS WAY, and skipping it is not a
+        // dodge. Making the fill transparent is exactly what such an element does on hover: the
+        // "ground" the second render exposes inside its glyphs is its OWN image, not what is
+        // behind it, so the difference is not a glyph mask and the worst pixel is whichever
+        // one happens to match the fill -- 1.00:1, always, on a title that is in fact opaque
+        // ink on paper. The Miscellany shelf's two titles are the case. Their revealed state
+        // is a real measurement and it is made where the picture is BAKED
+        // (tools/bake_oilpaint_type.py), against the paper, over every pixel.
+        if (cs0.webkitBackgroundClip === 'text' || cs0.backgroundClip === 'text') continue;
         seen.add(e);
-        const cs = getComputedStyle(e);
+        const cs = cs0;
         const col = (cs.webkitTextFillColor && cs.webkitTextFillColor !== 'currentcolor')
                     ? cs.webkitTextFillColor : cs.color;
         out.push({sel:s, col, x:r.x+scrollX, y:r.y+scrollY, w:r.width, h:r.height,
@@ -98,19 +141,54 @@ def measure(pw, page_path, scheme, port):
     # on the right, so the box contains pixels no glyph ever touches and the box-wide worst case
     # is a failure that does not exist. Pixels that changed when the text was made transparent
     # are exactly the pixels the text covers, so the mask is exact and costs one more screenshot.
+    # THE TWO PASSES ARE PROVEN TO DESCRIBE THE SAME PAGE, not assumed to. Everything above is
+    # a heuristic for "has it stopped moving", and a heuristic is exactly what this cannot rest
+    # on: a page whose picture is still being computed -- the oil-paint tuner renders its
+    # sample on its own clock -- can sit perfectly still for a second while a worker is busy,
+    # break the stillness test, and then repaint between the lit pass and the ground pass. When
+    # that happens the changed-pixel mask stops being a glyph mask and becomes the whole page,
+    # and the readout is a spread of impossible 1.00:1 failures on runs of text that are fine.
+    # So the style is REMOVED again afterwards and every position re-shot: if the page comes
+    # back byte-identical to its lit frame, nothing moved in between and the mask is exact. If
+    # it does not, the capture is thrown away and retried rather than reported.
+    positions = list(range(0, max(1, total - 900 + 1), 450))
+
+    def capture():
+        lit = {}
+        for sy in positions:
+            pg.evaluate("window.scrollTo(0,%d)" % sy); pg.wait_for_timeout(200)
+            lit[sy] = pg.screenshot()
+        tag = pg.add_style_tag(content=GROUND)
+        pg.wait_for_timeout(250)
+        gnd = {}
+        for sy in positions:
+            pg.evaluate("window.scrollTo(0,%d)" % sy); pg.wait_for_timeout(200)
+            gnd[sy] = pg.screenshot()
+        tag.evaluate("e => e.remove()")
+        pg.wait_for_timeout(250)
+        for sy in positions:                      # the proof
+            pg.evaluate("window.scrollTo(0,%d)" % sy); pg.wait_for_timeout(200)
+            if pg.screenshot() != lit[sy]:
+                return None
+        return lit, gnd
+
+    got = None
+    for attempt in range(4):
+        got = capture()
+        if got:
+            break
+        pg.wait_for_timeout(3000)
+    if not got:
+        browser.close()
+        sys.exit("%s / %s: the page kept repainting between the two passes, so no glyph mask "
+                 "can be trusted. Nothing was measured." % (page_path, scheme))
+
+    lit_png, gnd_png = got
     shots = {}
-    for sy in range(0, max(1, total - 900 + 1), 450):
-        pg.evaluate("window.scrollTo(0,%d)" % sy); pg.wait_for_timeout(200)
-        lit = np.asarray(Image.open(io.BytesIO(pg.screenshot())).convert("RGB")).astype(np.int16)
-        shots[sy] = [lit]
-    pg.add_style_tag(content=GROUND)
-    pg.wait_for_timeout(250)
-    for sy in list(shots):
-        pg.evaluate("window.scrollTo(0,%d)" % sy); pg.wait_for_timeout(200)
-        ground = np.asarray(Image.open(io.BytesIO(pg.screenshot())).convert("RGB"))
-        lit = shots[sy][0]
-        mask = np.abs(lit - ground.astype(np.int16)).max(axis=2) > 10
-        shots[sy] = (ground, mask)
+    for sy in positions:
+        lit = np.asarray(Image.open(io.BytesIO(lit_png[sy])).convert("RGB")).astype(np.int16)
+        ground = np.asarray(Image.open(io.BytesIO(gnd_png[sy])).convert("RGB"))
+        shots[sy] = (ground, np.abs(lit - ground.astype(np.int16)).max(axis=2) > 10)
     browser.close()
 
     worst = {}

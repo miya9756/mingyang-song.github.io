@@ -32,12 +32,17 @@ PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
          "projects/spdef/triplanes.html", "projects/spdef/field.html",
          "projects/spdef/knots.html", "projects/spdef/knotsplat.html",
          "projects/grain/index.html", "projects/tempformer/index.html",
-         "misc/index.html", "misc/museum/index.html"]
+         "misc/index.html", "misc/museum/index.html",
+         "misc/oilpaint/index.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
            "projects/smv/dequant_worker.js", "projects/smv/sw.js",
-           "projects/spdef/traj.js", "projects/spdef/knot_decode.js"]
+           "projects/spdef/traj.js", "projects/spdef/knot_decode.js",
+           # The oil-paint tuner's compute engine: it is a module WORKER, so nothing on the
+           # page names its imports and a page-only sweep would miss the whole JS package
+           # it pulls in (13 modules) plus the generated schema.json it fetches.
+           "misc/oilpaint/engine.worker.js", "misc/oilpaint/session.js"]
 
 VOID = {"br", "img", "input", "meta", "link", "hr", "source", "area", "base",
         "col", "embed", "param", "track", "wbr"}
@@ -156,6 +161,11 @@ def check_dom_ids(page, src):
                 # the grain page's `$` is getElementById under a shorter name; without this its
                 # ~30 element lookups are invisible here and a deleted element throws on load
                 r"\$\(\s*['\"]([A-Za-z][\w-]*)['\"]\s*\)",
+                # …and the oil-paint tuner's `$`, which is querySelector under the same short
+                # name and so passes a real SELECTOR. Without this its ~50 element lookups are
+                # invisible too — and that page's front row is BUILT from a schema, so a control
+                # that lost its container is a blank panel rather than a visible gap.
+                r"\$\(\s*['\"]#([A-Za-z][\w-]*)['\"]\s*\)",
                 # a pane's iframe id, named in the SpDef host's GROUPS config, not passed to _ctl()
                 r"frId\s*:\s*['\"]([A-Za-z][\w-]*)['\"]"):
         refs |= set(re.findall(pat, src))
@@ -205,6 +215,61 @@ def check_repeated_controls(page, src):
             fail(page, f'#{bid} ({kind.group(1)}) is missing view controls: {", ".join(missing)}')
     if not bad:
         print(f"  ok    view controls ({len(blocks)} blocks over {len(want)} kinds)")
+
+
+def check_page_defaults(page, src):
+    """A page's own opening settings must be reachable by the controls that show them.
+
+    The oil-paint tuner opens on a chosen look rather than on `PaintConfig`'s defaults, and
+    that table (`PAGE_DEFAULTS`) lives in the page while the control ranges live in the
+    generated `schema.json` beside it. Nothing else ties the two together, and both failures
+    are silent in a browser: a value off its slider's step grid looks correct until the first
+    drag SNAPS it, so a touch meant as a no-op changes the picture; and a `choice` naming an
+    option the schema no longer has leaves the <select> on its first entry while `params`
+    carries the dead name straight to the engine. Re-staging from upstream is exactly when
+    both happen, since that is what replaces schema.json.
+
+    Skipped, not failed, on a page with no such table -- this is one page's check.
+    """
+    m = re.search(r"const PAGE_DEFAULTS\s*=\s*\{(.*?)\};", src, re.S)
+    if not m:
+        return
+    schema_path = os.path.join(ROOT, os.path.dirname(page), "schema.json")
+    if not os.path.exists(schema_path):
+        fail(page, "PAGE_DEFAULTS but no schema.json beside the page to check it against")
+        return
+    doc = json.load(open(schema_path, encoding="utf-8"))
+    ctl = {c["name"]: c for c in doc.get("schema", [])}
+    want = dict(re.findall(r"([A-Za-z_]\w*)\s*:\s*'([^']*)'", m.group(1)))
+    nums = {k: float(v) for k, v in
+            re.findall(r"([A-Za-z_]\w*)\s*:\s*(-?[\d.]+(?:e-?\d+)?)\s*[,}]", m.group(1))}
+    bad = []
+    for name, v in want.items():
+        c = ctl.get(name)
+        if not c:
+            bad.append(f"{name}: no such control in schema.json")
+        elif c["kind"] != "choice":
+            bad.append(f"{name}: {v!r} is a string but the control is {c['kind']}")
+        elif v not in c["min"]:
+            bad.append(f"{name}: {v!r} is not one of {c['min']}")
+    for name, v in nums.items():
+        c = ctl.get(name)
+        if not c:
+            bad.append(f"{name}: no such control in schema.json")
+            continue
+        if c["kind"] == "choice":
+            bad.append(f"{name}: numeric but the control is a choice")
+            continue
+        lo, hi, step = c["min"], c["max"], c["step"]
+        if v < lo or v > hi:
+            bad.append(f"{name}: {v:g} is outside the control's {lo}..{hi}")
+        elif step and abs(round((v - lo) / step) - (v - lo) / step) > 1e-6:
+            bad.append(f"{name}: {v:g} is off the {step:g} step grid from {lo:g}"
+                       f" -- the slider would snap it on first drag")
+    if bad:
+        fail(page, "PAGE_DEFAULTS disagrees with schema.json: " + "; ".join(bad))
+    else:
+        print(f"  ok    page defaults ({len(want) + len(nums)} settings on-grid)")
 
 
 def check_page_chrome(page, src):
@@ -401,6 +466,7 @@ def main():
         check_dom_ids(page, src)
         check_css_comments(page, src)
         check_repeated_controls(page, src)
+        check_page_defaults(page, src)
         check_page_chrome(page, src)
         check_assets(page, src)
 

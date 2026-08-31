@@ -164,6 +164,15 @@
   @media(max-width:960px){.still{right:-34px;bottom:-92px;width:290px;height:385px}
                           .marquee{min-height:315px}}
   @media(max-width:680px){.still{display:none}.marquee{min-height:0}}
+  /* The two windows. Both were measured as TEXT on this page's paper before shipping, since
+     every pixel of them is a glyph: blended toward --ink and with the chroma put back, the
+     museum's render comes out at worst 3.5:1 and the tuner's painting at worst 3.6:1, so both
+     clear the 3:1 bar large text has to meet even at their brightest point. Re-measure if
+     either is replaced -- the museum's raw render was 1.9:1 and the raw painting 1.2:1, and
+     neither would have passed. tools/bake_oilpaint_type.py does the tone and the measurement
+     for the second one, and refuses to write a file that fails. */
+  .m-museum{--type-img:url(../assets/museum_type.jpg);--type-pos:center 44%}
+  .m-paint{--type-img:url(../assets/oilpaint_type.jpg);--type-pos:center 52%}
   .mgo{display:block;margin-top:.8em;font-size:13px;font-weight:600;color:var(--accent)}
   .mgo .arrow{display:inline-block;transition:transform .18s}
   .marquee:hover .mgo .arrow,.marquee:focus-visible .mgo .arrow{transform:translateX(5px)}
@@ -174,9 +183,15 @@
      The fill was blended toward --ink and measured against this page's paper before shipping: worst
      pixel 3.5:1, median 10.3:1, so every glyph clears the 3:1 bar large text has to meet even at the
      brightest point of the painting. Re-measure if the render is ever replaced. */
+  /* THE PICTURE IS PER ITEM AND ARRIVES AS A CUSTOM PROPERTY, not as a second rule. Every
+     shelf item's window shows the thing that item links to, so the url is a property of the
+     entry rather than of the pattern -- one `--type-img` on the .marquee, and the clip, the
+     fill, the reveal and the descender fix below are written exactly once however many
+     compartments the case grows. `--type-pos` goes with it because the right crop is a fact
+     about the picture, not about the layout. */
   @supports ((-webkit-background-clip:text) or (background-clip:text)){
-    .mtitle{background-image:url(../assets/museum_type.jpg);background-size:cover;
-            background-position:center 44%;-webkit-background-clip:text;background-clip:text}
+    .mtitle{background-image:var(--type-img);background-size:cover;
+            background-position:var(--type-pos,center);-webkit-background-clip:text;background-clip:text}
     .marquee:hover .mtitle,.marquee:focus-visible .mtitle{color:transparent;-webkit-text-fill-color:transparent}
     /* No hover on a touch screen, so there the picture is simply always in the letters. */
     @media(hover:none){.mtitle{color:transparent;-webkit-text-fill-color:transparent}}
@@ -205,16 +220,39 @@
 <main class="inner">
   <h2>The shelf</h2>
   <div class="shelf">
-    <a class="marquee" href="museum/">
+    <a class="marquee m-museum" href="museum/">
       <span class="mkick">Now showing</span>
       <h3 class="mtitle">Digital Museum</h3>
       <span class="mdesc">Paintings filmed in a gallery, fitted as 3D Gaussians.</span>
       <span class="mgo">Walk in <span class="arrow" aria-hidden="true">→</span></span>
+    </a>
+    <a class="marquee m-paint" href="oilpaint/">
+      <span class="mkick">Open playground</span>
+      <h3 class="mtitle">Oil Paint Tuner</h3>
+      <!-- ONE SHORT LINE, and that is a constraint rather than a style: the still life stands
+           at the right-hand end of this compartment, and a description long enough to wrap runs
+           under its cloth. Measured at the tightest width the object survives to: at 681px this
+           line ends 29px clear of the vignette's box, in family with the museum's 33px, where the
+           longer version it replaced had 7px. (The real gap is larger still — the cloth's own ink
+           at this height is inset from the image's left edge — but the box is the number that
+           cannot drift when the drawing is re-baked.) -->
+      <span class="mdesc">A photograph repainted, one stroke at a time.</span>
+      <span class="mgo">Start painting <span class="arrow" aria-hidden="true">&rarr;</span></span>
       <!-- The still life standing on this compartment's board. Decorative, so alt="" — the link
            already has its name from the heading beside it, and a description here would only make
            a screen reader read the shelf twice. width/height are the FILE's pixels (2x what the
            page paints, for a retina panel); the CSS sizes it and lets it hang out of the case. Derived by tools/bake_shelf_still.py
-           from the master, which is deliberately not committed — same rule as assets/web_bg.png. -->
+           from the master, which is deliberately not committed — same rule as assets/web_bg.png.
+
+           IT LIVES IN THE LAST COMPARTMENT, and it moves whenever a new one is added below.
+           Its whole effect is that it BREAKS THE CASE — the cloth drapes over the bottom board
+           and down past the footer's rule, so the object reads as being in front of the
+           furniture rather than parked inside it — and only the bottom board has anything to
+           break out of. Left on the compartment above, the drape hangs neatly INSIDE the case
+           and, worse, paints across the next item's description, which every offset here was
+           measured to keep clear. A shelf whose every compartment holds the same object would
+           be a wallpaper, so the answer is one object at the bottom rather than one each; when
+           an item gets a drawing of its own, that drawing takes this slot. -->
       <img class="still" src="../assets/misc_shelf.png" width="720" height="955" alt=""
            decoding="async">
     </a>

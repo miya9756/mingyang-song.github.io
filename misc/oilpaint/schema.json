@@ -1,0 +1,606 @@
+{
+ "schema": [
+  {
+   "group": "Allocation",
+   "name": "metric",
+   "kind": "choice",
+   "min": [
+    "var",
+    "range",
+    "grad",
+    "dct",
+    "residual"
+   ],
+   "max": null,
+   "step": null,
+   "help": "Where the tree spends strokes. 'var' is the classic quadtree criterion."
+  },
+  {
+   "group": "Allocation",
+   "name": "target_n",
+   "kind": "int",
+   "min": 200,
+   "max": 40000,
+   "step": 100,
+   "help": "Stroke budget. A CEILING, not a quota -- tau_floor can stop it being reached."
+  },
+  {
+   "group": "Allocation",
+   "name": "max_cell",
+   "kind": "int",
+   "min": 8,
+   "max": 256,
+   "step": 4,
+   "help": "Largest stroke, in pixels."
+  },
+  {
+   "group": "Allocation",
+   "name": "min_cell",
+   "kind": "int",
+   "min": 2,
+   "max": 64,
+   "step": 1,
+   "help": "Smallest stroke. Below ~8px a stroke stops reading as a stroke."
+  },
+  {
+   "group": "Allocation",
+   "name": "tau_floor",
+   "kind": "float",
+   "min": 0.0,
+   "max": 0.002,
+   "step": 2e-05,
+   "help": "Absolute detail floor the budget cannot buy past. Stops the tree subdividing JPEG noise in flat regions. Calibrated for metric='var'."
+  },
+  {
+   "group": "Allocation",
+   "name": "foveal_strength",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "How much the painted foveal map steers the stroke budget. 0 ignores it entirely, 1 makes it a hard gate where an unmarked cell cannot subdivide at all, and between the two it blends with the content metric. The budget is REDISTRIBUTED, never increased -- so if target_n is already unreachable there is nothing for the map to move and this will look inert. Lower target_n first."
+  },
+  {
+   "group": "Palette",
+   "name": "palette",
+   "kind": "choice",
+   "min": [
+    "none",
+    "zorn",
+    "impressionist",
+    "old-master",
+    "nocturne",
+    "fauve"
+   ],
+   "max": null,
+   "step": null,
+   "help": "The colour a painter would have mixed, rather than the one the camera recorded. 'none' is the photograph's own colour and every trim below still works on it; the rest each stand for a real palette -- 'zorn' is four pigments and cannot make a saturated blue, 'impressionist' has no black on it at all and puts violet in the shadows, 'old-master' is earths under a varnish, 'fauve' is colour off the leash."
+  },
+  {
+   "group": "Palette",
+   "name": "palette_strength",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "How far toward the graded colour the paint goes. 1 is the preset as written, 0 is the photograph and skips the grade entirely."
+  },
+  {
+   "group": "Palette",
+   "name": "warm_cool",
+   "kind": "float",
+   "min": -1.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "The warm-cool split, on top of the preset's own. Positive swings the lights toward the light's hue and the shadows toward its complement -- the single strongest cue that a colour was mixed rather than measured. Negative swaps the two."
+  },
+  {
+   "group": "Palette",
+   "name": "chroma",
+   "kind": "float",
+   "min": -0.6,
+   "max": 0.8,
+   "step": 0.01,
+   "help": "Chroma trim. Down toward a limited palette, which cannot reach a camera's most saturated colours; up toward paint used straight from the tube."
+  },
+  {
+   "group": "Palette",
+   "name": "value_compress",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "Pulls the darkest and lightest paint off the ends of the range. Oil has no pure black and no pure white, and the tinted ends the preset supplies only become visible once there is room for them."
+  },
+  {
+   "group": "Palette",
+   "name": "pigment",
+   "kind": "float",
+   "min": -0.6,
+   "max": 0.6,
+   "step": 0.01,
+   "help": "How far each stroke is pulled onto a colour the palette can actually MIX. Every preset names real tubes, and this is what makes the name binding rather than decorative: at the top of the range a Zorn painting contains no blue anywhere, because four pigments cannot make one. A TRIM like the rest -- 0 is whatever the preset asked for, and the range goes negative so a preset's own projection can be turned off. INERT at palette = 'none', which has no pigments to project onto. The ground is never projected: a stroke is one mixture, a blurred gradient is not."
+  },
+  {
+   "group": "Palette",
+   "name": "broken_color",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "Broken colour: neighbouring strokes alternate warm and cool about their own hue, so the eye mixes them rather than the palette knife. Unlike color_jitter this is a HUE alternation and it costs no random draw -- it rides the stroke's existing phase, so the painting's geometry is untouched at any value."
+  },
+  {
+   "group": "Flow",
+   "name": "flow",
+   "kind": "choice",
+   "min": [
+    "none",
+    "starry",
+    "waterlily",
+    "hatch"
+   ],
+   "max": null,
+   "step": null,
+   "help": "The organisation a PAINTER brings to the marks, as opposed to the one the subject has. 'none' follows the photograph's own structure and every trim below is inert. 'starry' is counter-rotating vortices and long chained ribbons; 'waterlily' is a near-horizontal weave of short dabs, and the SHORTNESS is doing as much of the work as the direction; 'hatch' is Cezanne's constructive stroke, one diagonal laid over everything. Nothing here moves a quadtree leaf, a stroke's size or its colour. A swirl field puts its vortices on a golden-angle spiral by default; on the tuner page the 'Swirl centres' tool places them by hand instead, and the CLI takes --vortices."
+  },
+  {
+   "group": "Flow",
+   "name": "flow_strength",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "How far the field takes over from the picture's own structure. Low values fill only the passages where the tensor had no signal anyway -- a sky, a flat ground -- and 1 overrules real edges too, which is what van Gogh does to a cypress. 0 skips the whole thing and is bit-identical to 'none'."
+  },
+  {
+   "group": "Flow",
+   "name": "flow_coh",
+   "kind": "float",
+   "min": -0.6,
+   "max": 0.6,
+   "step": 0.01,
+   "help": "Ribbons vs dabs, on top of the preset's own choice. Elongation is driven by coherence, so asserting a high one makes every mark stretch to aniso_max and a low one keeps them stubby. NEGATIVE range on purpose: without it a preset's ribbons could not be turned back into dabs and the other knobs could not be judged."
+  },
+  {
+   "group": "Flow",
+   "name": "flow_scale",
+   "kind": "float",
+   "min": -0.75,
+   "max": 2.0,
+   "step": 0.01,
+   "help": "Feature size trim -- swirl radius, wave wavelength and the turbulence together. -0.75 is a quarter of the preset's scale, 2.0 is three times it. In normalised canvas units, so a resize does not change the field. INERT at flow = 'none'."
+  },
+  {
+   "group": "Flow",
+   "name": "flow_rot",
+   "kind": "float",
+   "min": -180.0,
+   "max": 180.0,
+   "step": 5.0,
+   "help": "Rotates the field, in degrees, on top of the preset's own direction. For 'waterlily' this is the water plane; for 'hatch' it is which way the hatching runs; for a swirl it turns the spiral of vortices AND the background drift they sit on. Hand-placed centres are not turned by it -- they stay where they were put, and only the drift between them swings. INERT at flow = 'none'."
+  },
+  {
+   "group": "Flow",
+   "name": "flow_drift",
+   "kind": "float",
+   "min": -1.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "How far each stroke slides ALONG the flow, in stroke radii. The only term here that moves a mark rather than turning it: it makes strokes lying on a flow line bunch and read as a CHAIN following the curve, which orientation alone cannot do. Colours do not move with it -- a stroke still carries its own cell's paint. Negative so a preset's drift can be cancelled -- the range reaches past the largest drift any preset asks for, which tests/test_core.py checks -- and far enough to run the marks BACKWARDS along the flow. Never applied to the underpainting, which has to cover."
+  },
+  {
+   "group": "Geometry",
+   "name": "kappa",
+   "kind": "float",
+   "min": 0.7,
+   "max": 2.0,
+   "step": 0.01,
+   "help": "Radius vs cell edge. 1.414 (sqrt 2) exactly covers a square cell."
+  },
+  {
+   "group": "Geometry",
+   "name": "orient",
+   "kind": "choice",
+   "min": [
+    "structure",
+    "random",
+    "fixed"
+   ],
+   "max": null,
+   "step": null,
+   "help": "Stroke angle source. 'structure' follows the form; 'random' reads as confetti."
+  },
+  {
+   "group": "Geometry",
+   "name": "aniso_max",
+   "kind": "float",
+   "min": 1.0,
+   "max": 12.0,
+   "step": 0.1,
+   "help": "Max elongation on a fully coherent edge. 1.0 = round blobs = pointillist dots; the top of the range gives long dragged marks that follow the form."
+  },
+  {
+   "group": "Geometry",
+   "name": "tensor_sigma",
+   "kind": "float",
+   "min": 0.5,
+   "max": 8.0,
+   "step": 0.1,
+   "help": "Structure-tensor smoothing. Larger = calmer, more coherent flow field."
+  },
+  {
+   "group": "Geometry",
+   "name": "flat_dir",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "The flat-region directional brush. Where the detail-scale tensor has no signal -- sky, a gradient ground, an out-of-focus background -- its angle is the arctangent of noise and its coherence is 0, so the strokes come out as randomly-turned round blobs. This hands those places over to a coarse-scale reading of the same image and lets them elongate along it, the way a painter lays a flat passage in with one sweep. 0 is off and bit-identical to before; coherent edges are untouched at any value."
+  },
+  {
+   "group": "Geometry",
+   "name": "flat_sigma",
+   "kind": "float",
+   "min": 1.0,
+   "max": 32.0,
+   "step": 0.5,
+   "help": "The scale, in pixels, that the flat brush reads the picture at. Too small and it just recovers the same noise; too large and a sky's whole direction collapses to one angle. INERT at flat_dir = 0."
+  },
+  {
+   "group": "Geometry",
+   "name": "flat_theta_deg",
+   "kind": "float",
+   "min": 0.0,
+   "max": 180.0,
+   "step": 5.0,
+   "help": "Which way the flat brush sweeps where even the coarse scale finds nothing -- a truly uniform ground. 0 is horizontal, 90 vertical. INERT at flat_dir = 0, and it never reaches anywhere that has a gradient to follow instead."
+  },
+  {
+   "group": "Geometry",
+   "name": "jitter_centre",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "Centre jitter within the cell. REQUIRED -- at 0 the centres sit on a lattice."
+  },
+  {
+   "group": "Geometry",
+   "name": "jitter_theta_deg",
+   "kind": "float",
+   "min": 0.0,
+   "max": 90.0,
+   "step": 1.0,
+   "help": "Random angle spread around the base orientation [Litwinowicz97]."
+  },
+  {
+   "group": "Geometry",
+   "name": "jitter_radius",
+   "kind": "float",
+   "min": 0.0,
+   "max": 0.8,
+   "step": 0.01,
+   "help": "Uniform radius jitter. Bounded -- cannot leave its octave; see size_sigma."
+  },
+  {
+   "group": "Geometry",
+   "name": "jitter_aniso",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "Random spread on the elongation ratio."
+  },
+  {
+   "group": "Irregularity",
+   "name": "size_sigma",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "Log-normal spread on radius. The main cure for 'every stroke is the same size'."
+  },
+  {
+   "group": "Irregularity",
+   "name": "wobble_amp",
+   "kind": "float",
+   "min": 0.0,
+   "max": 0.4,
+   "step": 0.01,
+   "help": "Ragged outline instead of a perfect ellipse."
+  },
+  {
+   "group": "Irregularity",
+   "name": "color_jitter",
+   "kind": "float",
+   "min": 0.0,
+   "max": 0.15,
+   "step": 0.005,
+   "help": "Per-stroke pigment variation. Off by default -- in flat regions it reads as speckle rather than as loaded paint. Keep low if you turn it on."
+  },
+  {
+   "group": "Irregularity",
+   "name": "drop_p",
+   "kind": "float",
+   "min": 0.0,
+   "max": 0.8,
+   "step": 0.01,
+   "help": "Random drop with area-compensating expansion. Neutral at matched stroke count; largely subsumed by size_sigma."
+  },
+  {
+   "group": "Irregularity",
+   "name": "bristle_amp",
+   "kind": "float",
+   "min": 0.0,
+   "max": 0.8,
+   "step": 0.01,
+   "help": "Bristle grooves along the stroke [Hertzmann02]. Cuts real holes in the alpha, so the coverage figure genuinely falls as this rises."
+  },
+  {
+   "group": "Irregularity",
+   "name": "fringe_px",
+   "kind": "float",
+   "min": 0.0,
+   "max": 6.0,
+   "step": 0.1,
+   "help": "Fractal roughness on the outline, IN PIXELS -- the crumble is the same size on a 130px blob as on an 8px dab. The cure for a smooth, CG-looking boundary; wobble_amp cannot fix that, because its harmonics scale with the stroke."
+  },
+  {
+   "group": "Irregularity",
+   "name": "taper_amp",
+   "kind": "float",
+   "min": 0.0,
+   "max": 0.7,
+   "step": 0.01,
+   "help": "Thins the stroke towards one end -- the cue an ellipse cannot carry. Worth more than the bristles are."
+  },
+  {
+   "group": "Irregularity",
+   "name": "seed",
+   "kind": "int",
+   "min": 0,
+   "max": 9999,
+   "step": 1,
+   "help": "Random seed."
+  },
+  {
+   "group": "Paint",
+   "name": "base",
+   "kind": "choice",
+   "min": [
+    "blur",
+    "strokes",
+    "none"
+   ],
+   "max": null,
+   "step": null,
+   "help": "Ground under the strokes. 'blur' is the default and looks best -- it leaves the canvas weave visible and lets the detail strokes carry the picture. 'strokes' is a full coarse underpainting [Hertzmann98], which at this stroke size reads as clutter. 'none' shows the holes."
+  },
+  {
+   "group": "Paint",
+   "name": "base_cell_scale",
+   "kind": "float",
+   "min": 0.5,
+   "max": 6.0,
+   "step": 0.1,
+   "help": "Underpainting stroke size, relative to max_cell. INERT unless base = 'strokes'."
+  },
+  {
+   "group": "Paint",
+   "name": "base_block",
+   "kind": "int",
+   "min": 2,
+   "max": 64,
+   "step": 2,
+   "help": "Blur-base block size (also the safety canvas under the stroke underpainting)."
+  },
+  {
+   "group": "Paint",
+   "name": "hard",
+   "kind": "bool",
+   "min": null,
+   "max": null,
+   "step": null,
+   "help": "Hard-edged ellipsoids vs soft Gaussian falloff. Hard is the demo's look."
+  },
+  {
+   "group": "Paint",
+   "name": "hard_r",
+   "kind": "float",
+   "min": 0.5,
+   "max": 2.0,
+   "step": 0.01,
+   "help": "Hard-edge cutoff, in sigmas."
+  },
+  {
+   "group": "Paint",
+   "name": "alpha",
+   "kind": "float",
+   "min": 0.05,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "Per-stroke opacity. Below 1 the strokes glaze over each other."
+  },
+  {
+   "group": "Paint",
+   "name": "color",
+   "kind": "choice",
+   "min": [
+    "median",
+    "mean",
+    "centre"
+   ],
+   "max": null,
+   "step": null,
+   "help": "Cell colour rule. 'mean' goes muddy across an edge."
+  },
+  {
+   "group": "Paint",
+   "name": "linear",
+   "kind": "bool",
+   "min": null,
+   "max": null,
+   "step": null,
+   "help": "Average and composite in linear light rather than sRGB."
+  },
+  {
+   "group": "Impasto",
+   "name": "impasto",
+   "kind": "bool",
+   "min": null,
+   "max": null,
+   "step": null,
+   "help": "Height field + lighting [Hertzmann02]. Off = flat paint, and no height pass runs."
+  },
+  {
+   "group": "Impasto",
+   "name": "impasto_layer",
+   "kind": "float",
+   "min": 0.0,
+   "max": 3.0,
+   "step": 0.05,
+   "help": "Height gained from the first stroke to the last. This is what makes a stroke edge a RIDGE, and it is most of the effect -- try it with relief at 0."
+  },
+  {
+   "group": "Impasto",
+   "name": "impasto_relief",
+   "kind": "float",
+   "min": 0.0,
+   "max": 2.0,
+   "step": 0.05,
+   "help": "Bristle grooves as relief. Independent of bristle_amp: paint can be thicker without being more opaque."
+  },
+  {
+   "group": "Impasto",
+   "name": "canvas_weave",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "Canvas tooth, added to the height field only where the paint is thin."
+  },
+  {
+   "group": "Impasto",
+   "name": "impasto_depth",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.5,
+   "step": 0.01,
+   "help": "Height-to-slope gain: how thick the paint reads. At 0 the lighting is a no-op."
+  },
+  {
+   "group": "Impasto",
+   "name": "light_deg",
+   "kind": "float",
+   "min": 0.0,
+   "max": 360.0,
+   "step": 5.0,
+   "help": "Light azimuth as a screen compass -- 0 from the right, 90 from the top."
+  },
+  {
+   "group": "Impasto",
+   "name": "light_elev_deg",
+   "kind": "float",
+   "min": 5.0,
+   "max": 85.0,
+   "step": 1.0,
+   "help": "Light elevation. Low rakes across the relief; high flattens it."
+  },
+  {
+   "group": "Impasto",
+   "name": "gloss",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "step": 0.01,
+   "help": "0 matte tempera, 1 wet oil. Drives both the specular strength and its tightness."
+  },
+  {
+   "group": "Impasto",
+   "name": "occlusion",
+   "kind": "float",
+   "min": 0.0,
+   "max": 4.0,
+   "step": 0.05,
+   "help": "Ambient occlusion -- paint shading itself where strokes stack. Darkens creases only, and does NOT move with the light or the eye. If this ever reads as a drop shadow, the cause is the ground height, not this knob -- see render.GROUND_AT."
+  },
+  {
+   "group": "Impasto",
+   "name": "view_elev_deg",
+   "kind": "float",
+   "min": 15.0,
+   "max": 90.0,
+   "step": 1.0,
+   "help": "The eye. 90 is straight on; lower leans away and the sheen swings across the relief. The view-dependent term -- drive it from the pointer for a live painting."
+  },
+  {
+   "group": "Impasto",
+   "name": "view_deg",
+   "kind": "float",
+   "min": 0.0,
+   "max": 360.0,
+   "step": 5.0,
+   "help": "Which way the eye leans, as a screen compass. Inert at view_elev_deg = 90."
+  }
+ ],
+ "defaults": {
+  "metric": "var",
+  "target_n": 5000,
+  "max_cell": 64,
+  "min_cell": 8,
+  "base_block": 16,
+  "tau_floor": 0.0001,
+  "foveal_strength": 0.0,
+  "kappa": 1.35,
+  "jitter_centre": 0.35,
+  "jitter_radius": 0.15,
+  "jitter_theta_deg": 20.0,
+  "jitter_aniso": 0.2,
+  "aniso_max": 6.0,
+  "orient": "structure",
+  "tensor_sigma": 3.5,
+  "flat_dir": 0.8,
+  "flat_sigma": 8.0,
+  "flat_theta_deg": 45.0,
+  "flow": "none",
+  "flow_strength": 1.0,
+  "flow_scale": 0.0,
+  "flow_rot": 0.0,
+  "flow_coh": 0.0,
+  "flow_drift": 0.0,
+  "palette": "none",
+  "palette_strength": 1.0,
+  "warm_cool": 0.0,
+  "chroma": 0.0,
+  "value_compress": 0.0,
+  "broken_color": 0.0,
+  "pigment": 0.0,
+  "color": "median",
+  "alpha": 1.0,
+  "hard": true,
+  "hard_r": 1.5,
+  "linear": false,
+  "size_sigma": 0.3,
+  "drop_p": 0.0,
+  "color_jitter": 0.0,
+  "wobble_amp": 0.18,
+  "bristle_amp": 0.24,
+  "taper_amp": 0.35,
+  "fringe_px": 2.0,
+  "impasto": true,
+  "impasto_relief": 0.45,
+  "impasto_layer": 0.6,
+  "canvas_weave": 0.15,
+  "impasto_depth": 0.25,
+  "light_deg": 135.0,
+  "light_elev_deg": 35.0,
+  "gloss": 0.3,
+  "occlusion": 0.6,
+  "view_deg": 90.0,
+  "view_elev_deg": 90.0,
+  "base": "blur",
+  "base_cell_scale": 2.0,
+  "seed": 0
+ }
+}
