@@ -32,17 +32,12 @@ PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
          "projects/spdef/triplanes.html", "projects/spdef/field.html",
          "projects/spdef/knots.html", "projects/spdef/knotsplat.html",
          "projects/grain/index.html", "projects/tempformer/index.html",
-         "misc/index.html", "misc/museum/index.html",
-         "misc/oilpaint/index.html"]
+         "misc/index.html", "misc/museum/index.html"]
 # JS modules are scanned for asset refs too — the ~31 MB vendor/ wasm is reached from
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
            "projects/smv/dequant_worker.js", "projects/smv/sw.js",
-           "projects/spdef/traj.js", "projects/spdef/knot_decode.js",
-           # The oil-paint tuner's compute engine: it is a module WORKER, so nothing on the
-           # page names its imports and a page-only sweep would miss the whole JS package
-           # it pulls in (13 modules) plus the generated schema.json it fetches.
-           "misc/oilpaint/engine.worker.js", "misc/oilpaint/session.js"]
+           "projects/spdef/traj.js", "projects/spdef/knot_decode.js"]
 
 VOID = {"br", "img", "input", "meta", "link", "hr", "source", "area", "base",
         "col", "embed", "param", "track", "wbr"}
@@ -229,7 +224,11 @@ def check_page_defaults(page, src):
     carries the dead name straight to the engine. Re-staging from upstream is exactly when
     both happen, since that is what replaces schema.json.
 
-    Skipped, not failed, on a page with no such table -- this is one page's check.
+    Skipped, not failed, on a page with no such table -- this is one page's check. NOTHING ON
+    THE SITE USES IT TODAY: the tuner moved to its own Pages site on 2026-09-06 and misc/oilpaint/
+    went with it. Kept rather than deleted because it is generic (it reads whatever
+    `PAGE_DEFAULTS` / `schema.json` pair it finds beside a page) and costs one regex on a page
+    that has neither, so a schema-driven page arriving later is checked without re-deriving this.
     """
     m = re.search(r"const PAGE_DEFAULTS\s*=\s*\{(.*?)\};", src, re.S)
     if not m:

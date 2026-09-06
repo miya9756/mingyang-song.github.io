@@ -33,8 +33,10 @@ Under *Elsewhere* it also links two image-backed cards: the external Pixiv galle
 project page — it borrows the landing page's warm paper rather than picking a temperature of
 its own, since it is a continuation of the personal site rather than a new destination, and it
 carries only the family bones (Fraunces headings, back pill, footer). It holds a shelf whose two
-items are `misc/museum/` (**Digital Museum**) and `misc/oilpaint/` (**Oil Paint Tuner**), both
-below; a third item is another `.marquee` anchor in that list and nothing else.
+items are `misc/museum/` (**Digital Museum**, below) and **Oil Paint Tuner** — which since
+2026-09-06 is an **outbound link** to <https://miya9756.github.io/Oil-Paint-Tuner/> rather than a
+page in this repo (see its section below). A shelf item is a `.marquee` anchor in that list and
+nothing else, so where it points is not something the pattern cares about.
 
 **The shelf is drawn, and it is drawn in CSS.** `.shelf` is a case: two hairline uprights, a thin
 board at the top (its underside — you see the edge, not the top), a 3px board under every item, and
@@ -121,8 +123,9 @@ opaque resting fill, the reveal and the descender fix are written once however m
 the case grows. Both windows were measured as text on this page's paper before shipping: the
 museum's render is worst **3.5:1**, the tuner's painting worst **3.6:1**, both clearing the 3:1 bar
 large text has to meet. Raw they were 1.9:1 and **1.2:1** and neither would have passed.
-`tools/bake_oilpaint_type.py` bakes the second one — it runs the real pipeline on the tuner's own
-sample, blends the result toward `--ink` and puts the chroma back, and **measures the JPEG it wrote
+`tools/bake_oilpaint_type.py` bakes the second one — it runs the real pipeline (from
+`~/oil-paint-hack`, the only copy left) on the tuner's own sample, blends the result toward `--ink`
+and puts the chroma back, and **measures the JPEG it wrote
 rather than the array it encoded** (the encode costs 0.33 of a ratio at the worst pixel, which is a
 bright edge where ringing lands exactly where the margin already is), deleting the file and exiting
 non-zero if it lands under 3:1.
@@ -513,208 +516,53 @@ The viewer pipeline, all in the browser:
 3. per-frame offsets applied off-thread (`dequant_worker.js`)
 4. splats rasterised in **WebGL2** (EWA splatting, after antimatter15's `splat`) — all inside `index.html`
 
-## `misc/oilpaint/` — the Oil Paint Tuner
+## `misc/oilpaint/` — the Oil Paint Tuner, which is NO LONGER IN THIS REPO
 
-The second shelf item. Ported on 2026-08-31 from `~/oil-paint-hack/web/tune/`, which is where the
-tool is **authored** — that repo carries a `ship-to-site` skill stating the direction rule, and it
-is the same rule `projects/smv/` learned: **edits go outward, never back.** Change the pipeline or
-the tuner there, re-port here. The one thing this copy owns is its own page: the shell, the CSS and
-the four JS patches listed below.
+**The tool moved out on 2026-09-06** and the shelf item is now an outbound link to
+<https://miya9756.github.io/Oil-Paint-Tuner/>. `misc/oilpaint/` — the page, the twelve-module JS
+package, `engine.worker.js`, `session.js`, the generated `schema.json` and the sample photograph —
+is **deleted**, and so is its entry in `verify.py`'s `PAGES` / `MODULES`.
 
-An adaptive quadtree finds where a photograph is hard to describe with one flat colour; every leaf
-becomes one anisotropic Gaussian brush stroke, oriented by the image's structure tensor, coloured
-through a mixed-pigment palette and composited coarse to fine over an underpainting. **Nothing is
-uploaded, nothing is fetched at runtime, and there is no model** — `oilpaint/*.js` is a hand port of
-the Python package, held to it stage by stage by that repo's `tests/test_pipeline_parity.py`.
+That is the port's own rule reaching its conclusion. The tool is **authored** in
+`~/oil-paint-hack/web/tune/` (whose `ship-to-site` skill states the direction: **edits go outward,
+never back**), so a published copy here was a second thing to keep in step for no gain once it
+could be published from its own repo. **Do not re-stage it.** If the tuner needs work, it happens
+upstream; if it needs a new home, that is a Pages setting in *that* repo, not a folder in this one.
 
-### What ships, and how to re-stage it
+What this repo still owns of it, and must keep working:
 
-`build_static.py --dist` assembles the tree; **`schema.json` is generated, not written** — the
-control surface is defined once in `oilpaint/schema.py`, next to the `PaintConfig` it asserts
-against on import, which is the whole reason a build step exists at all.
+- **The shelf item.** `.marquee.m-paint` in `misc/index.html`, with `target="_blank" rel="noopener"`
+  the way the landing page's Pixiv card does it. It is still the **last** compartment, so the still
+  life stays where it is; the *one short line* rule for a description still applies (the tuner's
+  ends 29px clear of the vignette at 681px).
+- **`assets/oilpaint_type.jpg`**, the picture inside the title's letterforms. It is a painting the
+  tool itself made, so it is still exactly what the item links to, and it stays measured as text:
+  worst **3.6:1** toned (raw it was **1.2:1**). See the *title window* note near the top of this
+  file.
+- **`tools/bake_oilpaint_type.py`**, which re-bakes it. It always imported the pipeline from
+  `~/oil-paint-hack`, so nothing about it broke; only its `--src` default moved, from the deleted
+  `misc/oilpaint/div2k_0465.jpg` to `~/oil-paint-hack/assets/0465.png`, which is the same
+  photograph.
+- **The DIV2K credit, now in `misc/index.html`'s footer.** The sample is **image 0465 of the DIV2K
+  training set** (Agustsson & Timofte, *NTIRE 2017 Challenge on Single Image Super-Resolution*,
+  CVPR Workshops 2017); the numbering matches `0001.png`–`0900.png` exactly, and Mingyang settled
+  it — the upstream repo records no provenance and the file carries no EXIF. The tuner's colophon
+  used to carry the citation, and that page left; **the asset baked from that photograph did not**,
+  so the credit follows the asset. It is the only third-party clause on that page. Drop it only if
+  `assets/oilpaint_type.jpg` goes.
 
-```bash
-cd ~/oil-paint-hack && conda run -n 4dre python web/tune/build_static.py --dist /tmp/tunedist
-# then copy oilpaint/*.js, engine.worker.js, session.js and schema.json into misc/oilpaint/,
-# and sample.jpg as div2k_0465.jpg -- NOT index.html, and NOT anim.html
-```
+### Tooling that page changed, and that outlived it
 
-`index.html` here is **not** the upstream page and must not be overwritten by the build's copy. The
-animator (`anim.html`) is deliberately not published: the brief was the single-image tuner. Its two
-hooks went with it — the `Copy setup` button and the `publishSetup()` handoff comment — but
-`publishSetup()` itself stays, because it is also the session save.
-
-`div2k_0465.jpg` (357 KB) and the twelve JS modules are **plain git objects, not LFS**: the site tracks
-only `*.mkv` and `*.npz`, and the reasoning transfers — LFS pays for a few large files, not for
-thirteen small ones re-downloaded on every CI checkout.
-
-### The four JS patches, and why each one
-
-Everything else in the module is upstream's verbatim.
-
-- **`PROMOTE = {aniso_max: 'Allocation'}`.** `aniso_max` is in the schema's *Geometry* group, which
-  is correct — it is a piece of geometry — but what it decides is whether a mark is a pointillist
-  dot or a long dragged ribbon, which is the question `target_n` and `max_cell` are already asking.
-  The schema is left alone: which knob a visitor meets first is a property of the **page**, and a
-  rank in `schema.py` would put a presentation decision in the one file whose job is to stop the
-  control surface existing twice.
-- **The Advanced `<details>` is gone and its four groups are not built.** Geometry, Irregularity,
-  Paint and Impasto are **hard-coded at the engine's own `PaintConfig` defaults** — not hidden,
-  absent. `params` is seeded from `DEFAULTS`, so a field with no control keeps its value and still
-  reaches the engine; nothing left `schema.py`, so the CLI and the local tuner still expose all 57.
-- **`HIDDEN` also drops the nine TRIMS, so each preset card is "the look, and how much of it".**
-  `palette` and `flow` each carry a whole look; the numbers under them adjust whatever that look
-  chose (`warm_cool`, `chroma`, `value_compress`, `pigment`, `broken_color`; `flow_coh`,
-  `flow_scale`, `flow_rot`, `flow_drift`). A card is now the preset plus one number saying how far
-  to go with it, which is the pair a visitor can reason about. **Every one of them defaults to 0,
-  meaning "as the preset wrote it", so hiding them is genuinely inert** rather than a silent
-  setting — checked against `schema.json`. The two `choice` pickers deliberately STAY: dropping
-  the `flow` picker would leave `flow_strength` permanently inert, since it does nothing at
-  `flow: 'none'`, and a dead control is what the gating rules on this site exist to prevent.
-- **`PAGE_DEFAULTS` is what the page opens on, and it is not what the model opens on.**
-  `PaintConfig`'s defaults are the library's — conservative, sane for any source at any size.
-  These are a chosen look: `target_n 10000`, `max_cell 64`, `min_cell 7`, `tau_floor 0.0004`,
-  `foveal_strength 0`, `aniso_max 7.5`, `palette 'fauve'`, `flow 'none'`. A visitor who arrives,
-  waits, and sees a photograph faintly roughened has learned nothing; one who sees a painting has.
-  It lives in the page and **not in `schema.json`**, which is generated from the dataclass — putting
-  the page's taste in the one artefact whose job is to copy `PaintConfig` means a re-stage silently
-  reverts it. Applied over `DEFAULTS` and **under** the restored session, so it is an opening state
-  rather than an override of what the visitor last chose; the *Defaults* button means these,
-  because it means "the state the page opens in".
-
-  Two measured interactions worth knowing before changing any of it:
-  - **`min_cell 7` is indistinguishable from `min_cell 8`.** The quadtree halves a padded square,
-    so cell sizes are powers of two: from `max_cell 64` they go 64, 32, 16, 8, 4, and 7 admits
-    nothing 8 does not. Verified in the browser — identical stroke count, coverage, bare, psnr and
-    tau at both. `min_cell 4` is the next value that actually changes anything.
-  - **At the preview size the budget is NOT reached, so the page opens showing `⚠ ceiling 8491`.**
-    That grid is (1000/8)x(565/8) less padding waste, and `target_n` above ~8500 is unreachable
-    there however high it goes; *full res* has more room. `min_cell 4` clears it (10,034 strokes)
-    and so does `target_n 8000` (7,905). The warning is honest and the stats line exists to say it,
-    but it is the first thing a visitor reads.
-- **A restored session is FILTERED to the exposed set** (plus `seed`, which has a button rather than
-  a slider). Without it a setup written by the full tuner — or by an older version of this page —
-  would quietly restore an advanced value nothing on screen could show or change, which is exactly
-  the panel-disagrees-with-picture failure the render token exists to prevent. **Verified**: an
-  injected setup carrying `impasto`, `gloss`, `taper_amp` and `flat_theta_deg` comes back at the
-  dataclass defaults, while `target_n`, `aniso_max` and `seed` are restored.
-- **`card.className = 'card pane'`.** The control cards are BUILT from the schema and have no
-  markup, which is how they shipped for an hour without the glass class. The failure was invisible
-  at the top of the page and invisible in a full-page screenshot — a full-page capture resizes the
-  viewport, so the fixed backdrop only paints the first screen — and only showed at a scroll
-  position where the painting behind them is dark: **unveiled, 11.5px monospace over the picture's
-  city measures about 1:1.** Anything this page generates that should be glass has to say so here.
-
-### The design: the landing page's, carried to a tool
-
-Twelve columns, one gutter, `--r:0`, one gradient, Inter only, the same glass panels. **Inter
-only** follows the landing page rather than the project pages' Fraunces pairing: this page borrows
-that poster grammar wholesale, and a display serif would be a third system rather than a family
-resemblance.
-
-**THE FIELD IS DIVIDED UNEQUALLY INTO TWO, which is the older and more Swiss of the two ways to use
-a grid** — Müller-Brockmann's asymmetric field division rather than one measure with notes in the
-margin. Still exactly three spans, and they are still the whole discipline: **1/9** the wide field
-(masthead, picture, everything that acts on it, and the colophon under it), **9/13** the narrow
-field (the controls, as one tall rail), **1/13** full width (the masthead row, its rule, the
-footer). `max-width` goes to **1280** from the landing page's 1180, because two working fields need
-it. Adding a fourth span is how this turns back into a stack of cards.
-
-**The reason is the tool, not the look.** The first layout was one centred column with the section
-labels as chips in the left margin, which put the controls *below* the picture: dragging `target_n`
-moved something you could not see, and judging it meant scrolling up and then back down. Side by
-side, a slider and the picture it changes are on screen together, which is the whole job. What is
-given up is measured and is the smaller half: the picture goes from ~933px wide to ~777px, and it
-is now sized by the field rather than by `sizeWipe()`'s 0.62-of-viewport-height cap, which no
-longer binds at these widths.
-
-The section labels are no longer marginal notes but **column heads** — the same chips, set flush at
-the top of the field they name, `justify-self:start` so a four-word label does not become an 800px
-bar. A margin label needs a margin, and both margins are now doing work.
-
-**`.fcol` is the sticky field's travel container and it is NOT optional.** The rail is a few hundred
-pixels taller than the picture field, so the picture is pinned (`position:sticky`) and stays on
-screen while the cards scroll past. A sticky element is bounded by its **containing block**, and
-making the field itself the grid item does not give it one that stops at the row: the picture kept
-travelling down the whole page and, because every panel here is translucent, ended up showing
-**through the colophon** — sunflowers and a ghost toolbar behind the references. `contrast.py`
-caught it at **1.00:1** and it is exactly the class of bug that tool exists for. So the grid item is
-a plain wrapper that stretches to the row's height (the default `align-self` — which is why `.fcol`
-is deliberately *not* in the `align-self:start` rule beside it) and the field sticks inside it.
-
-Sticky is opt-in on **both axes**: `@media(min-width:1081px) and (min-height:800px)`. The height
-half is load-bearing — a sticky box taller than the viewport pins its top and puts its own bottom
-permanently out of reach, which here would mean the stats line could never be read while the rail
-is in view. The field measures ~720px, so 800px of viewport is the floor. **1080px** is the single
-structural breakpoint, set by the narrow field: below it the rail falls under ~300px and the picture
-under 620px, both at once, and the page becomes one column with the cards reflowing three across —
-which is what `auto-fit` was left in `.cards` for.
-
-**THERE IS NO BACKDROP PAINTING, and that is the one deliberate break.** It had the landing page's
-photograph behind it at first, and that made the tuner read as a second copy of the front door
-rather than as its own room. Out with it went the two orientation-picked assets, the `--art-*`
-tokens, and three things that existed only to serve them:
-
-- **`backdrop-filter`.** It resamples what is behind a panel; behind these there is now one flat
-  colour, so the blur was real GPU work every frame for nothing. The `@supports` fallback that
-  raised the veil where the filter is missing, and the **700px breakpoint** that dropped the filter
-  on phones, are both gone with it.
-- **The measured veil.** `--sheet` was a translucent `--bg` carrying a contrast budget against a
-  picture running from a bright sky to a dark city. Against a known flat ground there is no budget
-  to carry, so it is now simply the tone of a sheet laid on the page: `rgba(255,255,255,.72)` light,
-  `.045` dark.
-- The rule that text may never sit in a gutter, which is **kept anyway** — the panels are the grid.
-
-**What still makes them read as glass is what was always doing it: the rim, the sheen and the cast
-shadow.** The landing page's own note says as much — they paint once into the panel's layer and were
-never the expensive part. The rim keeps its two tinted stops, periwinkle and amber, so an edge
-catches a cool light at one corner and a warm one at the other.
-
-Contrast is still measured rather than assumed. On the flat ground: worst run **5.66:1** light
-(`#stats span`, the warn colour) and **5.14:1** dark, everything else better, nothing under AA.
-One real finding came out of it — **`.back` is `--fg`, not `--dim`**, because that pill is the one
-element sitting in the bright band a panel's `inset 0 26px 34px -32px` sheen paints along its top
-edge, and on its own denser `--field` ground `--dim` measured **4.40:1** there against 5.9:1
-everywhere else on the same panel. Raising the text rather than dimming the sheen keeps the glass.
-
-Two rules inherited and worth restating: the on-image chrome (`.wtag`, the two corner buttons)
-carries its own light-on-dark colours in both schemes, because it sits on a **photograph the
-visitor chose**, which has no theme; and every control is a hairline plus a translucent `--field`
-on the same sheet as the type, never a white box.
-
-**The Render button does NOT take `--grad`, and the split is the point of `--grad-key`.** Full
-chroma at both ends is elegant across 1px of masthead rule — the eye reads a coloured thread, not
-two hues — and was **candy** poured into a 110px box. Three things fix it without giving the colour
-up: the same two hues **moved in lightness** rather than dropped (tinted up into the paper's range
-in light, sunk into the ink's in dark, so the key belongs to the page instead of being a bright chip
-stuck on it); a **near-neutral third stop at 46%**, because two opposed hues blended directly cross
-through a dead grey-violet at the midpoint, which is what actually made the old one look cheap; and
-**115deg rather than 90deg**, so the ramp meets the corners and reads as light falling across a
-surface. The text on it is `--fg` in both schemes, which is what the lightness move buys: 13.5:1 and
-13.9:1 light, 9.3:1 and 8.6:1 dark, measured at both ends. The old fill needed a hard-coded dark ink
-and cleared 5.5:1 at its worst end — fine, but it could not follow the theme. Hover leans on
-**saturation**, not brightness: a tinted key has little brightness left to give.
-
-- **The wipe's corner labels are `.wtag`, deliberately NOT `.tag`.** That class means a metadata
-  chip on the landing page and `tools/contrast.py` measures it as one — over a photograph there is
-  no measurable ground, so the collision reported a failure about somebody's snapshot.
-- **The three toolbar toggles are wrapped in one `.togs`.** Loose in the flex row they wrap one at a
-  time, stranding the third alone at the far left of a second line while its siblings sit at the far
-  right, which reads as a layout fault rather than as a wrap.
-- The `.busy-pill`'s **clock is the load-bearing part** of it: a full-resolution render is tens of
-  seconds, and a bare spinner cannot be told from a freeze. It is a rectangle here, not a pill —
-  `--r` is 0 — and the one round thing left on the page is the wipe's drag handle, which is a
-  handle rather than a box.
-
-### Tooling this page changed
+All three are still in the repo and still doing work; the first two are the reason to read this
+section at all.
 
 - **`verify.py` learned the `$('#id')` form.** Its `$(...)` pattern was written for the grain page,
   whose `$` is `getElementById` and takes a bare id; this page's `$` is `querySelector` and takes a
   real selector, so its ~50 lookups were invisible and the check reported *0 referenced*. It now
-  sees 42, which matters here more than elsewhere: the front row is built from a schema, so a
-  control that lost its container is a blank panel rather than a visible gap. The page and the two
-  JS modules are in `PAGES` / `MODULES` (the worker is where the twelve-module package and
-  `schema.json` are reached from — a page-only sweep sees none of it).
+  saw 42, which mattered there more than elsewhere: the front row was built from a schema, so a
+  control that lost its container was a blank panel rather than a visible gap. **The pattern
+  stays** — any page whose `$` is `querySelector` needs it, and the check reporting *0 referenced*
+  is what a missing pattern looks like, not a clean page.
 - **`verify.py` gained `check_page_defaults()`**, which reads `PAGE_DEFAULTS` out of a page and
   validates it against the `schema.json` beside it: every name must exist, a `choice` must name a
   real option, and a number must be inside its range **and on its step grid**. Both failures are
@@ -743,22 +591,11 @@ and cleared 5.5:1 at its worst end — fine, but it could not follow the theme. 
   rule: **a page that will not hold still here has something animating outside its
   reduced-motion block.**
 
-### The sample photograph is DIV2K, and the filename says so
-
-It is **image 0465 of the DIV2K training set** (Agustsson & Timofte, *NTIRE 2017 Challenge on
-Single Image Super-Resolution: Dataset and Study*, CVPR Workshops 2017), re-encoded from
-`~/oil-paint-hack/assets/0465.png`. That repo records no provenance for it and the file carries no
-EXIF, so it was an open question until Mingyang settled it; the numbering matches DIV2K's
-`0001.png`–`0900.png` exactly.
-
-**The shipped file is therefore `div2k_0465.jpg`, not upstream's `sample.jpg`, and the rename is the
-attribution.** The source pane prints the file's own name on the picture (`upload()` sets `#tagL`),
-so the credit rides on the image itself rather than living only in the colophon, which is not where
-someone comparing two halves of a photograph is looking. Re-staging from upstream copies a file
-called `sample.jpg` — **rename it, and change the `SAMPLE` constant with it.** The colophon carries
-the full citation and says plainly that the picture is not Mingyang's and remains under the
-dataset's own terms; `assets/oilpaint_type.jpg` is baked from it, and
-`tools/bake_oilpaint_type.py`'s `--src` default points at the renamed file.
+Two consequences of the deletion. `check_page_defaults()` now has **no consumer** — nothing on the
+site carries a `PAGE_DEFAULTS` table — and is kept anyway, because it is generic and skips silently
+on a page that has neither half of the pair; its docstring says so. And `verify.py` sees no module
+worker at all any more, so the `$('#id')` form is currently exercised only by whatever page uses
+`querySelector` as its `$`.
 
 ## Provenance of `projects/smv/` (IMPORTANT)
 

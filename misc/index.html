@@ -198,6 +198,20 @@
   }
 
   footer{border-top:1px solid var(--line);margin-top:44px;padding:26px 0 48px;color:var(--muted);font-size:13px}
+  /* THE FOOTER HAS A MEASURE, and it is the still life's doing — the same constraint the shelf
+     descriptions carry, one row further down. The cloth drapes past the footer's rule (that is the
+     whole effect; see .still), so the right-hand end of this row is behind a drawing. A single
+     copyright line was short enough never to reach it; the credit under it is not, and its second
+     line came out running under the folds. So the text is given a column that stops where the
+     drawing's box starts, in the two bands where the drawing exists. Both numbers are measured
+     from .still's own geometry rather than eyeballed off a screenshot, and each leaves 20px of
+     air. The box's left edge sits `width - overhang + 20` in from .inner's content right edge (the
+     20 being the shelf's own padding, which the drawing is measured outside of): 360 - 120 + 20 =
+     260 at the top tier, 290 - 34 + 20 = 276 in the middle band. padding-right REPLACES .inner's
+     own, so it carries that clearance on top of the page padding rather than instead of it. Below
+     680px the drawing is display:none and the footer gets its full width back. */
+  @media(min-width:681px){footer .inner{padding-right:calc(clamp(20px,4vw,48px) + 296px)}}
+  @media(min-width:961px){footer .inner{padding-right:calc(clamp(20px,4vw,48px) + 280px)}}
   :where(a):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   @media(prefers-reduced-motion:reduce){
     .back,.back .barrow{transition:none}
@@ -226,7 +240,15 @@
       <span class="mdesc">Paintings filmed in a gallery, fitted as 3D Gaussians.</span>
       <span class="mgo">Walk in <span class="arrow" aria-hidden="true">→</span></span>
     </a>
-    <a class="marquee m-paint" href="oilpaint/">
+    <!-- THE TUNER LIVES ELSEWHERE, and this compartment is a pointer to it rather than a copy.
+         It was published here as misc/oilpaint/ (a port of ~/oil-paint-hack/web/tune/) and moved
+         out on 2026-09-06 to its own Pages site; the whole point of the port was that the tool is
+         authored upstream and edits go outward, so a second published copy was one more thing to
+         keep in step. External, so target/rel follow the landing page's Pixiv card. The title
+         window stays: assets/oilpaint_type.jpg is a painting the tool itself made, which is still
+         exactly what this item links to. -->
+    <a class="marquee m-paint" href="https://miya9756.github.io/Oil-Paint-Tuner/"
+       target="_blank" rel="noopener">
       <span class="mkick">Open playground</span>
       <h3 class="mtitle">Oil Paint Tuner</h3>
       <!-- ONE SHORT LINE, and that is a constraint rather than a style: the still life stands
@@ -261,9 +283,17 @@
 
 <footer>
   <!-- Every page on this site carries the line; nothing here is offered under an open licence.
-       /LICENSE at the repo root carries the scope. No third-party clause: unlike the project
-       pages, this one ships no external code or datasets — add it here if that ever changes. -->
-  <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved.</div>
+       /LICENSE at the repo root carries the scope.
+
+       THE ONE THIRD-PARTY CLAUSE, and it is here because the page that used to carry it left.
+       The Oil Paint Tuner's colophon credited its sample photograph, and that page moved to its
+       own site on 2026-09-06 — but assets/oilpaint_type.jpg still ships from this repo, and it is
+       that photograph, repainted by the tool, clipped into the shelf item's letterforms. So the
+       credit follows the asset rather than the link. Drop this line only if that image goes. -->
+  <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved.
+    <br>The painting in <em>Oil Paint Tuner</em> is image 0465 of the
+    <a href="https://data.vision.ee.ethz.ch/cvl/DIV2K/" target="_blank" rel="noopener">DIV2K</a>
+    dataset (Agustsson &amp; Timofte, NTIRE 2017), under its own terms.</div>
 </footer>
 </body>
 </html>

@@ -35,7 +35,10 @@ import numpy as np
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Where the pipeline is AUTHORED. Not a dependency of the site: only this script needs it.
+# Where the pipeline AND its sample photograph are authored. Not a dependency of the site: only
+# this script needs either. The sample is DIV2K image 0465 (Agustsson & Timofte, NTIRE 2017), which
+# is why assets/oilpaint_type.jpg carries a credit in misc/index.html's footer -- the tuner's own
+# colophon used to carry it, and that page is no longer in this repo.
 PKG = os.path.expanduser("~/oil-paint-hack")
 
 W, H = 900, 404                     # exactly assets/museum_type.jpg's frame
@@ -78,7 +81,11 @@ def contrast(img):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--src", default=os.path.join(ROOT, "misc", "oilpaint", "div2k_0465.jpg"),
+    # The tuner's own sample, and it now lives ONLY upstream: misc/oilpaint/ was deleted on
+    # 2026-09-06 when the tool moved to its own Pages site, so the default follows the source
+    # rather than a path in this repo. It is DIV2K image 0465 either way -- see the note under
+    # PKG above -- so the window still shows what the tuner shows when it opens.
+    ap.add_argument("--src", default=os.path.join(PKG, "assets", "0465.png"),
                     help="the photograph to paint; defaults to the tuner's own sample, so "
                          "the window shows what the page shows when it opens")
     ap.add_argument("--out", default=os.path.join(ROOT, "assets", "oilpaint_type.jpg"))
