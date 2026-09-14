@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpDef knot-bundle panel</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#ffffff"><!-- must track --panel; this page is also openable standalone -->
+<!--
+  The FIFTH renderer on this page, and the second one that draws gaussians. It plays a KNOT
+  BUNDLE: a scene whose motion is stored as the spline field's own knots — a value and a
+  tangent per knot — instead of one delta image per frame. Any timestep is a cubic-Hermite
+  blend of the two knots bracketing it, evaluated here, per gaussian, every frame.
+
+  Why not a mode of viewer.html
+  -----------------------------
+  The two formats disagree on everything below the keyframe: four streams per chunk instead of
+  two, one image per KNOT instead of per frame, a blend of two knots instead of keyframe-plus-
+  delta, and a timeline with no decode frontier because the whole (tiny) knot set is resident.
+  viewer.html is what the two published comparisons depend on and its decode path is the one
+  CLAUDE.md pins to compression/decoder.py; branching it for a second format is exactly the
+  risk that rule exists to prevent. Upstream (web/player_knots/) split for the same reason, and
+  this panel is that page's renderer with the chrome removed and the host protocol added.
+
+  What it does NOT carry, unlike viewer.html: the colorize-motion tint, which reads a per-frame
+  motion array that does not exist in this format. Hard ellipsoids is shared, because it is a
+  property of the splat rather than of how the splat got there. Nor is there a fly camera or a
+  virtual pad: this is one object on a turntable, so it orbits (see the camera section).
+
+  The trails ARE here, but they are the mesh card's, not viewer.html's: sampled from the spline
+  and striped by knot, so the colour flip marks a knot boundary. viewer.html's overlay reads a
+  stored per-frame array and fades blue to red by age, which would say nothing about knot spacing.
+  See the trail section.
+
+  Query: ?scene=<url relative to this file>&id=<name echoed back in every message>
+         &elev=<opening elevation above the dataset camera, degrees, default 18>
+         &zoom=<pull-back multiplier on the opening distance, default 1>
+-->
+<style>
+  :root{color-scheme:light;
+        --panel:#ffffff; --ink:#14181d; --muted:#5f6a78; --line:#dde3ea; --accent:#1f5fbf; --err:#b4331f}
+  *{box-sizing:border-box}
+  html{background:var(--panel)}
+  body{margin:0;background:var(--panel);color:var(--ink);overflow:hidden;
+       font:13px/1.5 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  #wrap{position:fixed;inset:0}
+  #gl{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+  #gl:active{cursor:grabbing}
+  #load{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;
+        background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.92) 40%);
+        font-size:11.5px;color:var(--muted);pointer-events:none}
+  #load.hide{display:none}
+  #stage{display:block;margin:0 0 5px}
+  #track{height:3px;border-radius:2px;background:var(--line);overflow:hidden}
+  #barfill{height:100%;width:0;background:var(--accent);transition:width .18s linear}
+  #err{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+       padding:20px;text-align:center;font-size:12.5px;color:var(--err)}
+  @media(prefers-reduced-motion:reduce){#barfill{transition:none}}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="gl"></canvas>
+  <div id="load"><span id="stage">starting…</span><div id="track"><div id="barfill"></div></div></div>
+  <div id="err"></div>
+</div>
+
+<script type="module">
+// The curve IS this panel's job — "evaluated in your browser" is the claim the card makes — so
+// unlike viewer.html this one imports it statically. It costs no vendor graph: knot_decode.js
+// keeps its ffmpeg import inside ffmpegReady(), which only the standalone fallback below calls.
+import { knotBracket, blendKnots, curveBasis, curveOrder } from './knot_decode.js';
+
+const Q=new URLSearchParams(location.search),SCENE=Q.get('scene')||'',ID=Q.get('id')||'panel';
+const canvas=document.getElementById('gl'),wrap=document.getElementById('wrap');
+const loadEl=document.getElementById('load'),stageEl=document.getElementById('stage'),barEl=document.getElementById('barfill'),errEl=document.getElementById('err');
+function showErr(m){errEl.textContent='✗ '+m;errEl.style.display='flex';loadEl.classList.add('hide');post({type:'error',msg:String(m)});}
+
+const HOST=parent!==window;
+function post(m){if(HOST)parent.postMessage(Object.assign({ch:'spdef',id:ID},m),location.origin);}
+function stage(label,pct){stageEl.textContent=label;if(pct!=null)barEl.style.width=Math.max(0,Math.min(100,pct))+'%';}
+
+const gl=canvas.getContext('webgl2',{antialias:false,premultipliedAlpha:true,alpha:true});
+if(!gl){showErr('WebGL2 unavailable');throw 0;}
+
+// ===== renderer (verbatim from viewer.html: EWA splatting after antimatter15's `splat`) =====
+const VERT=`#version 300 es
+precision highp float;precision highp int;uniform highp usampler2D u_tex;uniform highp sampler2D u_sh;uniform mat4 u_proj,u_view;uniform vec2 u_focal,u_viewport;uniform vec3 u_campos;uniform bool u_hasSH;uniform float u_lowpass;
+uniform int u_shCols;uniform int u_shBands;
+in vec2 a_pos;in uint a_index;out vec4 vColor;out vec2 vPos;
+vec3 shRest(vec3 d,int e){float x=d.x,y=d.y,z=d.z,xx=x*x,yy=y*y,zz=z*z,xy=x*y,yz=y*z,xz=x*z;vec3 r=vec3(0.0);
+ int row=e/u_shCols, b=(e-row*u_shCols)*15;
+ r+=-0.4886025119*y*texelFetch(u_sh,ivec2(b+0,row),0).rgb; r+=0.4886025119*z*texelFetch(u_sh,ivec2(b+1,row),0).rgb; r+=-0.4886025119*x*texelFetch(u_sh,ivec2(b+2,row),0).rgb;
+ if(u_shBands<=3) return r;
+ r+=1.0925484306*xy*texelFetch(u_sh,ivec2(b+3,row),0).rgb; r+=-1.0925484306*yz*texelFetch(u_sh,ivec2(b+4,row),0).rgb; r+=0.3153915653*(2.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+5,row),0).rgb;
+ r+=-1.0925484306*xz*texelFetch(u_sh,ivec2(b+6,row),0).rgb; r+=0.5462742153*(xx-yy)*texelFetch(u_sh,ivec2(b+7,row),0).rgb;
+ if(u_shBands<=8) return r;
+ r+=-0.5900435899*y*(3.0*xx-yy)*texelFetch(u_sh,ivec2(b+8,row),0).rgb; r+=2.8906114426*xy*z*texelFetch(u_sh,ivec2(b+9,row),0).rgb; r+=-0.4570457995*y*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+10,row),0).rgb;
+ r+=0.3731763326*z*(2.0*zz-3.0*xx-3.0*yy)*texelFetch(u_sh,ivec2(b+11,row),0).rgb; r+=-0.4570457995*x*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+12,row),0).rgb; r+=1.4453057213*z*(xx-yy)*texelFetch(u_sh,ivec2(b+13,row),0).rgb; r+=-0.5900435899*x*(xx-3.0*yy)*texelFetch(u_sh,ivec2(b+14,row),0).rgb;
+ return r;}
+void main(){uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10),0);vec3 wp=uintBitsToFloat(cen.xyz);
+ vec4 cam=u_view*vec4(wp,1.0);vec4 p=u_proj*cam;float clip=1.2*p.w;
+ if(p.z<-clip||p.x<-clip||p.x>clip||p.y<-clip||p.y>clip){gl_Position=vec4(0.,0.,2.,1.);return;}
+ uvec4 cov=texelFetch(u_tex,ivec2(((i&0x3ffu)<<1)|1u,i>>10),0);vec2 u1=unpackHalf2x16(cov.x),u2=unpackHalf2x16(cov.y),u3=unpackHalf2x16(cov.z);
+ mat3 Vrk=mat3(u1.x,u1.y,u2.x,u1.y,u2.y,u3.x,u2.x,u3.x,u3.y);
+ mat3 J=mat3(u_focal.x/cam.z,0.,-(u_focal.x*cam.x)/(cam.z*cam.z),0.,-u_focal.y/cam.z,(u_focal.y*cam.y)/(cam.z*cam.z),0.,0.,0.);
+ mat3 T=transpose(mat3(u_view))*J;mat3 cov2d=transpose(T)*Vrk*T;
+ cov2d[0][0]+=u_lowpass;cov2d[1][1]+=u_lowpass;
+ float mid=(cov2d[0][0]+cov2d[1][1])/2.0;
+ float rad=length(vec2((cov2d[0][0]-cov2d[1][1])/2.0,cov2d[0][1]));float l1=mid+rad,l2=mid-rad;if(l2<0.0)return;
+ vec2 dv=normalize(vec2(cov2d[0][1],l1-cov2d[0][0]));vec2 maj=min(sqrt(2.0*l1),1024.0)*dv;vec2 mn=min(sqrt(2.0*l2),1024.0)*vec2(dv.y,-dv.x);
+ vec3 base=vec3(float((cov.w)&0xffu),float((cov.w>>8)&0xffu),float((cov.w>>16)&0xffu))/255.0;float al=float((cov.w>>24)&0xffu)/255.0;
+ if(u_hasSH)base=clamp(base+shRest(normalize(wp-u_campos),int(cen.w)),0.0,1.0);
+ vColor=clamp(p.z/p.w+1.0,0.0,1.0)*vec4(base,al);
+ vPos=a_pos;vec2 c=vec2(p)/p.w;gl_Position=vec4(c+a_pos.x*maj/u_viewport+a_pos.y*mn/u_viewport,0.0,1.0);}`;
+const FRAG=`#version 300 es
+precision highp float;uniform float u_opacity;uniform int u_hardEdge;uniform float u_hardR;in vec4 vColor;in vec2 vPos;out vec4 frag;
+void main(){float d2=dot(vPos,vPos);
+ if(u_hardEdge==1){float d=sqrt(d2),aa=max(fwidth(d),1e-4),edge=1.0-smoothstep(u_hardR-aa,u_hardR+aa,d);
+  if(edge<=0.0)discard;float B=vColor.a*u_opacity*edge;frag=vec4(B*vColor.rgb,B);return;}
+ float A=-d2;if(A<-4.0)discard;float B=exp(A)*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);}`;
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+const prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VERT));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));gl.useProgram(prog);
+const u_proj=gl.getUniformLocation(prog,'u_proj'),u_view=gl.getUniformLocation(prog,'u_view'),u_focal=gl.getUniformLocation(prog,'u_focal'),u_viewport=gl.getUniformLocation(prog,'u_viewport'),u_op=gl.getUniformLocation(prog,'u_opacity'),u_texL=gl.getUniformLocation(prog,'u_tex'),u_lowpassL=gl.getUniformLocation(prog,'u_lowpass'),u_hardEdgeL=gl.getUniformLocation(prog,'u_hardEdge'),u_hardRL=gl.getUniformLocation(prog,'u_hardR');
+const u_shL=gl.getUniformLocation(prog,'u_sh'),u_camposL=gl.getUniformLocation(prog,'u_campos'),u_hasSHL=gl.getUniformLocation(prog,'u_hasSH'),u_shColsL=gl.getUniformLocation(prog,'u_shCols'),u_shBandsL=gl.getUniformLocation(prog,'u_shBands');
+const MAX_TEX=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+const shTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,shTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,1,1,0,gl.RGBA,gl.FLOAT,new Float32Array(4));
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+let shData=null,shHas=false,shBands=15,shIdx=null,shCols=1;
+function uploadSH(cb){
+  if(!cb){shHas=false;return;}
+  const K=cb.length/45|0,maxRows=Math.max(1,(MAX_TEX/2)|0);
+  shCols=Math.max(1,Math.ceil(K/maxRows));while(shCols*15>MAX_TEX)shCols--;
+  const rows=Math.ceil(K/shCols),W=shCols*15;
+  if(!shData||shData.length!==W*rows*4)shData=new Float32Array(W*rows*4);else shData.fill(0);
+  for(let e=0;e<K;e++){const col=e%shCols,row=(e/shCols)|0,ob=e*45,rb=(row*W+col*15)*4;
+    for(let k=0;k<15;k++){const o=rb+k*4,c=ob+k*3;shData[o]=cb[c];shData[o+1]=cb[c+1];shData[o+2]=cb[c+2];}}
+  gl.bindTexture(gl.TEXTURE_2D,shTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,W,rows,0,gl.RGBA,gl.FLOAT,shData);shHas=true;}
+const vao=gl.createVertexArray();gl.bindVertexArray(vao);
+const qb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,qb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-2,-2,2,-2,2,2,-2,2]),gl.STATIC_DRAW);
+const a_pos=gl.getAttribLocation(prog,'a_pos');gl.enableVertexAttribArray(a_pos);gl.vertexAttribPointer(a_pos,2,gl.FLOAT,false,0,0);
+const a_index=gl.getAttribLocation(prog,'a_index');const ib=gl.createBuffer();gl.enableVertexAttribArray(a_index);gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.vertexAttribIPointer(a_index,1,gl.UNSIGNED_INT,0,0);gl.vertexAttribDivisor(a_index,1);
+const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);gl.blendEquation(gl.FUNC_ADD);
+// ---- knot-striped trails ----------------------------------------------------------------
+// The same figure the mesh card draws, on gaussians: each sampled gaussian's path over the
+// preceding frames, with the segment colour flipping at every knot. The colour change IS the knot,
+// which is the one thing on screen that shows the spacing the paper argues about; a trail in one
+// colour would say nothing the moving cloud did not already say.
+//
+// Sampled from the SPLINE, not from rendered frames: the curve you see is the one the field
+// fitted, evaluated between the stored knots exactly as the playhead is. Two colours per `uTint`
+// draw call, one per contiguous run of same-interval segments.
+const LVERT=`#version 300 es
+in vec3 a_p;in float a_age;uniform mat4 u_proj,u_view;out float vAge;
+void main(){vAge=a_age;gl_Position=u_proj*u_view*vec4(a_p,1.0);}`;
+const LFRAG=`#version 300 es
+precision highp float;in float vAge;out vec4 o;uniform vec3 u_tint;uniform float u_alpha;
+void main(){o=vec4(u_tint,u_alpha*vAge);}`;
+const lprog=gl.createProgram();gl.attachShader(lprog,sh(gl.VERTEX_SHADER,LVERT));gl.attachShader(lprog,sh(gl.FRAGMENT_SHADER,LFRAG));gl.linkProgram(lprog);
+if(!gl.getProgramParameter(lprog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(lprog));
+const lu_proj=gl.getUniformLocation(lprog,'u_proj'),lu_view=gl.getUniformLocation(lprog,'u_view'),
+      lu_tint=gl.getUniformLocation(lprog,'u_tint'),lu_alpha=gl.getUniformLocation(lprog,'u_alpha');
+const lvao=gl.createVertexArray();gl.bindVertexArray(lvao);
+const lbuf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,lbuf);
+const la_p=gl.getAttribLocation(lprog,'a_p'),la_age=gl.getAttribLocation(lprog,'a_age');
+gl.enableVertexAttribArray(la_p);gl.vertexAttribPointer(la_p,3,gl.FLOAT,false,16,0);
+gl.enableVertexAttribArray(la_age);gl.vertexAttribPointer(la_age,1,gl.FLOAT,false,16,12);
+gl.bindVertexArray(null);
+// Same two stripe colours as points.html, and for the same reason: far enough apart in hue that a
+// change reads as a knot boundary at a glance, and legible on a white panel.
+const TRAIL_COLORS=[[0.349,0.698,0.573],[0.980,0.404,0.506]];
+// Trailed gaussians, samples per frame, and the cap that bounds a rebuild. The cap is what sets
+// the PEAK cost; DETAIL only raises the low end of the length slider.
+//
+// Deliberately below points.html's 1500 / 5. That card draws a mesh and nothing else, while every
+// frame here already costs a full-cloud blend, a splat-texture upload and a depth sort over 23,716
+// gaussians, and the trail is rebuilt on top of that whenever the playhead moves. Fewer, sparser
+// paths also read better over a dense cloud: 1500 overlapping polylines are a wash, and it is the
+// stripe boundaries that have to stay legible rather than any individual path.
+//
+// No motion filter, unlike the bundle behind knots.html: every gaussian in this scene moves (median
+// peak deviation from its own time-mean is 0.216 in a scene 2.5 across, and all of them are above
+// 0.01), so a stride over the PLAS-sorted (spatially coherent) rows is already an even sample.
+const TRAIL_POINTS=900,DETAIL=4,MAX_TRAIL_SAMPLES=256;
+const _f=new Float32Array(1),_i=new Int32Array(_f.buffer);
+function toHalf(v){_f[0]=v;const x=_i[0];let b=(x>>16)&0x8000,m=(x>>12)&0x07ff,e=(x>>23)&0xff;if(e<103)return b;if(e>142){b|=0x7c00;b|=((e==255)?0:1)&&(x&0x007fffff);return b;}if(e<113){m|=0x0800;b|=(m>>(114-e))+((m>>(113-e))&1);return b;}b|=((e-112)<<10)|(m>>1);b+=m&1;return b;}
+function packHalf2(a,b){return (toHalf(a)|(toHalf(b)<<16))>>>0;}
+function quatRotMat(w,x,y,z){return[1-2*(y*y+z*z),2*(x*y-w*z),2*(x*z+w*y),2*(x*y+w*z),1-2*(x*x+z*z),2*(y*z-w*x),2*(x*z-w*y),2*(y*z+w*x),1-2*(x*x+y*y)];}
+let N=0,staticIdx=0,numDyn=0,baseCenter,baseScale,baseQuat,baseColor,texW,texH,texU32,texF32,depthIndex,needSort=false;
+function writeSplat(i,cx,cy,cz,qw,qx,qy,qz,rgba){const o=8*i;texF32[o]=cx;texF32[o+1]=cy;texF32[o+2]=cz;
+ const R=quatRotMat(qw,qx,qy,qz);const sx=baseScale[3*i],sy=baseScale[3*i+1],sz=baseScale[3*i+2];
+ const M=[R[0]*sx,R[1]*sy,R[2]*sz,R[3]*sx,R[4]*sy,R[5]*sz,R[6]*sx,R[7]*sy,R[8]*sz];
+ const s0=M[0]*M[0]+M[1]*M[1]+M[2]*M[2],s1=M[0]*M[3]+M[1]*M[4]+M[2]*M[5],s2=M[0]*M[6]+M[1]*M[7]+M[2]*M[8];
+ const s3=M[3]*M[3]+M[4]*M[4]+M[5]*M[5],s4=M[3]*M[6]+M[4]*M[7]+M[5]*M[8],s5=M[6]*M[6]+M[7]*M[7]+M[8]*M[8];
+ texU32[o+3]=shIdx?shIdx[i]:0;
+ texU32[o+4]=packHalf2(4*s0,4*s1);texU32[o+5]=packHalf2(4*s2,4*s3);texU32[o+6]=packHalf2(4*s4,4*s5);texU32[o+7]=rgba;}
+function buildTexture(){texW=2048;texH=Math.ceil(N/1024);texU32=new Uint32Array(texW*texH*4);texF32=new Float32Array(texU32.buffer);
+ for(let i=0;i<N;i++)writeSplat(i,baseCenter[3*i],baseCenter[3*i+1],baseCenter[3*i+2],
+   baseQuat[4*i],baseQuat[4*i+1],baseQuat[4*i+2],baseQuat[4*i+3],baseColor[i]);}
+function uploadTexture(){gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32UI,texW,texH,0,gl.RGBA_INTEGER,gl.UNSIGNED_INT,texU32);}
+let ellipOn=false,ellipR=1.0;                 // hard-boundary ellipsoids, radius in std-devs
+let trailsOn=true,trailLen=40;                // knot-striped trails, window in frames
+let kept=null,trailSamples=null,trailArray=null,trailVerts=0,trailKey='';
+const trailRuns=[];
+let counts=new Uint32Array(65536);
+// exact full-range 16-bit bucketing over the CURRENT (spline-deformed) positions — same
+// choice as viewer.html; see CLAUDE.md on why over the percentile-clamped variant.
+function sortSplats(view){if(!depthIndex||depthIndex.length!==N)depthIndex=new Uint32Array(N);
+ const v2=view[2],v6=view[6],v10=view[10],v14=view[14];const d=new Int32Array(N);
+ const P=texF32;let dlo=Infinity,dhi=-Infinity;
+ for(let i=0;i<N;i++){const o=8*i;const z=(v2*P[o]+v6*P[o+1]+v10*P[o+2]+v14)*4096|0;d[i]=z;if(z<dlo)dlo=z;if(z>dhi)dhi=z;}
+ const sc=65535/((dhi-dlo)||1);counts.fill(0);
+ for(let i=0;i<N;i++){let b=(d[i]-dlo)*sc|0;b=b<0?0:b>65535?65535:b;d[i]=b;counts[b]++;}
+ const st=new Uint32Array(65536);for(let i=1;i<65536;i++)st[i]=st[i-1]+counts[i-1];for(let i=0;i<N;i++)depthIndex[st[d[i]]++]=i;
+ gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.bufferData(gl.ARRAY_BUFFER,depthIndex,gl.DYNAMIC_DRAW);}
+
+// ===== orbit camera (world Z up) =====
+// Orbit, not fly, and no virtual movement pad — the same argument points.html and field.html make.
+// This is one object on a turntable: it sits at the origin, and what you want is to rotate it, pan
+// it and get closer, not to walk around a world. That vocabulary is also fully reachable by touch
+// (one finger orbits, two pinch and pan), which is the only reason the pad existed on the fly
+// panels at all. Lifted verbatim from field.html, whose renderer shares this basis convention:
+// r/u/f are the view matrix's COLUMNS with u pointing DOWN the screen (the projection flips Y), so
+// the triad is built directly and there is no quaternion anywhere.
+//
+// The orbit STATE — yaw, pitch, dist AND target, not just the eye — is what goes over the host's
+// `cam` relay. A shared eye is not enough to keep two turntables in step: the target and the
+// distance are what the pointer handlers actually edit.
+const UP=[0,0,1];      // canonical D-NeRF frame: the floor is the xy plane, z is vertical
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const norm=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];};
+const _elev=parseFloat(Q.get('elev'));
+const CAM_ELEV=(Number.isFinite(_elev)?_elev:18)*Math.PI/180;
+const _z=parseFloat(Q.get('zoom')),CAM_ZOOM=Number.isFinite(_z)?_z:1;
+const cam={yaw:0,pitch:.4,dist:6,target:[0,0,0]};
+let home={yaw:0,pitch:.4,dist:6,target:[0,0,0]},camPos=[0,0,0];
+function camBasis(){
+  const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch),cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+  const eye=[cam.target[0]+cam.dist*cp*sy,cam.target[1]+cam.dist*cp*cy,cam.target[2]+cam.dist*sp];
+  const f=norm([cam.target[0]-eye[0],cam.target[1]-eye[1],cam.target[2]-eye[2]]);
+  // u is screen-DOWN, i.e. world up orthogonalised against f and negated
+  const u=norm([-(UP[0]-f[0]*dot(UP,f)),-(UP[1]-f[1]*dot(UP,f)),-(UP[2]-f[2]*dot(UP,f))]);
+  return {eye,f,u,r:cross(u,f)};                 // cross(r,u)=f — same handedness as viewer.html
+}
+function viewMatrix(){const{eye,f,r,u}=camBasis();camPos=eye;
+  return[r[0],u[0],f[0],0, r[1],u[1],f[1],0, r[2],u[2],f[2],0,
+         -dot(r,eye),-dot(u,eye),-dot(f,eye),1];}
+// Near/far scale with the orbit distance rather than being fixed as the fly panels' are: dollying
+// right up to a gaussian is a normal thing to do here, and a fixed 0.2 near plane clips it away.
+function projMatrix(w,h,fx,fy){const zn=Math.min(0.5,Math.max(0.02,cam.dist*0.02)),zf=cam.dist*20+100;
+  return[2*fx/w,0,0,0, 0,-2*fy/h,0,0, 0,0,zf/(zf-zn),1, 0,0,-(zf*zn)/(zf-zn),0];}
+// Pointer events, one code path for mouse and touch: one pointer orbits (shift or right button
+// pans), two pinch to dolly and drag to pan. The pitch clamp keeps the view off the poles, where
+// the up-vector orthogonalisation degenerates.
+const ptrs=new Map();let mode=null,lastX=0,lastY=0,pinch0=0,dist0=0;
+const mid=()=>{const v=[...ptrs.values()];return[(v[0].x+v[1].x)/2,(v[0].y+v[1].y)/2];};
+const spread=()=>{const v=[...ptrs.values()];return Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y)||1;};
+function panBy(dx,dy){const{r,u}=camBasis(),s=cam.dist*0.0015;
+  for(let c=0;c<3;c++)cam.target[c]+=-r[c]*dx*s-u[c]*dy*s;}     // u is screen-down, hence -u
+canvas.addEventListener('pointerdown',e=>{
+  canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptrs.size===1){mode=(e.shiftKey||e.button===2)?'pan':'orbit';lastX=e.clientX;lastY=e.clientY;}
+  else if(ptrs.size===2){mode='pinch';pinch0=spread();dist0=cam.dist;[lastX,lastY]=mid();}
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!ptrs.has(e.pointerId))return;
+  ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(mode==='pinch'&&ptrs.size>=2){
+    cam.dist=Math.max(1e-3,dist0*pinch0/spread());
+    const[mx,my]=mid();panBy(mx-lastX,my-lastY);lastX=mx;lastY=my;return;}
+  if(ptrs.size!==1)return;
+  const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;
+  if(mode==='pan')panBy(dx,dy);
+  else{cam.yaw+=dx*0.006;cam.pitch=Math.max(-1.45,Math.min(1.45,cam.pitch-dy*0.006));}
+});
+const drop=e=>{ptrs.delete(e.pointerId);
+  if(ptrs.size===1){mode='orbit';const v=[...ptrs.values()][0];lastX=v.x;lastY=v.y;}
+  else if(!ptrs.size)mode=null;};
+canvas.addEventListener('pointerup',drop);canvas.addEventListener('pointercancel',drop);
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('wheel',e=>{e.preventDefault();cam.dist*=Math.exp(e.deltaY*0.001);},{passive:false});
+// Echo suppression by construction: an adopted pose also updates `sent`, so the next diff finds
+// nothing and no message bounces back.
+let sent=null,adopted=false;
+function pushCam(){
+  const c=[cam.yaw,cam.pitch,cam.dist,cam.target[0],cam.target[1],cam.target[2]];
+  if(sent){let same=true;for(let i=0;i<6;i++)if(Math.abs(c[i]-sent[i])>1e-7){same=false;break;}if(same)return;}
+  sent=c;post({type:'cam',orbit:{yaw:cam.yaw,pitch:cam.pitch,dist:cam.dist,target:cam.target.slice()}});}
+function applyCam(o){
+  if(!o)return;
+  cam.yaw=o.yaw;cam.pitch=o.pitch;cam.dist=o.dist;cam.target=o.target.slice();
+  sent=[cam.yaw,cam.pitch,cam.dist,cam.target[0],cam.target[1],cam.target[2]];
+  adopted=true;}     // …so a later frameScene() does not yank the pair back to the opening pose
+function resize(){const dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.max(1,Math.floor(wrap.clientWidth*dpr));canvas.height=Math.max(1,Math.floor(wrap.clientHeight*dpr));}
+addEventListener('resize',resize);
+
+// ===== knot state =====
+// Chunks are self-contained (each carries its own reference and its own PLAS order) and overlap
+// by one knot, so any interval lies wholly inside one of them. All of them are resident: a knot
+// bundle is a few tens of MB of floats total, so there is nothing to stream and no frontier to
+// hold playback at — unlike the frame bundles the other two cards play.
+let chunks=[],activeChunk=-1,dec=null,curve='cubic_hermite',numIntervals=1,numKnots=0;
+let refCenter=null,refQuat=null,outXyz=null,outRot=null;
+let totalFrames=1,gFrame=0,camMeta=null,started=false,builtT=NaN,parity=null;
+let curView=null,curVw=1,curVh=1,curFx=1,curFy=1,lastView=null,fps=0,fpsN=0,fpsT=0;
+
+// t -> which chunk owns the interval starting at `left`. t == 1 lands on the last chunk's
+// final knot, which no interval starts at, hence the fallback.
+function chunkForKnot(left){for(let i=0;i<chunks.length;i++)if(left>=chunks[i].start_knot&&left<chunks[i].end_knot)return i;
+ return chunks.length-1;}
+function activateChunk(ci){const c=chunks[ci],k=c.kf;
+ activeChunk=ci;dec=c.streams?{streams:c.streams,rows:c.rows}:null;
+ refCenter=k.center;refQuat=k.quat;baseCenter=k.center;baseScale=k.scale;baseQuat=k.quat;baseColor=k.color;
+ N=k.numTotal;staticIdx=k.staticIdx;numDyn=k.numDyn;
+ shIdx=k.shIndex||null;uploadSH(k.shCodebook||null);
+ if(!outXyz||outXyz.length<numDyn*3){outXyz=new Float32Array(numDyn*3);outRot=new Float32Array(numDyn*4);}
+ // Trail buffers are POOLED, sized once for the worst case: the window is rebuilt on every
+ // displayed frame, and at the top of the length slider that is ~9 MB of garbage per rebuild
+ // otherwise. The +64 headroom covers the exact knot times inserted into the uniform samples.
+ kept=keptIndices(numDyn);
+ trailSamples=new Float32Array((MAX_TRAIL_SAMPLES+64)*kept.length*3);
+ trailArray=new Float32Array((MAX_TRAIL_SAMPLES+63)*kept.length*2*4);
+ trailKey='';
+ buildTexture();uploadTexture();builtT=NaN;needSort=true;}
+// The whole per-frame cost of this format: two 4-term blends per gaussian, then the usual
+// splat write. No decode, no upload of new offsets — the knots are already floats in RAM.
+// The reference IS the chunk's first knot and xyz_d is relative to it (rotation is not — see
+// compress_knot_bundle.py on why the two references differ in kind), so position adds the
+// blend to the reference and rotation adds it to the canonical quaternion and re-normalises.
+function applyTime(t){
+ const br=knotBracket(t,numIntervals),ci=chunkForKnot(br[0]);
+ if(ci!==activeChunk)activateChunk(ci);
+ if(!dec){applyKeyframe();return;}
+ const c=chunks[activeChunk];
+ blendKnots(dec,curve,c.start_knot,br[0],br[1],br[2],numDyn,outXyz,outRot);
+ for(let j=0;j<numDyn;j++){const gi=staticIdx+j,o3=j*3,o4=j*4;
+   let qw=refQuat[4*gi]+outRot[o4],qx=refQuat[4*gi+1]+outRot[o4+1],qy=refQuat[4*gi+2]+outRot[o4+2],qz=refQuat[4*gi+3]+outRot[o4+3];
+   const l=Math.hypot(qw,qx,qy,qz)||1;
+   writeSplat(gi,refCenter[3*gi]+outXyz[o3],refCenter[3*gi+1]+outXyz[o3+1],refCenter[3*gi+2]+outXyz[o3+2],
+              qw/l,qx/l,qy/l,qz/l,baseColor[gi]);}
+ uploadTexture();}
+function applyKeyframe(){for(let j=0;j<numDyn;j++){const gi=staticIdx+j;
+  writeSplat(gi,baseCenter[3*gi],baseCenter[3*gi+1],baseCenter[3*gi+2],
+             baseQuat[4*gi],baseQuat[4*gi+1],baseQuat[4*gi+2],baseQuat[4*gi+3],baseColor[gi]);}
+ uploadTexture();}
+// The frame -> time convention every panel on this page uses, and the one export_knots.py's
+// --check pinned against a packed bundle: t = frame / (frames - 1).
+const timeOf=f=>totalFrames>1?Math.min(1,Math.max(0,f/(totalFrames-1))):0;
+
+// At a knot the basis is [1,0,0,0], so the curve must return that knot's own stored offset.
+// Cheap, and it catches the two ways this panel can silently render a deformation the model
+// never predicted: a wrong basis order, and an off-by-one in the knot indexing. Reported in
+// the card's status line rather than kept to the console — a curve that is subtly wrong still
+// looks like a curve. Same contract traj.js and knots.html have with their bundles.
+function selfCheck(){
+ let worst=0;
+ for(let ci=0;ci<chunks.length;ci++){
+   const c=chunks[ci];if(!c.streams)continue;
+   const d={streams:c.streams,rows:c.rows},n=Math.min(c.kf.numDyn,4096),probe=new Float32Array(n*3);
+   for(let k=c.start_knot;k<=c.end_knot;k++){
+     const br=knotBracket(numIntervals?k/numIntervals:0,numIntervals);
+     if(chunkForKnot(br[0])!==ci)continue;            // the shared boundary knot belongs to one chunk
+     blendKnots(d,curve,c.start_knot,br[0],br[1],br[2],n,probe,null);
+     const off=(k-c.start_knot)*c.rows*3,want=c.streams.xyz_d;
+     for(let j=0;j<n*3;j++){const e=Math.abs(probe[j]-want[off+j]);if(e>worst)worst=e;}}}
+ return worst;}
+
+// ---- trails ------------------------------------------------------------------------------
+// Stride sample over the dynamic rows. They are PLAS-sorted, i.e. spatially coherent, so a stride
+// is an even sample of the cloud rather than of whatever order the compressor happened to write.
+function keptIndices(n){const stride=Math.max(1,Math.floor(n/TRAIL_POINTS)),out=[];
+ for(let i=0;i<n;i+=stride)out.push(i);return new Uint32Array(out);}
+// Position of a SUBSET of gaussians at time t, written into `out` at `off`. The full-cloud path
+// (blendKnots) would evaluate all 23,716 rows per sample, which at 256 samples a frame is not
+// affordable; this touches only the ~900 rows that are actually drawn. Same arithmetic, same
+// basis, same knot bracketing: it is blendKnots restricted to an index list, built from the
+// module's own curveBasis/curveOrder so there is still one definition of the curve.
+function evalSubset(t,idx,out,off){
+ const br=knotBracket(t,numIntervals),ci=chunkForKnot(br[0]),c=chunks[ci];
+ // A trail crossing a chunk boundary is not drawable as one path: each chunk carries its own
+ // reference AND its own PLAS order, so row j is a different gaussian either side. Report the
+ // sample as absent and let the caller leave a gap. (Inert on a single-chunk bundle like hook's.)
+ if(!c||!c.streams||ci!==activeChunk)return false;
+ const w=curveBasis(curve,br[2]),order=curveOrder(curve,br[0]-c.start_knot,br[1]-c.start_knot),rows=c.rows;
+ for(let j=0;j<idx.length;j++){
+   const b=idx[j]*3;let x=0,y=0,z=0;
+   for(let i=0;i<order.length;i++){
+     const arr=c.streams['xyz_'+order[i][0]];if(!arr)continue;
+     const o=order[i][1]*rows*3+b,wi=w[i];
+     x+=wi*arr[o];y+=wi*arr[o+1];z+=wi*arr[o+2];}
+   const g=staticIdx+idx[j],o3=off+j*3;
+   out[o3]=refCenter[3*g]+x;out[o3+1]=refCenter[3*g+1]+y;out[o3+2]=refCenter[3*g+2]+z;}
+ return true;}
+// Which knot interval a frame falls in: the index a segment is coloured by.
+const intervalOf=f=>knotBracket(timeOf(f),numIntervals)[0];
+// Uniform samples over the window, plus the EXACT knot times inside it, so a stripe boundary lands
+// on a knot rather than on the nearest uniform sample. Sorted and de-duplicated.
+function trailTimes(from,now){
+ const win=now-from;if(!(win>0))return[];
+ const uniform=Math.min(MAX_TRAIL_SAMPLES,Math.max(2,Math.round(win*DETAIL)+1)),out=[];
+ for(let s=0;s<uniform;s++)out.push(from+win*(s/(uniform-1)));
+ for(const k of knotFrames())if(k>from+1e-6&&k<now-1e-6)out.push(k);
+ out.sort((a,b)=>a-b);
+ return out.filter((f,i)=>i===0||f-out[i-1]>1e-9);}
+function buildTrail(now){
+ trailVerts=0;trailRuns.length=0;
+ if(!trailsOn||!dec||numDyn<=0)return;
+ if(!kept||kept.length===0)return;
+ const from=Math.max(0,now-trailLen),win=now-from;
+ if(win<1e-3)return;
+ const times=trailTimes(from,now),width=kept.length*3,ok=[];
+ for(let s=0;s<times.length;s++)ok.push(evalSubset(timeOf(times[s]),kept,trailSamples,s*width));
+ let o=0,emitted=0;
+ for(let s=0;s+1<times.length;s++){
+   if(!ok[s]||!ok[s+1])continue;                       // gap: drop this segment only
+   const aB=s*width,bB=(s+1)*width;
+   // Age from TIME, not from segment index, so the fade stays right across a gap.
+   const ageA=(times[s]-from)/win,ageB=(times[s+1]-from)/win;
+   for(let k=0;k<kept.length;k++){
+     const a=aB+k*3,b=bB+k*3;
+     trailArray[o++]=trailSamples[a];trailArray[o++]=trailSamples[a+1];trailArray[o++]=trailSamples[a+2];trailArray[o++]=ageA;
+     trailArray[o++]=trailSamples[b];trailArray[o++]=trailSamples[b+1];trailArray[o++]=trailSamples[b+2];trailArray[o++]=ageB;}
+   // Segments are time-ordered, so one interval owns a contiguous run of emitted ones.
+   const iv=intervalOf(times[s]),run=trailRuns[trailRuns.length-1];
+   if(run&&run.interval===iv&&run.first+run.count===emitted)run.count++;
+   else trailRuns.push({interval:iv,first:emitted,count:1});
+   emitted++;}
+ trailVerts=o/4;
+ gl.bindBuffer(gl.ARRAY_BUFFER,lbuf);gl.bufferData(gl.ARRAY_BUFFER,trailArray.subarray(0,o),gl.DYNAMIC_DRAW);}
+function drawTrail(){
+ if(!trailVerts)return;
+ gl.useProgram(lprog);gl.bindVertexArray(lvao);
+ gl.uniformMatrix4fv(lu_proj,false,projMatrix(curVw,curVh,curFx,curFy));gl.uniformMatrix4fv(lu_view,false,curView);
+ // Multiplied by vAge in the shader, so the tail is fainter still: overlapping polylines at full
+ // strength bury the cloud they are drawn over, and it is the stripe boundaries that have to stay
+ // legible, not any individual path. Ordinary SRC_ALPHA here, then the splats' front-to-back
+ // `under` operator is handed back, the same two-line dance drawTraj() does in viewer.html.
+ gl.uniform1f(lu_alpha,0.65);
+ gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+ const perSeg=2*kept.length;
+ for(const run of trailRuns){
+   const c=TRAIL_COLORS[((run.interval%TRAIL_COLORS.length)+TRAIL_COLORS.length)%TRAIL_COLORS.length];
+   gl.uniform3f(lu_tint,c[0],c[1],c[2]);
+   gl.drawArrays(gl.LINES,run.first*perSeg,run.count*perSeg);}
+ gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);
+ gl.bindVertexArray(vao);}
+function drawSplats(op){gl.useProgram(prog);gl.bindVertexArray(vao);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(u_texL,0);
+ gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,shTex);gl.uniform1i(u_shL,1);gl.uniform3fv(u_camposL,camPos);gl.uniform1i(u_hasSHL,(shHas&&shBands>0)?1:0);gl.uniform1i(u_shColsL,shCols);gl.uniform1i(u_shBandsL,shBands);
+ gl.uniformMatrix4fv(u_proj,false,projMatrix(curVw,curVh,curFx,curFy));gl.uniformMatrix4fv(u_view,false,curView);gl.uniform2f(u_focal,curFx,curFy);gl.uniform2f(u_viewport,curVw,curVh);gl.uniform1f(u_op,op);
+ gl.uniform1i(u_hardEdgeL,ellipOn?1:0);gl.uniform1f(u_hardRL,ellipR);
+ const nw=camMeta?camMeta.width:curVw,k=curVw/nw;gl.uniform1f(u_lowpassL,1.2*k*k);
+ gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,N);gl.activeTexture(gl.TEXTURE0);}
+function frame(t){requestAnimationFrame(frame);
+ if(!N||!chunks.length)return;
+ pushCam();
+ fpsN++;if(t-fpsT>1000){fps=Math.round(fpsN*1000/(t-fpsT));fpsN=0;fpsT=t;post({type:'stats',fps,splats:N});}
+ let vw=canvas.width,vh=canvas.height,vx=0,vy=0,fx,fy;
+ if(camMeta){const asp=camMeta.width/camMeta.height;
+   if(canvas.width/canvas.height>asp){vh=canvas.height;vw=Math.round(vh*asp);}else{vw=canvas.width;vh=Math.round(vw/asp);}
+   vx=(canvas.width-vw)>>1;vy=(canvas.height-vh)>>1;fy=0.5*vh/Math.tan(camMeta.fovy/2);fx=0.5*vw/Math.tan(camMeta.fovx/2);
+ }else{fy=0.5*canvas.height/Math.tan(0.5*1.1);fx=fy;}
+ curVw=vw;curVh=vh;curFx=fx;curFy=fy;curView=viewMatrix();
+ let moved=!lastView;if(lastView)for(let i=0;i<16;i++)if(Math.abs(curView[i]-lastView[i])>1e-6)moved=true;lastView=curView.slice();
+ gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.viewport(vx,vy,vw,vh);
+ // Rebuild only when the playhead actually moved. The timeline is continuous, so this is a
+ // float compare rather than a frame index — scrubbing gives a different t every pointer move
+ // and playing gives one every rAF, but a paused panel re-uploads nothing.
+ const tt=timeOf(gFrame);
+ if(builtT!==tt){applyTime(tt);builtT=tt;needSort=true;}
+ if(moved||needSort){sortSplats(curView);needSort=false;}
+ drawSplats(1.0);
+ // Rebuilt only when the playhead or the trail settings actually change, then drawn over the
+ // splats. Same cache trap as everywhere else on this page: an option change that does not also
+ // move the frame has to invalidate the key itself, which the `view` handler does.
+ if(trailsOn){const k=activeChunk+'|'+gFrame+'|'+trailLen;if(k!==trailKey){trailKey=k;buildTrail(gFrame);}drawTrail();}}
+function frameScene(){
+ // Opening pose from the dataset's held-out test camera, converted into orbit state: the D-NeRF
+ // cameras aim at the origin, so the target IS the origin and the pose is (yaw, pitch, dist).
+ // CAM_ELEV then raises the viewpoint about that target. A scene with no camera falls back to the
+ // point cloud's own centroid and a robust radius.
+ let yaw=cam.yaw,pitch=cam.pitch,dist=cam.dist,target=[0,0,0];
+ if(camMeta){
+   const e=camMeta.campos.map(v=>v*CAM_ZOOM),d=Math.hypot(e[0],e[1],e[2])||1;
+   dist=d;pitch=Math.max(-1.45,Math.min(1.45,Math.asin(e[2]/d)+CAM_ELEV));
+   yaw=Math.atan2(e[0],e[1]);
+ }else{
+   let cx=0,cy=0,cz=0;for(let i=0;i<N;i++){cx+=baseCenter[3*i];cy+=baseCenter[3*i+1];cz+=baseCenter[3*i+2];}
+   cx/=N;cy/=N;cz/=N;target=[cx,cy,cz];
+   const ds=[];for(let i=0;i<N;i+=10)ds.push(Math.hypot(baseCenter[3*i]-cx,baseCenter[3*i+1]-cy,baseCenter[3*i+2]-cz));
+   ds.sort((a,b)=>a-b);dist=(ds[Math.floor(ds.length*0.9)]||10)*2.6;pitch=CAM_ELEV;
+ }
+ home={yaw,pitch,dist,target:target.slice()};
+ // A pose already adopted from the panel beside this one wins over the opening one — the same
+ // guard field.html and knots.html carry. `home` is still the opening pose, so reset view works.
+ if(!adopted){cam.yaw=yaw;cam.pitch=pitch;cam.dist=dist;cam.target=target.slice();}
+ needSort=true;}
+
+// ===== scene install =====
+// Same division of labour as the splat cards: the HOST fetches and decodes on the one
+// ffmpeg.wasm the page owns, and pushes finished arrays here. Keyframes arrive first, so the
+// panel is on screen and orbitable — showing the first knot's pose — while the knot streams
+// are still decoding.
+function installKeyframes(m){
+  clearTimeout(_hello);
+  totalFrames=m.totalFrames;camMeta=m.camera||null;
+  curve=m.curve||'cubic_hermite';numIntervals=m.numIntervals||1;numKnots=m.numKnots||0;
+  chunks=m.chunks.map(c=>({kf:c.kf,start_knot:c.start_knot,end_knot:c.end_knot,streams:null,rows:0}));
+  activateChunk(0);frameScene();pushCam();
+  resize();if(!started){started=true;requestAnimationFrame(frame);}
+  ready();}
+function installKnots(m){const c=chunks[m.chunk];if(!c)return;
+  c.streams=m.streams;c.rows=m.rows;
+  if(activeChunk===m.chunk){dec={streams:c.streams,rows:c.rows};builtT=NaN;trailKey='';}
+  parity=selfCheck();
+  ready();
+  // `chunk` doubles as the delivery ACK: the host holds its own copy of these arrays until it
+  // arrives, so a panel that has to be reloaded can still be served. Reported through the same
+  // `buffered` message the splat panels use, so the host's play gating needs no new case.
+  post({type:'buffered',end:totalFrames,gop:m.chunk});}
+// Sent on the keyframe and again when knots land: the note and the parity margin are things
+// only this panel can describe, and the host joins every panel's note into the status line.
+function ready(){
+  const have=chunks.filter(c=>c.streams).length;
+  const note=N.toLocaleString()+' gaussians · '+numKnots+' knots · '
+    +(curve==='cubic_hermite'?'cubic Hermite':curve)
+    +(parity!=null?' · knot parity '+parity.toExponential(1):'')
+    +(have<chunks.length?' · decoding…':'');
+  post({type:'ready',frames:totalFrames,splats:N,note,
+        // Where the knots fall on the timeline. Unlike the trajectory card's supervised frames
+        // these are not integers (15 knots over 100 frames is one every ~7.07), which is why the
+        // host keeps them as a sorted float list rather than a Set of frame numbers.
+        marks:knotFrames(),markOn:'at a knot',markOff:'between knots'});}
+function knotFrames(){const out=[];for(let k=0;k<=numIntervals;k++)out.push(k/numIntervals*(totalFrames-1));return out;}
+
+addEventListener('message',e=>{if(e.origin!==location.origin)return;const m=e.data;
+ if(!m||m.ch!=='spdef'||m.to!==ID)return;
+ if(m.type==='cam')applyCam(m.orbit);
+ else if(m.type==='seek'){gFrame=m.frame;}                     // fractional: this card's clock is continuous
+ else if(m.type==='resetView'){cam.yaw=home.yaw;cam.pitch=home.pitch;cam.dist=home.dist;
+   cam.target=home.target.slice();needSort=true;}
+ else if(m.type==='view'){
+   ellipOn=!!m.ellip;ellipR=m.ellipR;
+   // Invalidate the trail cache on a change, or a new length shows the previous window until the
+   // playhead happens to move. Zero the geometry too, so switching trails OFF takes effect now.
+   if(m.trail!==trailsOn||m.trailLen!==trailLen){trailKey='';trailVerts=0;}
+   trailsOn=!!m.trail;trailLen=m.trailLen||trailLen;}
+ else if(m.type==='stage')stage(m.label,m.pct);
+ else if(m.type==='hide')loadEl.classList.add('hide');
+ else if(m.type==='keyframe')installKeyframes(m);
+ else if(m.type==='knots')installKnots(m);
+ else if(m.type==='error')showErr(m.msg);});
+
+let _hello=0;
+function hello(){post({type:'hello',scene:SCENE});_hello=setTimeout(hello,600);}
+
+// ===== standalone fallback =====
+// knotsplat.html?scene=… on its own still works, which keeps this panel debuggable in isolation
+// and is the only place knot_decode.js's own ffmpegReady() is reached. It runs its own clock,
+// as points.html's and field.html's fallbacks do.
+async function loadStandalone(){
+  if(!SCENE){showErr('no ?scene= given');return;}
+  const [{parseNpz,buildKeyframe},{ffmpegReady,decodeKnotChunk}]=
+    await Promise.all([import('../smv/decode.js'),import('./knot_decode.js')]);
+  const base=SCENE.replace(/[^/]*$/,'');
+  const grab=async(url,label)=>{const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status+' '+url);
+    const total=+r.headers.get('content-length')||0,rd=r.body.getReader(),parts=[];let recv=0;
+    for(;;){const{done,value}=await rd.read();if(done)break;parts.push(value);recv+=value.length;
+      stage(label,total?recv/total*100:null);}
+    const out=new Uint8Array(recv);let o=0;for(const c of parts){out.set(c,o);o+=c.length;}return out;};
+  stage('loading manifest…',2);
+  const scene=await (await fetch(SCENE)).json();
+  if(scene.format!=='knot_bundle')throw new Error('not a knot bundle (format='+scene.format+')');
+  const built=[];
+  for(const c of scene.chunks)
+    built.push({kf:buildKeyframe(parseNpz(await grab(base+c.reference,'keyframe…')),null,0),
+                start_knot:c.start_knot,end_knot:c.end_knot});
+  installKeyframes({totalFrames:scene.num_frames,camera:scene.camera,curve:scene.curve,
+                    numIntervals:scene.num_intervals,numKnots:scene.num_knots,chunks:built});
+  stage('loading decoder (ffmpeg.wasm, ~31 MB, one-time)…',10);
+  const ff=await ffmpegReady(()=>{});
+  for(let ci=0;ci<scene.chunks.length;ci++){
+    const d=await decodeKnotChunk(ff,scene.chunks[ci],p=>grab(base+p,'knot streams…'),
+      (name,done,total)=>stage('decoding '+name+' ('+done+'/'+total+')…',20+70*done/total));
+    installKnots({chunk:ci,streams:d.streams,rows:d.rows});
+  }
+  stage('ready',100);loadEl.classList.add('hide');
+  // Standalone there is no host clock, so run one: the same 30 fps the page's cards use.
+  let t0=0;requestAnimationFrame(function tick(t){requestAnimationFrame(tick);
+    if(!t0){t0=t;return;}gFrame=(gFrame+(t-t0)/1000*30)%totalFrames;t0=t;});
+}
+
+if(HOST){stage('waiting for host…',3);hello();}
+else loadStandalone().catch(e=>{console.error(e);showErr(e.message||e);});
+</script>
+</body>
+</html>

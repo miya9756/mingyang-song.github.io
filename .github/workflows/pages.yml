@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+# Build the personal site + the SmoothMotionVectors viewer under projects/smv/ and
+# publish to GitHub Pages on every push to main. The only "build" step is
+# regenerating the viewer's scenes.json from the committed scenes/.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow GITHUB_TOKEN to deploy to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let an in-progress run finish (don't cancel publishes).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Scene binaries (*.mkv/*.npz) are in Git LFS; smudge them to real
+          # content so the Pages artifact serves files, not pointer stubs.
+          lfs: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Regenerate the viewer's scenes.json
+        run: python3 projects/smv/make_scenes_index.py
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          # Enable Pages (Actions source) automatically on first run — no UI click.
+          enablement: true
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Publish the repo root (the site is fully static; no bundler).
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

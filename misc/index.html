@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miscellany — Mingyang Song</title>
+<link rel="icon" type="image/png" sizes="64x64" href="../assets/web_icon.png">
+<link rel="apple-touch-icon" href="../assets/web_icon.png">
+<meta name="description" content="Miscellany — odds and ends from Mingyang Song: things that are worth keeping but belong to no project.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="theme-color" content="#f4f2ec"><!-- must track --bg; Safari tints its chrome from this -->
+
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  /* Fourth palette in the family, and the only one that is NOT a project page — so it borrows the
+     landing page's warm paper (#f4f2ec) verbatim rather than picking a temperature of its own. A
+     shelf of odds and ends is a continuation of the personal site, not a new destination, and the
+     seam between them should be invisible. What it does get to itself is the accent: a muted plum,
+     off the blue the landing page uses and off Grain's amber, and the one colour in the card cover
+     that isn't gold. Bones are the project pages' (Fraunces display serif, the back pill, the card
+     radius, the section rhythm), so it still reads as this site. */
+  :root{
+    /* Fixed light palette, so pin color-scheme rather than leaving it `normal` — otherwise the UA
+       canvas, scrollbars and Safari's overscroll area stay white while the page is tinted. Keep the
+       theme-color meta above in sync with --bg. */
+    color-scheme:light;
+    --bg:#f4f2ec; --surface:#fdfbf6; --ink:#16181d; --muted:#5f6672;
+    --line:#e6e2d8; --accent:#6f4468; --shadow:rgba(16,24,40,.16);
+    /* the drawn shelf: a board's lit top edge, its front edge, and the light it keeps off the
+       compartment below. One step warmer and darker than --line so the boards read as boards
+       rather than as more hairlines; see the .shelf block for what is drawn with them. */
+    --board-top:#e2dccd; --board-face:#c8c0ab; --board-cast:rgba(88,74,48,.14);
+  }
+  *{box-sizing:border-box}
+  /* background on html too — only html's paints the overscroll area Safari rubber-bands into */
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .inner{max-width:760px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{background:linear-gradient(180deg,#fbf9f4,#f1efe8);border-bottom:1px solid var(--line);padding:32px 0 26px}
+  /* back to the personal site. '../' not an absolute path, so it resolves correctly whether the
+     site is served from a user-site root or a project-site subpath. */
+  .back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:rgba(255,255,255,.6);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:#fff;text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+
+  h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(30px,4.4vw,46px);line-height:1.05;letter-spacing:-.018em;color:var(--ink)}
+  .subtitle{margin:10px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
+            font-size:clamp(15px,2vw,21px);color:var(--ink);opacity:.9;line-height:1.25}
+  main{padding:34px 0 0}
+  h2{font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;margin:0 0 14px;color:var(--ink)}
+  p{margin:0 0 14px}
+
+  /* Shelf items are TYPE, not tiles. A bordered box with a heading, a line of prose and an arrow is
+     exactly the landing page's card, and repeating it here made the shelf read as a fourth section
+     of published work rather than as a shelf. So the item has no box at all: the title is set at
+     display size and IS the object, ruled above and below like a wall text, and the only chrome is
+     the rule and the arrow. Nothing here is borrowed from .card — no surface, no gradient border,
+     no lift. Each new item is another .marquee in the list. */
+  /* THE SHELF, drawn rather than just named — and drawn in CSS, so it is vector: no asset, crisp at
+     any zoom, and it takes its colours from the palette instead of baking them into a file.
+     Three parts: two hairline uprights (the case), a board under each item, and a soft contact
+     shadow below each board. The detail that makes it read as SHELVING rather than as a table or
+     another bordered box is that the boards OVERHANG the uprights by 5px — a box's edges meet at
+     the corner, a shelf's board runs past its sides. Boards are warm and one step darker than
+     --line, with a light top edge and a darker front edge, which is a plank seen very slightly from
+     above. Deliberately suggested, not rendered: no wood texture, no bevel, no drop shadow on the
+     case. Every item adds its own board, so the case grows a compartment per entry with no extra
+     markup. */
+  .shelf{position:relative;display:grid;gap:0;padding:0 20px;
+         border-left:1px solid var(--line);border-right:1px solid var(--line)}
+  /* the underside of the board above — thinner, because you are seeing its edge, not its top */
+  .shelf::before{content:"";position:absolute;left:-6px;right:-6px;top:0;height:2px;
+                 background:linear-gradient(180deg,var(--board-top),var(--board-face))}
+  /* A column rather than a block, bottom-aligned, because the compartment is now taller than its
+     type: `min-height` is set by the still life standing in it, and everything in a case rests on
+     the same board rather than hanging from the shelf above. With no min-height in play — below the
+     breakpoint where the vignette is dropped — flex-end lays out exactly as the old block did, so
+     this is inert on a phone rather than a second layout to keep in step. */
+  .marquee{display:flex;flex-direction:column;justify-content:flex-end;position:relative;
+           color:inherit;padding:26px 0 30px;min-height:280px}
+  /* the board this item rests on */
+  .marquee::after{content:"";position:absolute;left:-26px;right:-26px;bottom:0;height:3px;
+                  border-radius:1.5px;background:linear-gradient(180deg,var(--board-top),var(--board-face))}
+  /* and the light it keeps off the compartment below */
+  .marquee::before{content:"";position:absolute;left:-22px;right:-22px;bottom:-10px;height:10px;
+                   pointer-events:none;background:linear-gradient(180deg,var(--board-cast),transparent)}
+  .marquee:hover,.marquee:focus-visible{text-decoration:none}
+  .mkick{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
+  /* THE PADDING AND THE NEGATIVE MARGIN ARE ONE THING, and they are what let the `g` keep its
+     tail. `background-clip:text` paints inside the PADDING BOX, and `line-height:1` makes that box
+     exactly 1em tall while Fraunces spans ~1.24em from ascent to descent — the overflow is split
+     top and bottom, so the bottom ~.12em of every descender falls outside the box and gets no
+     image at all. Invisible at rest (the opaque fill covers the whole glyph) and obvious on hover.
+     So the box is grown .16em downward and the same amount is taken straight back off the margin:
+     the paint area covers the descenders, the layout below is untouched. Delete either half and
+     the tail of the `g` goes hollow again, or the description jumps 10px. The crop barely moves —
+     the image is 900x404 against a ~440px-wide box, so `cover` is bound by WIDTH and a taller box
+     only reveals a few more rows of a 197px-tall painting. */
+  .mtitle{display:block;margin:.18em 0 -.16em;padding-bottom:.16em;
+          font-family:'Fraunces','Palatino Linotype',Georgia,serif;
+          font-weight:600;font-size:clamp(34px,7.5vw,64px);line-height:1;letter-spacing:-.022em;
+          color:var(--ink);-webkit-text-fill-color:var(--ink);
+          transition:color .32s ease,-webkit-text-fill-color .32s ease}
+  .mdesc{display:block;max-width:52ch;margin:.7em 0 0;font-size:14px;color:var(--muted)}
+  /* SOMETHING ON THE SHELF: a still life of Mingyang's own, standing on the board at the right-hand
+     end of the compartment. One compartment holding one line of type read as a diagram of a shelf
+     rather than as a shelf; a drawn object in it is what makes the case furniture.
+
+     THE ILLUSTRATION OVERLAPS THE TITLE ON PURPOSE, and the overlap is the point rather than a
+     tolerance. The type passes behind the tablecloth — at the widest layout the last `m` of
+     *Museum* is covered and the word still reads — which is what puts the drawing IN the page
+     instead of beside it. Two flat things that merely abut read as two panels; one in front of the
+     other reads as depth, and that is cheaper and truer than any shadow. It is worth knowing what
+     it costs: this is the link's own label, so the overlap is kept to the tail of the last word,
+     never a whole one, and every other line (kicker, description, call to action) stays clear.
+
+     IT IS BIGGER THAN THE COMPARTMENT ON PURPOSE, and breaking the case is the effect rather than
+     a side effect. It overhangs the right upright by 76px, and its cloth drapes over the bottom
+     board and down past the footer's rule, so the object is in FRONT of the furniture instead of
+     parked inside it. A drawing that fits neatly in its box reads as an inserted picture; one that
+     does not fit reads as a thing someone put there. Two consequences, both load-bearing:
+
+     - `z-index:1` IS WHAT PUTS THE CLOTH OVER THE BOARD. `.marquee::after` — the board — is the
+       last child, so without it the board paints over the drape, cutting it in a straight line at
+       the shelf's front edge and making the cloth look tucked behind rather than hung over.
+       `.marquee` is `position:relative` with `z-index:auto` and so opens no stacking context,
+       which is also what lets the drape pass in front of the footer's rule further down.
+     - `pointer-events:none` IS BACK, and it is now required rather than tidy. The drape hangs a
+       long way outside the compartment and this image lives inside the `<a>`; without it, a strip
+       of cloth floating over the footer would be a live link target in the middle of nowhere. The
+       compartment is unchanged as a target and the hover reveal still fires from it.
+
+     The hang is 132px against the 140px between the board and the page's bottom edge, so the drape
+     stops just inside it. Give it more and the page grows a few pixels of scroll for a decoration:
+     an absolutely positioned box still counts toward scrollable overflow even though it is out of
+     flow, and the footer's own padding is all that is absorbing it.
+
+     THE PNG IS CROPPED TO ITS INK, which is what keeps every offset here meaningful — they are
+     measured from the cloth's real lowest fold and the drawing's real right edge, not from whatever
+     transparent margin the artwork happened to carry (the master is A4 with the drawing floating
+     inside it). `tools/bake_shelf_still.py` does the cropping; do not point this at a raw master.
+
+     Nothing here moves on hover, so there is nothing to add to the reduced-motion block. The
+     picture appearing in the title is the affordance; the shelf is furniture. */
+  .still{position:absolute;right:-120px;bottom:-210px;width:360px;height:478px;
+         z-index:1;pointer-events:none}
+  /* Two things below the top tier, and they move together: the object shrinks AND it stops
+     escaping, because the escape is what costs page margin. Values are checked against the two
+     things that can break — the description (one ~356px line, which the vignette must not run
+     under) and the viewport's right edge. Worst case in each band: 33px of margin to spare at
+     681px, 83px at 961px. Below the last breakpoint a phone has neither the width to escape into
+     nor the room to give up, so the shelf goes back to type alone. */
+  @media(max-width:960px){.still{right:-34px;bottom:-92px;width:290px;height:385px}
+                          .marquee{min-height:315px}}
+  @media(max-width:680px){.still{display:none}.marquee{min-height:0}}
+  /* The two windows. Both were measured as TEXT on this page's paper before shipping, since
+     every pixel of them is a glyph: blended toward --ink and with the chroma put back, the
+     museum's render comes out at worst 3.5:1 and the tuner's painting at worst 3.6:1, so both
+     clear the 3:1 bar large text has to meet even at their brightest point. Re-measure if
+     either is replaced -- the museum's raw render was 1.9:1 and the raw painting 1.2:1, and
+     neither would have passed. tools/bake_oilpaint_type.py does the tone and the measurement
+     for the second one, and refuses to write a file that fails. */
+  .m-museum{--type-img:url(../assets/museum_type.jpg);--type-pos:center 44%}
+  .m-paint{--type-img:url(../assets/oilpaint_type.jpg);--type-pos:center 52%}
+  .m-room{--type-img:url(../assets/room_type.jpg);--type-pos:center 46%}
+  .mgo{display:block;margin-top:.8em;font-size:13px;font-weight:600;color:var(--accent)}
+  .mgo .arrow{display:inline-block;transition:transform .18s}
+  .marquee:hover .mgo .arrow,.marquee:focus-visible .mgo .arrow{transform:translateX(5px)}
+  /* The reveal: the title's letterforms are a window onto the thing they link to — a render of the
+     actual reconstruction, clipped to the glyphs. Both the image and the clip live inside @supports,
+     because without background-clip the image would paint as a plain RECTANGLE behind the words; and
+     the resting state keeps an opaque fill over it, so the picture appears only on hover or focus.
+     The fill was blended toward --ink and measured against this page's paper before shipping: worst
+     pixel 3.5:1, median 10.3:1, so every glyph clears the 3:1 bar large text has to meet even at the
+     brightest point of the painting. Re-measure if the render is ever replaced. */
+  /* THE PICTURE IS PER ITEM AND ARRIVES AS A CUSTOM PROPERTY, not as a second rule. Every
+     shelf item's window shows the thing that item links to, so the url is a property of the
+     entry rather than of the pattern -- one `--type-img` on the .marquee, and the clip, the
+     fill, the reveal and the descender fix below are written exactly once however many
+     compartments the case grows. `--type-pos` goes with it because the right crop is a fact
+     about the picture, not about the layout. */
+  @supports ((-webkit-background-clip:text) or (background-clip:text)){
+    .mtitle{background-image:var(--type-img);background-size:cover;
+            background-position:var(--type-pos,center);-webkit-background-clip:text;background-clip:text}
+    .marquee:hover .mtitle,.marquee:focus-visible .mtitle{color:transparent;-webkit-text-fill-color:transparent}
+    /* No hover on a touch screen, so there the picture is simply always in the letters. */
+    @media(hover:none){.mtitle{color:transparent;-webkit-text-fill-color:transparent}}
+  }
+
+  footer{border-top:1px solid var(--line);margin-top:44px;padding:26px 0 48px;color:var(--muted);font-size:13px}
+  /* THE FOOTER HAS A MEASURE, and it is the still life's doing — the same constraint the shelf
+     descriptions carry, one row further down. The cloth drapes past the footer's rule (that is the
+     whole effect; see .still), so the right-hand end of this row is behind a drawing. A single
+     copyright line was short enough never to reach it; the credit under it is not, and its second
+     line came out running under the folds. So the text is given a column that stops where the
+     drawing's box starts, in the two bands where the drawing exists. Both numbers are measured
+     from .still's own geometry rather than eyeballed off a screenshot, and each leaves 20px of
+     air. The box's left edge sits `width - overhang + 20` in from .inner's content right edge (the
+     20 being the shelf's own padding, which the drawing is measured outside of): 360 - 120 + 20 =
+     260 at the top tier, 290 - 34 + 20 = 276 in the middle band. padding-right REPLACES .inner's
+     own, so it carries that clearance on top of the page padding rather than instead of it. Below
+     680px the drawing is display:none and the footer gets its full width back. */
+  @media(min-width:681px){footer .inner{padding-right:calc(clamp(20px,4vw,48px) + 296px)}}
+  @media(min-width:961px){footer .inner{padding-right:calc(clamp(20px,4vw,48px) + 280px)}}
+  :where(a):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){
+    .back,.back .barrow{transition:none}
+    .back:hover .barrow{transform:none}
+    /* The reveal still happens — it is the affordance, not decoration — it just stops fading in. */
+    .marquee,.mtitle,.mgo .arrow{transition:none}
+    .marquee:hover .mgo .arrow,.marquee:focus-visible .mgo .arrow{transform:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <a class="back" href="../"><span class="barrow" aria-hidden="true">←</span> Mingyang Song</a>
+    <h1>Miscellany</h1>
+    <p class="subtitle">Odds and ends that belong to no project, kept anyway.</p>
+  </div>
+</header>
+
+<main class="inner">
+  <h2>The shelf</h2>
+  <div class="shelf">
+    <a class="marquee m-museum" href="museum/">
+      <span class="mkick">Now showing</span>
+      <h3 class="mtitle">Digital Museum</h3>
+      <span class="mdesc">Paintings filmed in a gallery, fitted as 3D Gaussians.</span>
+      <span class="mgo">Walk in <span class="arrow" aria-hidden="true">→</span></span>
+    </a>
+    <!-- THE SECOND ROOM OF THE MUSEUM, and it sits directly under it rather than at the end of the
+         shelf, which is the one placement decision here. Ordering by subject keeps the two museum
+         rooms adjacent; it also means nothing is added BELOW the last compartment, so the still
+         life stays exactly where it is and none of its measured offsets move. Adding a fourth item
+         at the bottom would move the drawing, per the note on it below. -->
+    <a class="marquee m-room" href="museum/room/">
+      <span class="mkick">Also showing</span>
+      <h3 class="mtitle">The Painted Room</h3>
+      <!-- ONE SHORT LINE — see the constraint spelled out on the compartment below. -->
+      <span class="mdesc">Five of my paintings, lost in a flooded ruin.</span>
+      <span class="mgo">Wade in <span class="arrow" aria-hidden="true">&rarr;</span></span>
+    </a>
+    <!-- THE TUNER LIVES ELSEWHERE, and this compartment is a pointer to it rather than a copy.
+         It was published here as misc/oilpaint/ (a port of ~/oil-paint-hack/web/tune/) and moved
+         out on 2026-09-06 to its own Pages site; the whole point of the port was that the tool is
+         authored upstream and edits go outward, so a second published copy was one more thing to
+         keep in step. External, so target/rel follow the landing page's Pixiv card. The title
+         window stays: assets/oilpaint_type.jpg is a painting the tool itself made, which is still
+         exactly what this item links to. -->
+    <a class="marquee m-paint" href="https://miya9756.github.io/Oil-Paint-Tuner/"
+       target="_blank" rel="noopener">
+      <span class="mkick">Open playground</span>
+      <h3 class="mtitle">Oil Paint Tuner</h3>
+      <!-- ONE SHORT LINE, and that is a constraint rather than a style: the still life stands
+           at the right-hand end of this compartment, and a description long enough to wrap runs
+           under its cloth. Measured at the tightest width the object survives to: at 681px this
+           line ends 29px clear of the vignette's box, in family with the museum's 33px, where the
+           longer version it replaced had 7px. (The real gap is larger still — the cloth's own ink
+           at this height is inset from the image's left edge — but the box is the number that
+           cannot drift when the drawing is re-baked.) -->
+      <span class="mdesc">A photograph repainted, one stroke at a time.</span>
+      <span class="mgo">Start painting <span class="arrow" aria-hidden="true">&rarr;</span></span>
+      <!-- The still life standing on this compartment's board. Decorative, so alt="" — the link
+           already has its name from the heading beside it, and a description here would only make
+           a screen reader read the shelf twice. width/height are the FILE's pixels (2x what the
+           page paints, for a retina panel); the CSS sizes it and lets it hang out of the case. Derived by tools/bake_shelf_still.py
+           from the master, which is deliberately not committed — same rule as assets/web_bg.png.
+
+           IT LIVES IN THE LAST COMPARTMENT, and it moves whenever a new one is added below.
+           Its whole effect is that it BREAKS THE CASE — the cloth drapes over the bottom board
+           and down past the footer's rule, so the object reads as being in front of the
+           furniture rather than parked inside it — and only the bottom board has anything to
+           break out of. Left on the compartment above, the drape hangs neatly INSIDE the case
+           and, worse, paints across the next item's description, which every offset here was
+           measured to keep clear. A shelf whose every compartment holds the same object would
+           be a wallpaper, so the answer is one object at the bottom rather than one each; when
+           an item gets a drawing of its own, that drawing takes this slot. -->
+      <img class="still" src="../assets/misc_shelf.png" width="720" height="955" alt=""
+           decoding="async">
+    </a>
+  </div>
+</main>
+
+<footer>
+  <!-- Every page on this site carries the line; nothing here is offered under an open licence.
+       /LICENSE at the repo root carries the scope.
+
+       THE ONE THIRD-PARTY CLAUSE, and it is here because the page that used to carry it left.
+       The Oil Paint Tuner's colophon credited its sample photograph, and that page moved to its
+       own site on 2026-09-06 — but assets/oilpaint_type.jpg still ships from this repo, and it is
+       that photograph, repainted by the tool, clipped into the shelf item's letterforms. So the
+       credit follows the asset rather than the link. Drop this line only if that image goes. -->
+  <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved.
+    <br>The painting in <em>Oil Paint Tuner</em> is one image of the
+    <a href="https://data.vision.ee.ethz.ch/cvl/DIV2K/" target="_blank" rel="noopener">DIV2K</a>
+    dataset (Agustsson &amp; Timofte, NTIRE 2017), under its own terms.</div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,1478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Painted Room — Mingyang Song</title>
+<link rel="icon" type="image/png" sizes="64x64" href="../../../assets/web_icon.png">
+<link rel="apple-touch-icon" href="../../../assets/web_icon.png">
+<meta name="description" content="An interactive flooded salon inspired by Mingyang Song's illustration: five repainted photographs, carved gilded frames, broken marble columns, sunflowers, warm lamplight, and water that answers when you touch it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Must track --bg. This room has no light switch: it is dark, permanently, so unlike the wall
+     next door there is only one value to track. -->
+<meta name="theme-color" content="#0b0c0e">
+
+<!-- THE PAINTINGS ARE PRELOADED, and it earns its place twice over.
+     Speed: they are the long pole. Nothing fetches them until the ~1 MB of three.js has parsed and
+     boot() has run, and by then the browser has been idle on the network for most of a second.
+     Naming them here starts all five in parallel with the library.
+     And checkability: the module builds their paths from a slug (`paintings/${slug}.webp`), so no
+     literal path exists anywhere for verify.py to resolve -- a renamed or uncommitted painting
+     would fail only in the browser, which is the failure this repo's static check exists to
+     prevent. These are the literals. Keep them in step with the WORKS table.
+
+     `crossorigin` IS REQUIRED AND IS NOT DECORATION. three's TextureLoader sets
+     crossOrigin='anonymous', so it fetches in CORS mode; a preload without the attribute is a
+     different credentials mode, the browser refuses to match the two, and every painting is
+     downloaded TWICE -- the preload turning into a 794 KB penalty rather than a saving. Chromium
+     says so in the console ("a preload ... is found, but is not used"), which is the only warning
+     you get. -->
+<link rel="preload" as="image" type="image/webp" crossorigin href="paintings/grossmunster.webp">
+<link rel="preload" as="image" type="image/webp" crossorigin href="paintings/snow.webp">
+<link rel="preload" as="image" type="image/webp" crossorigin href="paintings/ridge.webp">
+<link rel="preload" as="image" type="image/webp" crossorigin href="paintings/wisteria.webp">
+<link rel="preload" as="image" type="image/webp" crossorigin href="paintings/storm.webp">
+
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  /* THE ROOM IS DARK AND HAS NO SWITCH, which is the one palette decision here.
+     misc/museum/ is warm paper that CAN go dark; this page is that page's dark tokens, taken
+     verbatim and made the only state. Two reasons it is not themed:
+       - the exhibit is a room lit by a single lamp. A gallery after hours on warm paper would be
+         a black rectangle in a cream page, which reads as a broken image rather than as a room;
+         the museum page learned that when its own light switch was built.
+       - a canvas that IS the page's darkness cannot cross-fade with it. Next door the stage is a
+         pruned capture on paper and the room around it is CSS; here the room is inside the canvas.
+     Same tokens, never re-invented, so the shared bones below (back pill, hints, label, footer)
+     are byte-for-byte the museum's and the two pages read as one place. */
+  :root{
+    color-scheme:dark;
+    --bg:#0b0c0e; --surface:#15171a; --ink:#e8e6e1; --muted:#8b9199;
+    --line:#23262b; --accent:#c9a3c0; --shadow:rgba(0,0,0,.5);
+    --pill:rgba(255,255,255,.05); --pill-hi:rgba(255,255,255,.1); --kbd:#1c1f24; --err:#e6786c;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .inner{max-width:860px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header.inner{padding-top:30px}
+  .back{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:var(--pill);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:var(--pill-hi);text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+  h1{margin:16px 0 0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(28px,4.2vw,42px);line-height:1.05;letter-spacing:-.018em}
+  .subtitle{margin:9px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
+            font-size:clamp(15px,2vw,20px);opacity:.9;line-height:1.3}
+
+  /* THE STAGE IS WIDER AND SHORTER THAN THE WALL NEXT DOOR'S, and both halves of that are the
+     subject's doing. Next door a single painting hangs on the paper with no frame at all, so its
+     stage is a 4:3 box the picture sits inside. Here the canvas contains a ROOM -- five paintings
+     across a bay, and water running out to the walls -- so it is 16:9 and as wide as the measure
+     allows: crop the sides and the wing walls go with them, and the bay stops reading as a bay.
+     It DOES get a frame, unlike next door: this canvas is opaque (there is a room behind every
+     pixel, not a pruned capture on transparent paper), so an unbordered rectangle of near-black on
+     near-black paper would have no edge at all. A hairline and the page's own card radius give it
+     one, and the inset shadow keeps the room from looking pasted on. */
+  .stage{position:relative;width:min(calc(100% - 40px),1200px);aspect-ratio:16/9;margin:34px auto 0;
+         border:1px solid var(--line);border-radius:12px;overflow:hidden;
+         box-shadow:0 18px 50px -28px var(--shadow)}
+  /* The last four declarations are the same suppression the museum page and the SMV viewer's
+     movement pad carry, and for the same reason: a press-and-drag on a canvas is also what a touch
+     OS reads as "select this", and iOS raises its callout and magnifier over the scene.
+     preventDefault() on pointerdown does not stop it -- the callout comes off the touch sequence,
+     not the pointer event -- so it has to be refused in CSS. Android's long-press menu is refused
+     by the contextmenu handler in the script. */
+  #gl{position:absolute;inset:0;width:100%;height:100%;display:block;
+      touch-action:none;cursor:grab;outline:none;
+      -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+      -webkit-tap-highlight-color:transparent}
+  #gl.drag{cursor:grabbing}
+  /* Keyboard focus must stay visible -- it is the only way anyone navigating by key can tell the
+     room is the thing they are about to turn. But POINTER focus must not: the script focuses the
+     canvas on pointerdown so the arrow keys work straight after a drag, and a browser that matches
+     :focus-visible on a programmatic focus() then draws a rectangle inside the frame every time you
+     touch it. `.quiet` is set for pointer focus and cleared on the next key or blur. Same pair, and
+     the same reasoning, as misc/museum/index.html. */
+  #gl:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+  #gl.quiet:focus-visible{outline:none}
+  @media(max-width:760px){.stage{width:calc(100% - 24px);margin-top:26px;border-radius:10px}}
+
+  /* Status sits OVER the stage rather than above it, so nothing reflows when it goes away. */
+  #status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+          text-align:center;padding:0 24px;color:var(--muted);font-size:13.5px;line-height:1.6;
+          background:var(--bg);transition:opacity .5s ease}
+  #status.err{color:var(--err)}
+  #status.gone{opacity:0;pointer-events:none}
+  #status[hidden]{display:none}
+
+  /* THE WALL LABEL NAMES WHATEVER YOU ARE LOOKING AT, and it is written by the renderer rather
+     than by the markup -- see nearestWork() in the script. A room with five things in it has no one
+     caption, and a list of five would be a checklist rather than a label. So it behaves like a
+     gallery guide walking beside you: turn toward a picture and it names that picture.
+     Set like the museum's label, because it is the same object. */
+  .label{margin:24px auto 0;max-width:560px;text-align:center;min-height:76px;
+         transition:opacity .28s ease}
+  .label.fade{opacity:0}
+  .label .who{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+  .label .what{margin:.35em 0 0;font-family:'Fraunces',Georgia,serif;font-style:italic;font-size:19px;line-height:1.35}
+  .label .med{margin:.35em 0 0;font-size:13px;color:var(--muted)}
+
+  .hints{margin:20px auto 0;max-width:660px;display:flex;flex-wrap:wrap;gap:8px 18px;
+         justify-content:center;font-size:12.5px;color:var(--muted)}
+  .hints b{color:var(--ink);font-weight:600}
+  .hints kbd{font:inherit;font-size:11px;background:var(--kbd);border:1px solid var(--line);border-bottom-width:2px;
+             border-radius:5px;padding:1px 6px;color:var(--ink)}
+  .hints .reset{font:inherit;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;
+                text-decoration:underline;text-underline-offset:2px}
+  .hints .reset:disabled{color:var(--muted);text-decoration:none;cursor:default;opacity:.6}
+
+  /* WHICH BACKEND ACTUALLY RAN. One line, and it is not an instrument panel -- see the museum's
+     note about not growing the render-settings bar back. It earns its place because this page's
+     whole premise is the backend: three.js falls back to WebGL2 silently where WebGPU is missing,
+     and a visitor comparing what they see against what the page claims deserves to know which one
+     drew it. Muted, small, and below the fold of the controls. */
+  .backend{margin:14px auto 0;text-align:center;font-size:11.5px;letter-spacing:.06em;
+           text-transform:uppercase;color:var(--muted);opacity:.75}
+  .backend[hidden]{display:none}
+
+  main{padding-bottom:10px}
+  footer.inner{border-top:1px solid var(--line);margin-top:46px;padding-top:26px;padding-bottom:48px;color:var(--muted);font-size:13px}
+  footer p{margin:0 0 8px}
+  :where(a,button):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* Everything that moves on its own is switched off here, per the site rule. What survives is
+     everything the visitor asks for: turning, zooming, moving the lamp, and the ripples a touch
+     makes. See the WANDER / SWELL / reduced-motion notes in the script -- the room does not stop
+     being interactive, it stops being restless. */
+  @media(prefers-reduced-motion:reduce){
+    .back,.back .barrow,#status,.label{transition:none}
+    .back:hover .barrow{transform:none}
+  }
+</style>
+</head>
+<body>
+<header class="inner">
+  <a class="back" href="../"><span class="barrow" aria-hidden="true">←</span> Digital Museum</a>
+  <h1>The Painted Room</h1>
+  <p class="subtitle">Gilded things, borrowed light, and water where the floor once was.</p>
+</header>
+
+<main>
+  <div class="stage">
+    <!-- No role="img": the script makes this focusable and drag-turnable, and a static image role
+         would tell a screen reader the opposite. The label under it names whatever is being faced,
+         and the turn is reachable from the keyboard for anyone who cannot drag. -->
+    <canvas id="gl" tabindex="0"
+            aria-label="A flooded salon seen in 3D: broken marble columns and arches, five paintings in carved gilded frames, a velvet chair, a fringed lamp, sunflowers, and books above reflective water. Drag or use arrow keys to look around, scroll or use plus and minus to zoom, and press 0 to reset the view."></canvas>
+    <div id="status">Building the room…</div>
+  </div>
+
+  <div class="label" id="label"></div>
+
+  <div class="hints">
+    <span><b>drag</b> to look around</span>
+    <span><b>scroll</b> or pinch to step closer</span>
+    <span><b>click</b> anywhere to aim the lamp</span>
+    <span>and <b>the water</b> answers</span>
+    <button class="reset" id="reset" disabled>reset view</button>
+  </div>
+
+  <p class="backend" id="backend" hidden></p>
+</main>
+
+<footer class="inner">
+  <p>The five paintings are my own photographs, repainted by
+     <a href="https://miya9756.github.io/Oil-Paint-Tuner/" target="_blank" rel="noopener">Oil Paint Tuner</a>.
+     The room takes its atmosphere from <a href="https://www.pixiv.net/artworks/113329102" target="_blank" rel="noopener">my illustration, <i>2023</i></a>.
+     The ruin they are lost in is drawn with
+     <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> on
+     <a href="https://www.w3.org/TR/webgpu/" target="_blank" rel="noopener">WebGPU</a>, falling back
+     to WebGL2 where that is not available.</p>
+  <p>AI contributor: GPT-6 Astra (via Codex) &mdash; scene development, geometry, and code refinement
+     under my artistic direction.</p>
+  <p>&copy; 2026 Mingyang Song &middot; All rights reserved. Third-party code remains under its own licence.</p>
+</footer>
+
+<script type="module">
+// THE PAINTED ROOM. Five of Mingyang's photographs, repainted by his own Oil Paint Tuner, hung in
+// broken columns standing in the flood, lit by one lamp and by the sky through the fallen roof.
+//
+// This is the museum's THIRD room and its first that is not a capture. Next door two real paintings
+// are 3D-Gaussian reconstructions of things that exist in the Kunsthaus, rasterised by a
+// hand-written WebGL2 splat renderer; nothing here is measured from the world, so none of that
+// machinery applies. It is modelled, not captured, and so it is built the way modelled things are
+// built: three.js on WebGPU.
+//
+// WHY three.js RATHER THAN THE HAND-WRITTEN WGSL the rest of this repo would suggest. The site has
+// no build step and no npm, and every renderer in it is written out longhand -- so a 1 MB library
+// is a real departure and it is worth saying what it buys. The room needs, all at once: a shadowed
+// light, a planar reflection (a second render of the scene from a mirrored camera), physically
+// plausible materials, tone mapping, and a post pass. Each is a solved thing with a subtle wrong
+// version, and writing five of them by hand is where the bugs would be, not in the room. What is
+// hand-written is what makes the room ITS OWN: the ripple simulation, the water's shading, and the
+// volumetric pass -- all three below, in TSL, none of them from an addon.
+//
+// It is VENDORED, not fetched from a CDN, exactly as projects/smv/vendor/ is: the page must work
+// with no third party in the loop, and pinning r185 means a three.js release cannot break a room
+// nobody is watching. Two files, because three.webgpu.min.js imports ./three.core.min.js -- keep
+// them together and keep them beside each other.
+import * as THREE from './vendor/three.webgpu.min.js';
+import {carvedFrame, dressRoom} from './details.js';
+const {Fn, vec2, vec3, vec4, float, uniform, texture, uv, positionWorld, cameraPosition,
+       mix, clamp, max, min, abs, exp, pow, smoothstep, normalize, length, fract, sin, dot,
+       reflector, screenUV, screenCoordinate, Loop, mx_noise_float, saturate, oneMinus,
+       step, bumpMap} = THREE.TSL;
+
+const canvas=document.getElementById('gl'),statusEl=document.getElementById('status');
+const labelEl=document.getElementById('label'),resetBtn=document.getElementById('reset');
+const backendEl=document.getElementById('backend'),stage=document.querySelector('.stage');
+function say(msg,err){statusEl.hidden=false;statusEl.classList.remove('gone');statusEl.innerHTML=msg;statusEl.classList.toggle('err',!!err);}
+const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+
+// ---------------------------------------------------------------------------------------------
+// THE WORKS. Everything that differs between the five lives here -- the file, the wall it hangs
+// on, where along that wall, how tall it is, and its label -- so hanging a sixth is an entry in
+// this array and a wall with room on it. Same contract as the SCENES table next door.
+//
+// `ar` is the shipped file's width/height and is what sizes the canvas inside its frame; it is
+// PRINTED BY tools/bake_room_paintings.py for exactly this reason, so a re-bake that changes a
+// crop is caught by comparing two numbers rather than by noticing a stretched picture.
+//
+// THE TITLES ARE DESCRIPTIVE, NOT DOCUMENTARY. These are Mingyang's own photographs and only he
+// knows where and when; nothing here asserts a place except `grossmunster`, where the building is
+// unmistakable. Edit them here -- they are not written anywhere else.
+const WORKS=[
+  // Two still hanging on what is left of the walls...
+  {slug:'grossmunster', ar:1.7778, h:1.95, pos:[-3.85,2.20,-6.87], rot:[0,0.06,0.012],
+   title:'The Grossmünster from the Limmat', med:'photograph, repainted · Zürich'},
+  {slug:'snow',         ar:0.5625, h:3.05, pos:[ 3.05,2.52,-6.80], rot:[0,-0.03,-0.008],
+   title:'Snow at Dusk',                     med:'photograph, repainted'},
+  // ...one propped on a fallen drum and leaning back against a column...
+  {slug:'ridge',        ar:1.3333, h:2.05, pos:[ 5.15,1.30,-4.95], rot:[-0.15,-0.55,0.03],
+   title:'Cloud Over the Ridge',             med:'photograph, repainted'},
+  // ...one standing in the water against the left ruin...
+  {slug:'wisteria',     ar:1.7778, h:1.72, pos:[-5.05,1.15,-3.85], rot:[-0.12,0.62,-0.02],
+   title:'Wisteria on a Courtyard Wall',     med:'photograph, repainted'},
+  // ...and one that has gone over, its lower edge under the surface. The reference painting has
+  // exactly this: an ornate frame half in the flood, catching the lamp along its top moulding.
+  {slug:'storm',        ar:1.7778, h:1.35, pos:[-1.80,0.33,-0.15], rot:[-1.06,0.34,0.10],
+   title:'Storm Over the City',              med:'photograph, repainted'},
+];
+
+// ---------------------------------------------------------------------------------------------
+// THE ROOM IS A FLOODED RUIN, and the enclosure around it is deliberately almost invisible.
+//
+// The volumetric pass and the planar reflection both need bounds -- one marches to a far surface,
+// the other mirrors a scene -- so there is a box. But it is large, unlit and nearly black: what the
+// visitor reads as "the room" is the ruin standing in the water, and everything past it is meant to
+// fall away into the dark, which is how the reference painting handles its own background.
+const ROOM_W=11.0, ROOM_D=[-9.0,5.0], ROOM_H=9.0;
+const WATER_Y=0;
+// ---------------------------------------------------------------------------------------------
+// THE LAMP. One light, as asked for, and it is a SPOTLIGHT rather than a bulb for three reasons
+// that all pull the same way: a cone is what a gallery actually hangs; one spotlight needs one
+// shadow map, where a point light needs a six-face cube; and a cone is the shape the volumetric
+// pass integrates through, so the beam in the haze and the light on the paintings are the same
+// object rather than two things kept in step by hand.
+const LAMP_Y=5.35;          // how high the fitting hangs. Above every frame, well below the ceiling.
+const LAMP_XZ=[-0.6,-0.4];  // and where. It does NOT move: see the aiming note below.
+const LAMP_CONE=0.34;       // outer half-angle, radians (~15°). Narrow, because the throw is long:
+                            // across this room that is a 2.2 m pool, i.e. one painting and its
+                            // surroundings. At the 36° a ceiling downlight would want, the beam
+                            // lights the whole back wall and aiming it stops meaning anything.
+const LAMP_PEN=0.42;        // a gallery lamp has a soft edge, and a hard one banded on the water
+const LAMP_INT=210;         // candela. Solved rather than guessed: irradiance is I/d^2, the
+                            // throw is ~7.8 m, and a peak just under 1.5 linear on albedo-.35
+                            // stone is what the ACES shoulder wants. 1500 was 20x that.
+const LAMP_DIST=30, LAMP_DECAY=2;
+const LAMP_COL=0xffcf96;    // a warm practical, the reference painting's own key light.
+                            // The room's only colour that is not in a painting or in the stone.
+// THE SKY THROUGH THE BROKEN ROOF. What was a flat AmbientLight is now a real environment: a small
+// procedural sky, prefiltered, hung on scene.environment. That is a different KIND of light and it
+// is what the room was missing -- flat ambient adds the same grey to every surface whatever way it
+// faces, so a fluted column lit by it is a flat disc and the gilding has nothing to reflect. An
+// environment has directions in it: cold light from above, almost nothing from below, and a warmer
+// bright patch where the roof has fallen in. Columns get a gradient down their length, the mouldings
+// pick up a sky to be gold against, and the water reflects something other than black.
+//
+// It is also the honest reading of the scene. A ruin has no ceiling; the reason there is any light
+// at all besides the lamp is that the sky is coming in.
+const ENV_INT=0.85;         // how much sky
+const ENV_GAP=2.15;         // which way the hole in the roof is, in radians about y
+
+// THE STATIC LIGHTS. The spotlight is the one that swings and the one that casts; these three do
+// not move, do not cast, and exist to put a floor under the picture -- an environment alone lifts
+// the midtones evenly, which is exactly what a ruin at night does NOT look like. What was missing
+// was direction and incident.
+//
+// None of them casts a shadow, and that is the whole reason four lights are affordable: a shadow
+// map is a full re-render of the scene per light per frame, and the beam is the only light in here
+// whose shadow anybody reads. Their contribution is diffuse fill, which shadowing would barely
+// change and would cost four times the geometry.
+const MOON_INT=1.3;        // cold light down through the gap in the roof, keyed to ENV_GAP so the
+                            // brightest part of the sky and the direction it arrives from agree
+const MOON_COL=0xb5b3df;
+// Two lanterns left standing in the flood. They are the second thing the reference painting has
+// that this room did not: warm light at WATER LEVEL, which is what puts a second set of highlights
+// on the ripples and stops the floor going black wherever the beam is not.
+const LANTERNS=[[-2.35,0.66,-1.75, 26], [ 6.15,0.60,-5.60, 20]];
+const LANT_COL=0xffb877;
+// THE LAMP IS AIMED, NOT CARRIED, and that is the interaction. A lamp you drag around the floor
+// has to hang low to light anything, which makes its beam short and its cone a puddle; a lamp that
+// hangs where a gallery would hang it and SWINGS to where you point throws its beam right across
+// the room -- which is the only reason there is anything for the volumetric pass to integrate. So
+// clicking sets the target, not the position. The opening aim is the centre picture, because a room
+// that opens with nothing lit is a room that opens black.
+const HOME_AIM=new THREE.Vector3(3.05, 2.52, -6.80);   // the tall picture on the right-hand wall fragment
+const AIM_S=2.6;            // how fast the beam swings to a new aim, in units of "per second, e-fold"
+const WANDER=0.085;         // how far the aim breathes around where it was put, in metres
+const WANDER_S=0.085;       // and how slowly. A hung lamp breathes; it does not patrol.
+
+// ---------------------------------------------------------------------------------------------
+// THE WATER. A height field integrated on the GPU, not a scrolling normal map: the whole point of
+// the floor is that it ANSWERS -- touch it and a ring leaves your finger, crosses the room, comes
+// back off the walls and interferes with itself. A normal map cannot do that, and the difference is
+// the difference between a floor that is wet and a floor that is a surface.
+const SIM_N=256;            // grid. 256² across a ~20 m room is 8 cm cells: fine enough that a ring
+                            // reads as a ring, coarse enough that two passes are free.
+const SIM_HALF=12.0;        // world half-extent the grid covers; the enclosure's own is 11 x 7.
+const SIM_C=0.22;           // wave speed² per step. Above ~0.25 the explicit integrator goes unstable.
+const SIM_DAMP=0.9955;      // per step. A ring should cross the room a few times and then be gone.
+const DROP_R=0.026;         // in sim uv, so ~0.5 m: a hand's worth of disturbance, not a pebble's.
+const DROP_A=0.55;
+const SWELL=0.065;           // the ambient breath, so the floor is never a mirror. Off under reduced
+                            // motion -- see the note there.
+
+// ---------------------------------------------------------------------------------------------
+// THE VOLUMETRIC PASS. Answering the question this room was built to answer: yes, and this is what
+// it costs. The air in the room is given a density and the beam is INTEGRATED THROUGH IT -- for
+// every pixel, march the view ray, and at each step ask how much light reaches that point of air
+// and scatter a little of it toward the eye. That is a real single-scattering integral, not a
+// screen-space radial blur off the lamp's position, and the difference shows exactly where it
+// should: the frames cast shafts, because the shadow test is done per sample rather than per pixel.
+//
+// It needs to know what the lamp can see, so the room is rendered ONCE MORE from the lamp into a
+// small target holding distance-to-lamp -- see bakeLightDepth(). That is a second shadow map in all
+// but name, and three's own is still doing its job on the surfaces; the two are separate because
+// three's is private to the renderer and this pass has to sample it at arbitrary points in the air,
+// not at a fragment's own position.
+const VOL_STEPS=40;         // marching steps. 40 is where the dither below stops being visible.
+const VOL_FAR=26.0;
+const VOL_DENSITY=0.016;    // haze. Above ~0.05 the room turns to fog and the paintings go flat.
+const VOL_STRENGTH=0.85;
+const LD_N=512;             // the lamp's own view of the room
+const LD_BIAS=0.06;         // in metres. Below ~0.03 the shafts acquire self-shadow acne.
+
+// ---------------------------------------------------------------------------------------------
+// Renderer. WebGPU where there is one, and three's own WebGL2 backend where there is not -- the
+// fallback is automatic and silent, which is why the page says out loud which one it got.
+const renderer=new THREE.WebGPURenderer({canvas, antialias:true, alpha:false});
+renderer.setClearColor(0x000000, 1);
+// ACES rather than the neutral mapper: this room is one hot lamp in a lot of near-black, which is
+// precisely the case a filmic shoulder is for. Without it the pool of light on the water clips to
+// white and the tungsten hue goes with it.
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+
+// Which backend answered. Filled in by boot(); see the note there about why there is no top-level
+// await in this module.
+let isWebGPU=false;
+
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x171420,0.038);
+// 55 degrees, not the 46 this started at, and the change is compositional rather than cosmetic.
+// At 46 the horizontal half-angle is 37 degrees, so at the 4-5 m where a foreground column has to
+// stand to be BIG the frame is only ~3.4 m wide -- there is physically nowhere to put one that is
+// both close and in shot, and the first attempt at two of them put both entirely off-screen. 55
+// opens that to 4.6 m at the same depth, which is room for a column at either side with the frame
+// cutting its top off. It is also simply the wider, flatter look the reference painting has.
+const camera=new THREE.PerspectiveCamera(55,16/9,0.1,80);
+
+// ---------------------------------------------------------------------------------------------
+// Materials. There are only two sources in here -- the lamp and the sky -- so what separates stone
+// from gilding from canvas is only how each answers them: the stone drinks the light, the gilding
+// throws it back, the paintings sit between.
+//
+// The palette is a warm amber key against a cold blue-green fill, and that split is doing most of
+// the work. It is not decoration: with one warm source, everything the lamp misses would otherwise
+// be merely DARK, and a dark surface carries no form. Giving the shadow a colour of its own means
+// the far side of every column is still describing a cylinder.
+const stoneMat=new THREE.MeshStandardNodeMaterial({roughness:0.94, metalness:0.0});
+{
+  // Marble is not one colour, and a column rendered as one reads as plastic under a raking light --
+  // which is the only kind of light in here. Two octaves of noise in WORLD space: a broad mottle
+  // that varies block to block, and a fine one for the bump, so neighbouring drums of the same
+  // geometry do not come out identical. World space rather than uv, so the pattern runs THROUGH the
+  // stone -- a broken shaft and the drum that fell off it match across the break.
+  const nA=mx_noise_float(positionWorld.mul(0.85)).mul(0.5).add(0.5);
+  const nB=mx_noise_float(positionWorld.mul(6.5));
+  stoneMat.colorNode=mix(vec3(0.070,0.059,0.081), vec3(0.22,0.19,0.21), nA)
+                      .mul(nB.mul(0.085).add(1.0));
+  const vein=pow(oneMinus(abs(sin(positionWorld.x.mul(1.7).add(positionWorld.y.mul(0.9)).add(nA.mul(7))))),float(20));
+  const wet=oneMinus(smoothstep(float(-0.1),float(0.65),positionWorld.y));
+  stoneMat.colorNode=stoneMat.colorNode.mul(oneMinus(vein.mul(0.28))).mul(oneMinus(wet.mul(0.40)));
+  stoneMat.roughnessNode=mix(float(0.86),float(0.30),wet);
+  stoneMat.normalNode=bumpMap(nB, float(0.035));
+}
+const darkMat=new THREE.MeshStandardNodeMaterial({color:0x161420, roughness:1.0});
+const woodMat=new THREE.MeshStandardNodeMaterial({color:0x24161e, roughness:0.62});
+const floorMat=new THREE.MeshStandardNodeMaterial({color:0x1a1713, roughness:0.95});
+// Gilding, not gold: metalness just under 1 at a rough-ish finish, so the mouldings carry a
+// travelling highlight rather than mirroring the room.
+const frameMat=new THREE.MeshStandardNodeMaterial({color:0xd7a965, roughness:0.32, metalness:0.82});
+{
+  const patina=mx_noise_float(positionWorld.mul(7)).mul(0.5).add(0.5);
+  frameMat.colorNode=mix(vec3(0.22,0.105,0.041),vec3(0.76,0.48,0.20),smoothstep(0.15,0.76,patina));
+  frameMat.roughnessNode=mix(float(0.26),float(0.47),patina);
+}
+
+// Solid enclosure pieces align to the room's actual depth. A recessed ceiling
+// surrounds the roof opening; all slab undersides and exposed edges are closed.
+{
+  const depth=ROOM_D[1]-ROOM_D[0], mid=(ROOM_D[0]+ROOM_D[1])/2;
+  for(const [x,y,z,w,h,d] of [
+    [0,ROOM_H/2,ROOM_D[0],2*ROOM_W,ROOM_H,0.35],
+    [0,ROOM_H/2,ROOM_D[1],2*ROOM_W,ROOM_H,0.35],
+    [-ROOM_W,ROOM_H/2,mid,0.35,ROOM_H,depth],
+    [ ROOM_W,ROOM_H/2,mid,0.35,ROOM_H,depth],
+    [0,WATER_Y-0.5,mid,2*ROOM_W,0.3,depth],
+    [-7.5,ROOM_H,mid,7,0.4,depth],[7.5,ROOM_H,mid,7,0.4,depth],
+    [0,ROOM_H,ROOM_D[0]+1.5,8,0.4,3],[0,ROOM_H,ROOM_D[1]-1.5,8,0.4,3]
+  ]){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),y<0?floorMat:darkMat);
+    m.position.set(x,y,z);m.receiveShadow=true;scene.add(m);
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// A FLUTED COLUMN, BROKEN. Built rather than modelled, because the whole point of a colonnade is
+// that there are several and no two are the same: one function with a seed gives a family.
+//
+// The flutes are real geometry, not a normal map, and they have to be -- the lamp swings, and a
+// flute is only convincing when the highlight travels ALONG the groove and the shadowed side goes
+// properly dark. A normal map fakes that until the light moves.
+//
+// Two details do most of the work. The shaft TAPERS (entasis, ~7% over its length), which is the
+// thing that separates a classical column from a pipe. And the break is a function of ANGLE, so the
+// top is a ragged rim rather than a clean cut -- a horizontal cut reads as a cylinder someone
+// truncated, which is exactly what a ruin must not look like.
+function flutedColumn(R, H, seed, brk, flutes){
+  flutes=flutes||22;
+  const NA=flutes*6, NH=Math.max(10, Math.round(H*7));
+  const pos=[], idx=[];
+  const ang=i=>i/NA*Math.PI*2;
+  // r(theta): a scalloped section. The fillets between flutes are what keep it from reading as a gear.
+  const rad=(a,y)=>{
+    const t=y/H, taper=1-0.07*t;
+    const f=Math.pow(Math.max(0,Math.cos(flutes*a)),0.65);
+    return R*taper*(1-0.055*f);
+  };
+  // THE BREAK IS MEASURED IN RADII, NOT IN THE COLUMN'S HEIGHT, and getting that wrong is the most
+  // visible mistake this file has made. The first version varied the top by a FRACTION OF H, so a
+  // 3 m shaft broken at 0.56 had a top sweeping 1.7 m from one side to the other -- across a shaft
+  // 0.9 m thick. That is not a fracture, it is a scoop, and with a fan closing it the column came
+  // out looking like a sail hung between the others.
+  //
+  // A real break is a roughly planar surface across the shaft, so its height range is set by the
+  // DIAMETER and the angle it broke at: 2R.tan(theta), a few tens of centimetres on a column this
+  // size whatever the column's height. Hence R.brk here, with brk the tilt (0 = a clean cut, 1 = a
+  // steep one) -- and H now means the height the shaft actually survives to, which is what the
+  // table is easier to read as anyway. The leading cos(a - seed) IS the tilted plane; the two
+  // higher terms are the roughness on it.
+  const topAt=a=>H + R*brk*(0.75*Math.cos(a-seed)+0.25*Math.sin(a*3+seed*2.1)
+                            +0.10*Math.sin(a*7+seed*1.3));
+  for(let i=0;i<=NA;i++){
+    const a=ang(i), ty=topAt(a);
+    for(let j=0;j<=NH;j++){
+      const y=ty*j/NH;
+      pos.push(Math.cos(a)*rad(a,y), y, Math.sin(a)*rad(a,y));
+    }
+  }
+  for(let i=0;i<NA;i++) for(let j=0;j<NH;j++){
+    const p=i*(NH+1)+j, q=(i+1)*(NH+1)+j;
+    idx.push(p,p+1,q, q,p+1,q+1);
+  }
+  // Both ends are closed. The broken top is a fan to the mean height, so it is a rough surface
+  // rather than a disc; the foot is capped too, because half of these are lying down and a lying
+  // drum with an open end shows the inside of its own tube.
+  const fan=(y0,rimScale,flip)=>{
+    const c=pos.length/3; pos.push(0,y0,0);
+    const rim=[];
+    for(let i=0;i<=NA;i++){ const a=ang(i), ty=(rimScale==='top')?topAt(a):0;
+      rim.push(pos.length/3);
+      pos.push(Math.cos(a)*rad(a,ty), ty, Math.sin(a)*rad(a,ty)); }
+    for(let i=0;i<NA;i++) flip?idx.push(c,rim[i],rim[i+1]):idx.push(c,rim[i+1],rim[i]);
+  };
+  let mean=0; for(let i=0;i<NA;i++) mean+=topAt(ang(i))/NA;
+  fan(mean,'top',false);
+  fan(0,'bottom',true);
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setIndex(idx); g.computeVertexNormals();
+  const normals=g.attributes.normal;
+  for(let j=0;j<=NH;j++){
+    const other=NA*(NH+1)+j;
+    const n=new THREE.Vector3().fromBufferAttribute(normals,j)
+      .add(new THREE.Vector3().fromBufferAttribute(normals,other)).normalize();
+    normals.setXYZ(j,n.x,n.y,n.z); normals.setXYZ(other,n.x,n.y,n.z);
+  }
+  g.computeBoundingSphere();
+  return g;
+}
+// A Doric capital: the round echinus and the square abacus over it. Only the unbroken column keeps
+// one, which is what makes it read as the one that survived.
+function capital(R){
+  const g=new THREE.Group();
+  const ech=new THREE.Mesh(new THREE.CylinderGeometry(R*1.34,R*0.98,R*0.42,28), stoneMat);
+  ech.position.y=R*0.21; g.add(ech);
+  const ab=new THREE.Mesh(new THREE.BoxGeometry(R*2.9,R*0.34,R*2.9), stoneMat);
+  ab.position.y=R*0.59; g.add(ab);
+  g.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+  return g;
+}
+function plinth(R,h){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(R*2.7,h,R*2.7), stoneMat);
+  m.castShadow=true; m.receiveShadow=true; return m;
+}
+
+// THE COLONNADE. Placed by hand rather than scattered, and overlapping ON PURPOSE: the near columns
+// are set to cross the far ones from the opening view, because a row of separated cylinders reads as
+// a diagram and a tangle of them reads as a ruin. Depths run from z = -6.4 back there to +0.9 right
+// under the camera, so there is always something in front of something.
+// [x, z, radius, height, seed, break, capital?, plinth?]
+// EVERY POSITION HERE IS CHECKED AGAINST THE FRUSTUM, because "close to the camera" and "in shot"
+// pull against each other and eyeballing it put the first two columns entirely outside the picture.
+// The opening eye is at about (0, 3.0, 3.6) and the horizontal half-angle is 42.8 degrees, so the
+// frame is 2.4 m either side of the axis at z = 0, 5.6 m at z = -3, and 8.5 m at the back wall.
+// The angle in each comment is where that column lands; anything past 42.8 is not in the picture.
+// x, z, radius, HEIGHT IT SURVIVES TO, seed, break tilt, capital?, plinth?
+const COLUMNS=[
+  // Two REPOUSSOIRS, near enough that the frame cuts their tops off. A column running out of the
+  // top of the picture is what tells the eye the ruin continues past what it can see, and it costs
+  // nothing next to actually building more of it.
+  [-3.60,-0.70, 0.74, 6.75, 1.7, 0.50, false, false],   // 37°
+  [ 3.95,-1.10, 0.68, 5.80, 5.3, 0.70, false, false],   // 38°
+  // …then the colonnade proper, receding and overlapping.
+  [-5.60,-4.40, 0.56, 4.40, 4.1, 0.80, false, true ],   // 34°
+  [-1.70,-5.80, 0.46, 2.15, 2.2, 1.00, false, true ],   // 10°
+  [ 0.30,-6.40, 0.48, 5.40, 0.6, 0.15, true,  true ],   // 11°  the one that survived, with its capital
+  [ 5.90,-3.70, 0.60, 2.30, 2.9, 1.00, false, false],   // 37°
+  [ 7.30,-6.60, 0.48, 3.80, 3.4, 0.80, false, true ],   // 35°
+];
+for(const [x,z,R,H,seed,brk,cap,pl] of COLUMNS){
+  const g=new THREE.Group(); g.position.set(x, WATER_Y-0.16, z);
+  g.rotation.y=seed;                       // no two show the same flutes to the lamp
+  let base=0;
+  if(pl){ const pb=plinth(R,0.30); pb.position.y=0.15; g.add(pb); base=0.30; }
+  const sh=new THREE.Mesh(flutedColumn(R,H,seed,brk), stoneMat);
+  sh.position.y=base; sh.castShadow=true; sh.receiveShadow=true; g.add(sh);
+  if(cap){ const c=capital(R); c.position.y=base+H; g.add(c); }
+  scene.add(g);
+}
+
+// WHAT FELL. A toppled shaft lying in the flood and three drums off it -- the drums are the detail
+// that makes the standing columns read as broken rather than as short. Each is half in the water,
+// so the surface cuts them, which is the reference painting's whole trick for selling depth.
+const FALLEN=[
+  // [x, y, z, rotX, rotY, rotZ, radius, length, seed, break tilt]
+  [-0.10,0.20,-2.15, 0.06, 0.42, 1.62, 0.40, 2.65, 2.2, 0.65],
+  [-4.55,0.30,-0.35, 0.10,-0.85, 1.53, 0.46, 0.85, 6.1, 0.90],
+  [ 4.35,0.26,-0.10,-0.05, 1.30, 1.58, 0.44, 0.80, 3.8, 0.55],
+  [ 7.10,0.28,-4.40, 0.04, 0.25, 1.49, 0.48, 0.95, 1.1, 0.80],
+];
+for(const [x,y,z,rx,ry,rz,R,L,seed,brk] of FALLEN){
+  const m=new THREE.Mesh(flutedColumn(R,L,seed,brk), stoneMat);
+  m.position.set(x,y,z); m.rotation.set(rx,ry,rz);
+  m.castShadow=true; m.receiveShadow=true; scene.add(m);
+}
+
+// WHAT IS LEFT OF THE WALLS -- two fragments at the back, each with a ragged top, and each still
+// holding a picture. A rectangle would say "wall"; the broken edge is what says "ruin", and it is
+// the only reason these are built rather than being two more planes.
+function ruinWall(w,h,depth,seed,tilt){
+  const NX=Math.max(14,Math.round(w*7));
+  // THE TOP EDGE IS A COLLAPSE, NOT A FRINGE, and that distinction is the whole function. The first
+  // version varied a full-height wall by 16% and the result read as a rectangle with a decorative
+  // edge -- because the sides were still vertical and full height, which is what the eye actually
+  // reads as "panel". What makes it a fragment is that one end has come DOWN: a strong linear tilt
+  // sets which end stands, three octaves break the line, and the whole thing is floored just above
+  // the water so the low end dies into it instead of ending on a corner.
+  const top=i=>{
+    const u=i/NX, t=u*w;
+    const n=0.5+0.34*Math.sin(t*1.55+seed)+0.13*Math.sin(t*4.1+seed*2.1)+0.06*Math.sin(t*9.3+seed*0.7);
+    return h*Math.max(0.10, Math.min(1, 0.62+tilt*(u-0.5)+0.30*(n-0.5)));
+  };
+  // NON-INDEXED, AND THAT IS A CORRECTNESS FIX RATHER THAN A STYLE. Sharing one vertex between
+  // the front face, the back face and the broken top means computeVertexNormals() averages three
+  // normals that point three different ways, and the wall shades as a soft curved sheet -- it came
+  // out looking like a sail hung between the columns. A masonry fragment has hard arrises; every
+  // triangle here carries its own corner, so every face gets its own normal.
+  const P=[];
+  const tri=(a,b,c)=>{ P.push(a[0],a[1],a[2], b[0],b[1],b[2], c[0],c[1],c[2]); };
+  const quad=(a,b,c,d)=>{ tri(a,b,c); tri(a,c,d); };
+  const F=depth/2, B=-depth/2;
+  for(let i=0;i<NX;i++){
+    const x0=-w/2+w*i/NX, x1=-w/2+w*(i+1)/NX, y0=top(i), y1=top(i+1);
+    quad([x0,0,F],[x1,0,F],[x1,y1,F],[x0,y0,F]);            // front
+    quad([x1,0,B],[x0,0,B],[x0,y0,B],[x1,y1,B]);            // back
+    quad([x0,y0,F],[x1,y1,F],[x1,y1,B],[x0,y0,B]);          // the broken top edge
+  }
+  // The two ends, or the fragment is a hollow sheet and the low one shows its own inside.
+  quad([-w/2,0,B],[-w/2,0,F],[-w/2,top(0),F],[-w/2,top(0),B]);
+  quad([w/2,0,F],[w/2,0,B],[w/2,top(NX),B],[w/2,top(NX),F]);
+  for(let i=0;i<NX;i++){
+    const x0=-w/2+w*i/NX, x1=-w/2+w*(i+1)/NX;
+    quad([x0,0,B],[x1,0,B],[x1,0,F],[x0,0,F]);
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));
+  g.computeVertexNormals(); g.computeBoundingSphere();
+  return g;
+}
+// Tilts pull OPPOSITE ways, so the pair does not read as one wall with a gap in it: the left
+// fragment stands at its right-hand end, the right one at its left.
+for(const [x,z,w,h,d,seed,tilt] of [[-4.15,-7.20,6.2,4.85,0.55,1.3, 0.55],
+                                    [ 2.95,-7.20,5.0,6.00,0.55,4.9,-0.48]]){
+  const m=new THREE.Mesh(ruinWall(w,h,d,seed,tilt), stoneMat);
+  m.position.set(x,WATER_Y-0.2,z); m.castShadow=true; m.receiveShadow=true; scene.add(m);
+}
+
+// RUBBLE. Blocks off the entablature, half in the water. They are here for density rather than for
+// meaning: the reference painting is CROWDED, and a scene with six uprights and nothing between
+// them reads as a diagram of a colonnade. Cheap boxes, because at this scale and this light nobody
+// is reading their silhouette -- what they contribute is broken edges catching the lamp.
+for(const [x,y,z,rx,ry,rz,a,b,c] of [
+    [-2.70,0.16,-1.05, 0.10, 0.55, 0.06, 0.95,0.52,0.78],
+    [ 3.55,0.13, 0.35,-0.06,-0.35, 0.13, 0.78,0.44,0.66],
+    [ 0.75,0.11,-3.30, 0.05, 1.05,-0.09, 0.62,0.38,0.60],
+    [-6.30,0.14,-5.35, 0.08,-0.65, 0.05, 0.84,0.46,0.70],
+    [ 5.05,0.10,-4.70,-0.04, 0.85, 0.07, 0.58,0.34,0.52]]){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(a,b,c), stoneMat);
+  m.position.set(x,y,z); m.rotation.set(rx,ry,rz);
+  m.castShadow=true; m.receiveShadow=true; scene.add(m);
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE FRAMES, and they are the most ornate thing in here on purpose -- in the reference painting
+// the gilding IS the light, the one surface that answers the lamp brightly enough to draw the eye
+// across a dark picture.
+//
+// A MOULDING IS A PROFILE SWEPT ROUND A RECTANGLE, and building it that way rather than as an
+// extruded outline is what buys the ornament. `frameSweep` takes a cross-section -- a list of
+// (how far out, how far forward) -- and rings it round the opening: every profile point becomes a
+// rectangle offset outward by that much, and consecutive rectangles are joined. The corners mitre
+// themselves, because a rectangle grown outward by a constant meets its neighbour on the diagonal,
+// which is exactly what a mitre is.
+//
+// The profile below is a real one, read outward from the picture: a fillet at the rabbet, a bead, a
+// hollow, an ogee (the double curve that is the signature of a picture frame), a flat, and a
+// chamfer down to the outer edge -- then straight back to the wall to close it. Sixteen steps, so
+// the lamp finds five or six separate highlights across the width of the moulding instead of one.
+function frameSweep(w,h,profile){
+  const A=w/2, B=h/2, P=profile.length, pos=[];
+  const corner=(k,o)=>{const sx=(k===0||k===3)?1:-1, sy=(k<2)?1:-1; return [sx*(A+o), sy*(B+o)];};
+  for(let i=0;i<P;i++){
+    const [o0,z0]=profile[i], [o1,z1]=profile[(i+1)%P];
+    for(let k=0;k<4;k++){
+      const k2=(k+1)%4;
+      const a=corner(k,o0), b=corner(k2,o0), c=corner(k2,o1), d=corner(k,o1);
+      pos.push(a[0],a[1],z0, c[0],c[1],z1, b[0],b[1],z0);
+      pos.push(a[0],a[1],z0, d[0],d[1],z1, c[0],c[1],z1);
+    }
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  // Non-indexed with face normals, deliberately: a carved moulding wants its steps to CATCH, and
+  // smoothing across them turns the whole profile into one soft roll.
+  g.computeVertexNormals(); g.computeBoundingSphere();
+  return g;
+}
+// out, forward. Starts at the rabbet (the lip the canvas sits behind) and wraps to the back.
+const MOULDING=[[0.000,0.014],[0.008,0.030],[0.017,0.034],[0.025,0.021],[0.031,0.024],
+                [0.040,0.049],[0.053,0.063],[0.068,0.060],[0.079,0.041],[0.090,0.045],
+                [0.104,0.062],[0.119,0.056],[0.130,0.028],[0.138,0.010],[0.138,-0.040],
+                [0.000,-0.040]];
+const BEAD_GEO=new THREE.SphereGeometry(1,9,7);
+const CORNER_GEO=new THREE.BoxGeometry(1,1,1);
+
+function ornateFrame(w,h,scale){
+  const k=scale||1, prof=MOULDING.map(([o,z])=>[o*k, z*k]);
+  const grp=new THREE.Group();
+  const m=new THREE.Mesh(frameSweep(w,h,prof), frameMat);
+  m.castShadow=true; m.receiveShadow=true; grp.add(m);
+
+  // A BEAD COURSE round the rabbet. One instanced mesh, so a hundred beads cost one draw call --
+  // which is the only reason this is affordable at five frames. It is the detail that reads as
+  // *carving* rather than as a stepped extrusion, and it is right at the picture's edge where the
+  // eye already is.
+  // Small, and set back into the rabbet. The first pass used 2.5 cm beads standing proud of the
+  // moulding's crest, which under a warm lamp on a dark frame read as a string of fairy lights --
+  // the ornament has to be the same material catching the same light, not a row of highlights.
+  const r=0.0062*k, gap=r*2.7;
+  const nx=Math.max(2,Math.round(w/gap)), ny=Math.max(2,Math.round(h/gap));
+  const total=2*(nx+ny);
+  const beads=new THREE.InstancedMesh(BEAD_GEO, frameMat, total);
+  const mt=new THREE.Matrix4(), sc=new THREE.Vector3(r,r,r*0.8);
+  const q=new THREE.Quaternion(), off=0.010*k, zb=0.021*k;
+  let n=0;
+  const put=(x,y)=>{ mt.compose(new THREE.Vector3(x,y,zb), q, sc); beads.setMatrixAt(n++, mt); };
+  for(let i=0;i<nx;i++){ const x=-w/2+w*(i+0.5)/nx; put(x, h/2+off); put(x, -h/2-off); }
+  for(let i=0;i<ny;i++){ const y=-h/2+h*(i+0.5)/ny; put(w/2+off, y); put(-w/2-off, y); }
+  beads.count=n; beads.instanceMatrix.needsUpdate=true;
+  grp.add(beads);   // no shadow: a 6 mm bead casts nothing anyone can see, and it is 100 casters
+
+  // Corner blocks. A real frame breaks its moulding at the corners with a carved boss; without them
+  // the mitre runs straight through and the frame reads as machined.
+  // Corner bosses. They sit ON the moulding, over its crest, not outside its edge -- the first
+  // pass put them past the outer edge and they read as four tabs stuck to the corners rather than
+  // as carving. A lozenge (45 degrees in plane) because that is what breaks the mitre visually.
+  const cs=0.050*k;
+  for(const [sx,sy] of [[1,1],[-1,1],[1,-1],[-1,-1]]){
+    const c=new THREE.Mesh(CORNER_GEO, frameMat);
+    c.scale.set(cs*2.0, cs*2.0, cs*0.9);
+    c.position.set(sx*(w/2+0.070*k), sy*(h/2+0.070*k), 0.064*k);
+    c.rotation.z=Math.PI/4;
+    c.castShadow=true; c.receiveShadow=true;
+    grp.add(c);
+  }
+  grp.add(carvedFrame(w,h,k,frameMat));
+  return grp;
+}
+
+const loader=new THREE.TextureLoader();
+const works=[];   // {…WORKS entry, centre:Vector3, normal:Vector3}
+async function hangWork(work){
+  const tex=await loader.loadAsync(`paintings/${work.slug}.webp`);
+  tex.colorSpace=THREE.SRGBColorSpace;
+  tex.anisotropy=Math.min(8, renderer.getMaxAnisotropy?renderer.getMaxAnisotropy():8);
+  const w=work.h*work.ar, h=work.h;
+
+  // A group whose +z is the way the picture faces, so everything inside is written in the picture's
+  // own frame. Unlike a gallery hang these are not on a wall grid: each carries its own position and
+  // tilt in the WORKS table, because in a ruin nothing is plumb.
+  const g=new THREE.Group();
+  g.position.fromArray(work.pos);
+  g.rotation.set(work.rot[0], work.rot[1], work.rot[2]);
+  scene.add(g);
+  // Frame weight scales with the picture but is CLAMPED at both ends: a 0.21 m moulding round a
+  // 1.9 m canvas is about 7% of its width, which is what a heavy gilt frame actually is. The first
+  // pass scaled it at h/1.9 and the mouldings came out at 4%, which reads as a passe-partout.
+  g.add(ornateFrame(w,h,Math.max(1.4, Math.min(2.2, h/1.3))));
+  const backing=new THREE.Mesh(new THREE.BoxGeometry(w+0.02,h+0.02,0.10), woodMat);
+  backing.position.z=-0.045; backing.castShadow=true; g.add(backing);
+
+  // THE PAINTINGS ARE LIT, NOT PASTED. The image is treated as albedo and multiplied by whatever
+  // the lamp delivers, so a picture the lamp is not on falls into the dark -- which is what makes
+  // aiming it worth doing. Same reasoning the museum page's relight() sets out next door: the light
+  // already in the picture is the light of the day it was taken, and nothing here removes it.
+  const pm=new THREE.MeshStandardNodeMaterial({map:tex, roughness:0.62, metalness:0.0});
+  // AND THEY ARE OIL, so the brush has to catch the light. The bump is derived from the picture's
+  // own luminance -- there is no second map to ship and nothing to invent: where the tool laid a
+  // thick stroke the image is light, and that is where a real canvas stands proud.
+  pm.normalNode=bumpMap(texture(tex).r, float(0.34));
+  const canvasMesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h), pm);
+  canvasMesh.position.z=0.012;
+  canvasMesh.receiveShadow=true;
+  g.add(canvasMesh);
+
+  const nrm=new THREE.Vector3(0,0,1).applyEuler(g.rotation);
+  works.push(Object.assign({}, work, {centre:g.position.clone(), normal:nrm, mesh:canvasMesh}));
+}
+
+// ---------------------------------------------------------------------------------------------
+// The lamp itself, and the fitting it hangs from.
+const lamp=new THREE.SpotLight(LAMP_COL, LAMP_INT, LAMP_DIST, LAMP_CONE, LAMP_PEN, LAMP_DECAY);
+lamp.position.set(LAMP_XZ[0], LAMP_Y, LAMP_XZ[1]);
+lamp.castShadow=true;
+lamp.shadow.mapSize.set(1024,1024);
+lamp.shadow.camera.near=0.4; lamp.shadow.camera.far=LAMP_DIST;
+lamp.shadow.bias=-0.0022; lamp.shadow.normalBias=0.022;
+lamp.target.position.copy(HOME_AIM);
+scene.add(lamp, lamp.target);
+// Cold light down through the gap. A directional rather than another spot: the sun and the moon are
+// the two things far enough away for their rays to be parallel, and parallel is what makes a shaft
+// of light through a broken roof read as coming from OUTSIDE rather than from a fitting just above.
+{
+  const moon=new THREE.DirectionalLight(MOON_COL, MOON_INT);
+  moon.position.set(Math.cos(ENV_GAP)*9, 13, Math.sin(ENV_GAP)*9);
+  moon.target.position.set(0,0,-3);
+  scene.add(moon, moon.target);
+}
+
+// Things the lamp's own depth map must not see. The halos are half-metre spheres of nothing, and
+// the globes are light sources rather than obstacles; left in, either one punches a hole in the
+// beam. three's shadow map skips them already (castShadow defaults to false), but bakeLightDepth()
+// overrides every material and so renders whatever is VISIBLE -- that list is kept here.
+const noBake=[];
+// The lanterns. Each is a light and the thing the light comes out of -- an unattached point light
+// in an otherwise physical scene reads as a bug, and the globes are also what the water reflects.
+for(const [x,y,z,intensity] of LANTERNS){
+  const pl=new THREE.PointLight(LANT_COL, intensity, 16, 2);
+  pl.position.set(x,y,z);
+  scene.add(pl);
+  const globe=new THREE.Mesh(new THREE.SphereGeometry(0.115,18,12),
+    new THREE.MeshBasicNodeMaterial({color:LANT_COL}));
+  globe.position.set(x,y,z); scene.add(globe); noBake.push(globe);
+  // A halo, so the globe sits in the air rather than being a bright disc cut out of it. Additive
+  // and back-faced, so it never occludes the globe inside it and never needs sorting against it.
+  const halo=new THREE.Mesh(new THREE.SphereGeometry(0.42,16,12),
+    new THREE.MeshBasicNodeMaterial({color:LANT_COL, transparent:true, opacity:0.10,
+      blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.BackSide, toneMapped:false}));
+  halo.position.set(x,y,z); scene.add(halo); noBake.push(halo);
+  // The stand it sits on, so it is standing in the flood rather than floating over it.
+  const foot=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.085,y-0.10,10), stoneMat);
+  foot.position.set(x,(y-0.10)/2,z); foot.castShadow=true; scene.add(foot);
+}
+
+// Closed architectural and decorative meshes share the room's materials and lighting.
+const dressing=dressRoom({scene,stoneMat,frameMat,woodMat});
+noBake.push(...dressing.glows);
+
+// The sky, built rather than fetched: an equirectangular strip 128x64, prefiltered by PMREM into
+// the roughness pyramid the standard material samples. No asset ships for this, and nothing about it
+// needs an HDR loader -- a gradient is all a broken roof at dusk actually is.
+function skyTexture(){
+  const W=128,H=64,d=new Uint8Array(W*H*4);
+  for(let y=0;y<H;y++){
+    const up=Math.cos((y+0.5)/H*Math.PI);             // +1 straight up, -1 straight down
+    for(let x=0;x<W;x++){
+      const th=(x+0.5)/W*Math.PI*2;
+      const sky=Math.pow(Math.max(0,up),0.7);
+      let r=0.16+0.30*sky, g=0.12+0.26*sky, b=0.23+0.40*sky;
+      // The break in the roof: a soft bright patch, warmer than the rest because it is catching
+      // the last of the light rather than the middle of the sky.
+      const gap=Math.pow(Math.max(0,Math.cos(th-ENV_GAP))*Math.max(0,up), 2.6);
+      r+=1.05*gap; g+=0.92*gap; b+=0.70*gap;
+      // A little warm bounce back off the flooded floor, so downward-facing surfaces are not dead.
+      const bounce=Math.pow(Math.max(0,-up),2.0)*0.14;
+      r+=bounce; g+=bounce*0.60; b+=bounce*0.34;
+      const i=(y*W+x)*4;
+      d[i]=Math.min(255,r*255); d[i+1]=Math.min(255,g*255); d[i+2]=Math.min(255,b*255); d[i+3]=255;
+    }
+  }
+  const t=new THREE.DataTexture(d,W,H,THREE.RGBAFormat);
+  t.mapping=THREE.EquirectangularReflectionMapping;
+  t.colorSpace=THREE.SRGBColorSpace;
+  t.minFilter=t.magFilter=THREE.LinearFilter;
+  t.needsUpdate=true;
+  return t;
+}
+
+// THE FITTING. A drop rod from the ceiling, a can that turns to follow the beam, and the bulb in
+// its mouth. It is here because a beam has to come from something: with nothing at the top of it
+// the shaft reads as a rendering artefact rising out of the ceiling rather than as a lamp lighting
+// a picture. The can is `fitting`, a group whose -y is the beam, so aiming it is a lookAt.
+const fitting=new THREE.Group();
+fitting.position.set(LAMP_XZ[0], LAMP_Y, LAMP_XZ[1]);
+scene.add(fitting);
+{
+  const canMat=new THREE.MeshStandardNodeMaterial({color:0x191612, roughness:0.55, metalness:0.4,
+                                                   side:THREE.DoubleSide});
+  const can=new THREE.Mesh(new THREE.CylinderGeometry(0.10,0.135,0.24,22,1,true), canMat);
+  can.position.y=-0.06; can.castShadow=true;
+  fitting.add(can);
+  const cap=new THREE.Mesh(new THREE.SphereGeometry(0.105,18,10,0,Math.PI*2,0,Math.PI/2), canMat);
+  cap.position.y=0.055; cap.castShadow=true;
+  fitting.add(cap);
+}
+// Emissive rather than lit: it IS the source, so nothing else in the room can be what illuminates
+// it. Sitting just inside the can's mouth so the fitting occludes it from above.
+const bulb=new THREE.Mesh(new THREE.SphereGeometry(0.062,18,12),
+  new THREE.MeshBasicNodeMaterial({color:LAMP_COL}));
+bulb.position.y=-0.14;
+fitting.add(bulb);
+// The drop rod, from the ceiling to the fitting. Not a child of it -- the rod hangs, the can turns.
+const rod=new THREE.Mesh(new THREE.CylinderGeometry(0.013,0.013,ROOM_H-LAMP_Y,6),
+  new THREE.MeshStandardNodeMaterial({color:0x1c1915, roughness:0.8}));
+rod.position.set(LAMP_XZ[0], (ROOM_H+LAMP_Y)/2, LAMP_XZ[1]);
+scene.add(rod);
+
+// ---------------------------------------------------------------------------------------------
+// THE WATER, PART ONE: the simulation.
+//
+// Two half-float targets holding (height, height-last-step) and a fullscreen pass that integrates
+// the wave equation between them: h' = 2h - h_prev + c²∇²h, damped. It is the plainest possible
+// explicit integrator and that is deliberate -- the interesting behaviour (rings that expand,
+// bounce off the walls and interfere) is in the equation, not in the solver.
+//
+// TWO STEPS PER FRAME, ALWAYS, AND THAT IS WHAT MAKES THE READ SIDE SIMPLE. Ping-ponging normally
+// leaves the current state in a different target on alternate frames, so everything downstream has
+// to be told which one to read. Stepping A->B and then B->A puts it back in A every time, so the
+// water material binds simRT[0] once and never thinks about it again. It also doubles the wave
+// speed for free, which is what a room this size wants.
+const simOpts={type:THREE.HalfFloatType, format:THREE.RGBAFormat, depthBuffer:false, stencilBuffer:false};
+const simRT=[0,1].map(()=>{
+  const rt=new THREE.RenderTarget(SIM_N,SIM_N,simOpts);
+  rt.texture.minFilter=THREE.LinearFilter; rt.texture.magFilter=THREE.LinearFilter;
+  rt.texture.wrapS=rt.texture.wrapT=THREE.ClampToEdgeWrapping;
+  rt.texture.generateMipmaps=false;
+  return rt;
+});
+// xy = where the disturbance is, in sim uv; z = how hard. Zeroed after the first of the two steps
+// so one touch is one ring rather than two.
+const uDrop=uniform(new THREE.Vector3(-1,-1,0));
+const uSwell=uniform(SWELL);
+const uTime=uniform(0);
+
+function simMaterial(srcTex){
+  const m=new THREE.NodeMaterial();
+  m.depthTest=false; m.depthWrite=false; m.toneMapped=false;
+  const e=1/SIM_N, p=uv();
+  const c=texture(srcTex,p);
+  const lap=texture(srcTex,p.add(vec2(-e,0))).x
+      .add(texture(srcTex,p.add(vec2(e,0))).x)
+      .add(texture(srcTex,p.add(vec2(0,-e))).x)
+      .add(texture(srcTex,p.add(vec2(0,e))).x)
+      .sub(c.x.mul(4));
+  // ClampToEdge on the sim texture is doing real work here: a sample off the edge repeats the edge
+  // texel, which is a reflecting (Neumann) boundary -- so a ring bounces off the walls of the grid
+  // instead of vanishing at them. The grid is sized to the room for that reason.
+  const h=c.x.mul(2).sub(c.y).add(lap.mul(SIM_C)).mul(SIM_DAMP);
+  const drop=uDrop.z.mul(oneMinus(smoothstep(0, DROP_R, length(p.sub(uDrop.xy)))));
+  m.fragmentNode=vec4(h.add(drop), c.x, 0, 1);
+  return m;
+}
+const simMat=[simMaterial(simRT[0].texture), simMaterial(simRT[1].texture)];
+const quad=new THREE.QuadMesh();
+
+function stepWater(){
+  // A->B, then B->A, so the answer is always in simRT[0].
+  quad.material=simMat[0]; renderer.setRenderTarget(simRT[1]); quad.render(renderer);
+  uDrop.value.z=0;                       // the touch is spent; the second step only propagates it
+  quad.material=simMat[1]; renderer.setRenderTarget(simRT[0]); quad.render(renderer);
+  renderer.setRenderTarget(null);
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE WATER, PART TWO: how it looks.
+//
+// Shaded by hand rather than by a standard material, because a standard material would have to be
+// argued out of everything it is good at. What is wanted is four terms and no more: a nearly black
+// body, a planar reflection, a Fresnel mix between them, and one specular from the lamp. Given
+// one bright source and a mirror-flat surface, writing those four is shorter and more controllable
+// than persuading a PBR material to arrive at them -- and it keeps the reflection's distortion, the
+// ripple normal and the highlight reading from the SAME normal, which is the thing that sells it.
+const SIM_TO_UV=1/(2*SIM_HALF);
+const NRM_GAIN=9.0;      // height-field slope -> normal tilt. Taste, bounded by the water going
+                          // faceted above ~40 as the 8 cm grid starts to show.
+const DISTORT=0.026;      // how far the ripples drag the reflection across the screen
+const uLampPos=uniform(new THREE.Vector3(LAMP_XZ[0],LAMP_Y,LAMP_XZ[1]));
+const uWaterTint=uniform(new THREE.Color(0x0d1a1e));
+const uLampTint=uniform(new THREE.Color(LAMP_COL));
+
+const water=new THREE.Mesh(new THREE.PlaneGeometry(2*SIM_HALF,2*SIM_HALF), new THREE.MeshBasicNodeMaterial());
+water.rotation.x=-Math.PI/2;
+water.position.y=WATER_Y;
+scene.add(water);
+
+// The planar reflection: the room rendered again from a camera mirrored through the water plane.
+// Half resolution -- it is about to be smeared by the ripples, and nobody has ever noticed a soft
+// reflection in moving water.
+const refl=reflector({resolutionScale:0.4});
+refl.target.rotation.x=-Math.PI/2;
+scene.add(refl.target);
+
+{
+  const pw=positionWorld;
+  const wuv=pw.xz.mul(SIM_TO_UV).add(0.5);
+  const e=1/SIM_N;
+  const hAt=(o)=>texture(simRT[0].texture, wuv.add(o)).x;
+  const dhx=hAt(vec2(e,0)).sub(hAt(vec2(-e,0)));
+  const dhz=hAt(vec2(0,e)).sub(hAt(vec2(0,-e)));
+
+  // THE SWELL IS NOT PART OF THE SIMULATION, and keeping it out is deliberate. Feeding a driving
+  // term back into an explicit integrator is how one goes unstable; and the swell is not a wave, it
+  // is the reason a real pool is never a mirror even when nothing has touched it. So it is added to
+  // the SLOPE at shading time, where it can be turned off (reduced motion) without the water
+  // changing state.
+  const t=uTime.mul(0.11);
+  const sx=mx_noise_float(vec3(pw.x.mul(0.62).add(11.3), pw.z.mul(0.62), t)).mul(uSwell);
+  const sz=mx_noise_float(vec3(pw.x.mul(0.62), pw.z.mul(0.62).add(4.7), t)).mul(uSwell);
+  const n=normalize(vec3(dhx.mul(-NRM_GAIN).sub(sx), float(1.0), dhz.mul(-NRM_GAIN).sub(sz)));
+
+  const V=normalize(cameraPosition.sub(pw));
+  // Schlick, with water's own 0.02 at normal incidence. At the grazing angles most of this floor is
+  // seen at, that term goes to 1 and the water becomes a mirror -- which is exactly what makes a
+  // shallow pool read as wet rather than as dark glass.
+  const fres=clamp(float(0.02).add(pow(oneMinus(max(dot(n,V),float(0))),float(5)).mul(0.98)), 0, 1);
+
+  const baseUV=refl.uvNode||screenUV.flipX();
+  refl.uvNode=baseUV.add(n.xz.mul(DISTORT));
+
+  // The body. Not black: a little of the room's own warmth, so the water has a colour where the
+  // reflection has nothing to give it -- straight down, which is most of the near field.
+  const tile=sin(pw.x.mul(2.2)).mul(sin(pw.z.mul(2.2)));
+  const body=uWaterTint.mul(mix(float(0.8),float(1.15),smoothstep(float(-0.1),float(0.1),tile)));
+
+  const L=normalize(uLampPos.sub(pw));
+  const H=normalize(L.add(V));
+  const spec=pow(max(dot(n,H),float(0)), float(420)).mul(2.6);
+  // Falls off with distance like the lamp itself does, or the highlight is as bright in the far
+  // corner as it is under the bulb.
+  const atten=float(1).div(float(1).add(pow(length(uLampPos.sub(pw)).mul(0.22), float(2))));
+
+  const m=water.material;
+  m.colorNode=mix(body, refl.mul(0.90), fres.mul(0.84).add(0.12)).add(uLampTint.mul(spec.mul(atten)));
+  m.toneMapped=true;
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE VOLUMETRIC BEAM. Yes, volumetric media are doable on WebGPU, and this is the cheap honest
+// version of it: single scattering through a homogeneous medium, integrated per pixel with a
+// shadow test at every sample.
+//
+// IT IS DRAWN AS GEOMETRY, NOT AS A POST PASS, and that is the decision that makes it simple. The
+// usual shape for this is a fullscreen pass that rebuilds each pixel's view ray from the screen
+// coordinate and stops it at the scene's depth buffer -- two conventions (which way is screen y,
+// which way is depth) that differ between backends and whose failure looks like a plausible
+// picture rather than an error. Instead the volume is a BOX THE SHAPE OF THE ROOM, drawn back
+// faces only: every pixel of it already carries the world position where the eye's ray leaves the
+// air, in `positionWorld`, so the ray is `positionWorld - cameraPosition` and there is nothing to
+// reconstruct and no convention to get backwards. The box is inset 5 cm from the walls so ordinary
+// depth testing does the occlusion -- a frame standing proud of its wall simply hides the haze
+// behind it -- and it is drawn last, additively, writing no depth.
+//
+// The cost of that shape: the march stops at the wall rather than at whatever is in front of it, so
+// a pixel showing a picture gets no haze at all instead of the little in front of it. The pictures
+// hang within 12 cm of their walls, so that is a twentieth of the room's depth, and it errs toward
+// too little haze in front of a painting -- which is the right direction to be wrong in.
+const uLightVP=uniform(new THREE.Matrix4());
+const uLampDir=uniform(new THREE.Vector3(0,-1,0));
+const uCosOuter=uniform(Math.cos(LAMP_CONE));
+const uCosInner=uniform(Math.cos(LAMP_CONE*(1-LAMP_PEN)));
+const uVolAmt=uniform(VOL_DENSITY);
+// WHICH WAY IS V WHEN SAMPLING A RENDER TARGET. Determined by experiment rather than reasoned
+// about -- see the note in the light-depth bake below. 1 leaves it alone, -1 flips it.
+const uShadowFlip=uniform(1);
+
+const lightDepthRT=new THREE.RenderTarget(LD_N,LD_N,
+  {type:THREE.HalfFloatType, format:THREE.RGBAFormat, depthBuffer:true, stencilBuffer:false});
+lightDepthRT.texture.minFilter=THREE.NearestFilter;
+lightDepthRT.texture.magFilter=THREE.NearestFilter;
+lightDepthRT.texture.generateMipmaps=false;
+
+// What the lamp can see, as plain distance in metres. Distance rather than a depth buffer because
+// the volumetric asks its question in metres ("is this point of air nearer to the lamp than
+// whatever the lamp hit in that direction?"), and storing the answer in the units of the question
+// removes a whole projection's worth of arithmetic and of possible sign errors.
+const distMat=new THREE.NodeMaterial();
+distMat.fragmentNode=vec4(length(positionWorld.sub(uLampPos)), 0, 0, 1);
+distMat.toneMapped=false;
+distMat.fog=false;
+
+const lightCam=new THREE.PerspectiveCamera(2*LAMP_CONE*180/Math.PI*1.12, 1, 0.35, LAMP_DIST);
+
+// The room's air, as a box. Inset from the walls so depth testing can do the occluding.
+const volGeo=new THREE.BoxGeometry(2*ROOM_W-0.1, ROOM_H-0.12, (ROOM_D[1]-ROOM_D[0])-0.1);
+const volMat=new THREE.MeshBasicNodeMaterial({side:THREE.BackSide, depthWrite:false,
+  transparent:true, blending:THREE.AdditiveBlending, toneMapped:false, fog:false});
+const volMesh=new THREE.Mesh(volGeo, volMat);
+volMesh.position.set(0, ROOM_H/2, (ROOM_D[0]+ROOM_D[1])/2);
+volMesh.renderOrder=10;
+volMesh.frustumCulled=false;
+scene.add(volMesh);
+
+volMat.colorNode=Fn(()=>{
+  const ro=cameraPosition, far=positionWorld;
+  const seg=far.sub(ro), dist=min(length(seg), float(VOL_FAR));
+  const dir=normalize(seg);
+  const dt=dist.div(float(VOL_STEPS));
+  // A per-pixel offset into the first step. Without it 40 planes of constant density read as 40
+  // visible shells; with it they read as grain, which the eye forgives and a bilinear filter half
+  // removes anyway. Screen-space, so it does not swim when the camera turns.
+  const jit=fract(sin(dot(screenCoordinate.xy, vec2(12.9898,78.233))).mul(43758.545));
+  const acc=vec3(0,0,0).toVar();
+
+  Loop(VOL_STEPS, ({i})=>{
+    const p=ro.add(dir.mul(float(i).add(jit).mul(dt)));
+    const toL=uLampPos.sub(p);
+    const dl=length(toL);
+    const L=toL.div(max(dl,float(1e-4)));
+
+    // Inside the cone? The same smooth edge the spotlight's own penumbra uses, so the beam in the
+    // air and the pool on the floor share one edge instead of two that nearly agree.
+    const cosA=dot(L.negate(), uLampDir);
+    const cone=smoothstep(uCosOuter, uCosInner, cosA);
+
+    // Does the lamp actually reach here, or is a frame in the way? One texture read against the
+    // distance map baked above. This is the whole reason the pass is a march and not a gradient:
+    // the answer differs along the ray, so the shafts have edges.
+    const clip=uLightVP.mul(vec4(p, 1.0));
+    const luv0=clip.xy.div(max(clip.w,float(1e-4))).mul(0.5).add(0.5);
+    const luv=vec2(luv0.x, mix(luv0.y, oneMinus(luv0.y), uShadowFlip.mul(-0.5).add(0.5)));
+    const stored=texture(lightDepthRT.texture, saturate(luv)).x;
+    // Outside the map is outside the beam; the cone term has usually already said so, but a sample
+    // behind the lamp would otherwise project back into the frustum and light up.
+    const inFrustum=step(float(0), clip.w)
+        .mul(step(float(0), luv.x)).mul(step(luv.x, float(1)))
+        .mul(step(float(0), luv.y)).mul(step(luv.y, float(1)));
+    const lit=step(dl, stored.add(float(LD_BIAS))).mul(inFrustum);
+
+    const atten=float(1).div(float(1).add(pow(dl.mul(0.19), float(2))));
+    acc.addAssign(cone.mul(lit).mul(atten).mul(uVolAmt).mul(dt));
+  });
+
+  return uLampTint.mul(acc.mul(VOL_STRENGTH));
+})();
+
+// Baked whenever the lamp has actually moved. The room is static, so this is a function of the
+// lamp's position alone -- and the lamp drifts slowly, so re-rendering the room from it every frame
+// would be spending a whole pass on a picture that had not changed. A centimetre is well under what
+// the beam's soft edge can show.
+let lastBake=new THREE.Vector3(1e9,0,0), lastBakeTarget=new THREE.Vector3(1e9,0,0);
+function bakeLightDepth(){
+  if(lamp.position.distanceTo(lastBake)<0.01 && lamp.target.position.distanceTo(lastBakeTarget)<0.025) return;
+  lastBake.copy(lamp.position);
+  lastBakeTarget.copy(lamp.target.position);
+  lightCam.position.copy(lamp.position);
+  lightCam.lookAt(lamp.target.position);
+  lightCam.updateMatrixWorld();
+  lightCam.updateProjectionMatrix();
+  uLightVP.value.multiplyMatrices(lightCam.projectionMatrix, lightCam.matrixWorldInverse);
+
+  // The fitting is AT the lamp; left visible its own can would render at a few centimetres and
+  // shadow the entire room. The volume box is what this map is for, so it cannot be its own input.
+  const hid=[fitting,volMesh,...noBake].map(o=>{const v=o.visible; o.visible=false; return [o,v];});
+  scene.overrideMaterial=distMat;
+  renderer.setRenderTarget(lightDepthRT);
+  renderer.clear();
+  renderer.render(scene, lightCam);
+  renderer.setRenderTarget(null);
+  scene.overrideMaterial=null;
+  hid.forEach(([o,v])=>{o.visible=v;});
+}
+
+// ---------------------------------------------------------------------------------------------
+// THE CAMERA. Orbit on an arc of standing room in front of the bay -- the same choice, for the same
+// reason, that projects/spdef/points.html makes: one subject, and a vocabulary (turn, step closer,
+// and nothing else) that a finger can reach all of. A fly camera would need WASD and would let the
+// visitor walk out through a wall.
+//
+// The limits are what keep it a room rather than a model of one. Yaw stops before the arc reaches
+// the side walls; pitch stops before the eye goes under the water, which is the one bound that is
+// not taste -- below the surface the reflection is nonsense and the volume box is behind you.
+const TARGET=new THREE.Vector3(0, 2.15, -3.4);
+const HOME={yaw:-0.035, pitch:0.12, dist:8.2};
+const YAW_LIM=55*Math.PI/180, PITCH_LO=-9*Math.PI/180, PITCH_HI=30*Math.PI/180;
+const DIST_LO=3.6, DIST_HI=8.4, EYE_FLOOR=0.55;
+let cam={...HOME}, touched=false;
+
+function placeCamera(){
+  cam.yaw=Math.max(-YAW_LIM,Math.min(YAW_LIM,cam.yaw));
+  cam.pitch=Math.max(PITCH_LO,Math.min(PITCH_HI,cam.pitch));
+  cam.dist=Math.max(DIST_LO,Math.min(DIST_HI,cam.dist));
+  const cp=Math.cos(cam.pitch);
+  camera.position.set(TARGET.x+cam.dist*Math.sin(cam.yaw)*cp,
+                      TARGET.y+cam.dist*Math.sin(cam.pitch),
+                      TARGET.z+cam.dist*Math.cos(cam.yaw)*cp);
+  // A second floor under the eye, belt and braces with PITCH_LO: that limit is an angle and this is
+  // the thing it is protecting, and the two stop agreeing the moment DIST_HI is retuned.
+  if(camera.position.y<EYE_FLOOR) camera.position.y=EYE_FLOOR;
+  // Keep the orbit outside standing shafts, including at the closest zoom.
+  for(const [x,z,r,h] of COLUMNS){
+    if(camera.position.y>h+0.45) continue;
+    const dx=camera.position.x-x,dz=camera.position.z-z,d=Math.hypot(dx,dz),clearance=r+0.22;
+    if(d<clearance){
+      camera.position.x=x+(d>0.0001?dx/d:1)*clearance;
+      camera.position.z=z+(d>0.0001?dz/d:0)*clearance;
+    }
+  }
+  camera.lookAt(TARGET);
+}
+placeCamera();
+
+function resetView(){ cam={...HOME}; touched=false; placeCamera(); resetBtn.disabled=true; nudge(); }
+resetBtn.addEventListener('click',()=>{resetView();canvas.focus();});
+
+// ---------------------------------------------------------------------------------------------
+// Pointer. Drag turns; a press that does not travel is a click and aims the lamp. The travel is
+// measured from where the press STARTED rather than summed per event -- jitter accumulates, and a
+// per-event test lets a slow drag through as a click. Same rule, and the same threshold, as the
+// museum page's serve-the-light.
+const ray=new THREE.Raycaster();
+const aim=new THREE.Vector3().copy(HOME_AIM);        // where the beam is going
+const aimShown=new THREE.Vector3().copy(HOME_AIM);   // where it has got to
+let drag=null, pinch=null;
+
+function pointerNDC(ev){
+  const r=canvas.getBoundingClientRect();
+  return new THREE.Vector2(((ev.clientX-r.left)/r.width)*2-1, -((ev.clientY-r.top)/r.height)*2+1);
+}
+// Everything the beam can land on. The water first, because it is the one that also answers.
+let pickList=[];
+function serve(ev){
+  ray.setFromCamera(pointerNDC(ev), camera);
+  const hits=ray.intersectObjects(pickList,true);
+  if(!hits.length) return;
+  const p=hits[0].point;
+  aim.copy(p);
+  if(hits[0].object===water) splash(p.x,p.z);
+}
+// A ring leaves the point that was touched. In sim uv, since that is the grid's own frame.
+function splash(x,z,amp){
+  uDrop.value.set(x/(2*SIM_HALF)+0.5, z/(2*SIM_HALF)+0.5, amp===undefined?DROP_A:amp);
+}
+
+canvas.addEventListener('pointerdown',ev=>{
+  canvas.setPointerCapture(ev.pointerId);
+  canvas.classList.add('drag','quiet'); canvas.focus({preventScroll:true});
+  if(drag&&ev.isPrimary===false){ pinch={id:ev.pointerId, x:ev.clientX, y:ev.clientY}; return; }
+  drag={id:ev.pointerId, x:ev.clientX, y:ev.clientY, x0:ev.clientX, y0:ev.clientY, far:0};
+});
+canvas.addEventListener('pointermove',ev=>{
+  if(drag) nudge();
+  if(pinch&&ev.pointerId===pinch.id){ pinch.x=ev.clientX; pinch.y=ev.clientY; return; }
+  if(!drag||ev.pointerId!==drag.id) return;
+  if(pinch){
+    // Two fingers: the gap between them is the distance. Also disqualifies the press as a click.
+    const d=Math.hypot(ev.clientX-pinch.x, ev.clientY-pinch.y);
+    if(drag.gap) { cam.dist*=drag.gap/Math.max(d,1); placeCamera(); touched=true; resetBtn.disabled=false; }
+    drag.gap=d; drag.far=Infinity;
+    drag.x=ev.clientX; drag.y=ev.clientY; return;
+  }
+  const dx=ev.clientX-drag.x, dy=ev.clientY-drag.y;
+  drag.x=ev.clientX; drag.y=ev.clientY;
+  drag.far=Math.max(drag.far, Math.hypot(ev.clientX-drag.x0, ev.clientY-drag.y0));
+  cam.yaw-=dx*0.0044; cam.pitch+=dy*0.0034;
+  placeCamera(); touched=true; resetBtn.disabled=false;
+});
+function endPointer(ev){
+  if(pinch&&ev.pointerId===pinch.id){ pinch=null; return; }
+  if(!drag||ev.pointerId!==drag.id) return;
+  if(ev.type==='pointerup'&&drag.far<5) serve(ev);
+  drag=null; pinch=null; canvas.classList.remove('drag');
+}
+canvas.addEventListener('pointerup',endPointer);
+canvas.addEventListener('pointercancel',endPointer);
+canvas.addEventListener('wheel',ev=>{
+  ev.preventDefault();
+  cam.dist*=Math.exp(ev.deltaY*0.0012); placeCamera(); touched=true; resetBtn.disabled=false;
+},{passive:false});
+// Android's long-press menu, which the CSS suppression does not cover. Same handler as next door.
+canvas.addEventListener('contextmenu',ev=>ev.preventDefault());
+canvas.addEventListener('blur',()=>canvas.classList.remove('quiet'));
+canvas.addEventListener('keydown',ev=>{
+  const k=ev.key; let hit=true;
+  const s=ev.shiftKey?0.5:1;
+  if(k==='ArrowLeft') cam.yaw+=0.06*s;
+  else if(k==='ArrowRight') cam.yaw-=0.06*s;
+  else if(k==='ArrowUp') cam.pitch+=0.045*s;
+  else if(k==='ArrowDown') cam.pitch-=0.045*s;
+  else if(k==='+'||k==='=') cam.dist*=0.92;
+  else if(k==='-'||k==='_') cam.dist*=1.08;
+  else if(k==='0'||k==='Home'){ ev.preventDefault(); resetView(); canvas.classList.remove('quiet'); return; }
+  else hit=false;
+  if(!hit) return;
+  ev.preventDefault(); canvas.classList.remove('quiet');
+  placeCamera(); touched=true; resetBtn.disabled=false;
+});
+
+// ---------------------------------------------------------------------------------------------
+// THE LABEL NAMES WHAT YOU ARE FACING. Five works and one caption, so the caption follows the eye:
+// a work counts as faced when it is near the middle of the view AND the visitor is in front of it,
+// which for a bay matters -- the wing pictures are edge-on from the far side of the arc and naming
+// one you cannot read would be worse than naming nothing.
+const _toWork=new THREE.Vector3(), _fwd=new THREE.Vector3();
+let shownWork=null;
+function nearestWork(){
+  camera.getWorldDirection(_fwd);
+  let best=null, bestAlign=0.80;      // ~36° off the view axis; wider and it names a picture at the edge
+  for(const w of works){
+    _toWork.copy(w.centre).sub(camera.position).normalize();
+    const align=_toWork.dot(_fwd);
+    if(align<bestAlign) continue;
+    if(-_toWork.dot(w.normal)<0.30) continue;   // we are round the side of it
+    best=w; bestAlign=align;
+  }
+  return best;
+}
+function paintLabel(w){
+  if(w===shownWork) return;
+  shownWork=w;
+  labelEl.classList.add('fade');
+  setTimeout(()=>{
+    labelEl.innerHTML = w ? `<div class="who">Mingyang Song</div>`+
+        `<div class="what">${w.title}</div><div class="med">${w.med}</div>` : '';
+    labelEl.classList.remove('fade');
+  }, reduced.matches?0:170);
+}
+
+// ---------------------------------------------------------------------------------------------
+// OPENING THE ROOM. This is a plain async function and not top-level await, deliberately: the
+// repo's only syntax check for a page like this is esprima (there is no node on this box, and a
+// module that fails to parse leaves the page sitting on its loading line for ever), and esprima
+// predates top-level await. Keeping the module parseable by it is worth one function.
+async function boot(){
+  try{ await renderer.init(); }
+  catch(e){ say('This room needs WebGPU or WebGL2, and this browser provided neither.<br>'+
+                'It should run in a recent Chrome, Edge, Safari or Firefox.',true); throw e; }
+  isWebGPU=!!(renderer.backend&&renderer.backend.isWebGPUBackend);
+
+  // A GPU CAN BE TAKEN AWAY, AND THE FAILURE IS SILENT AND VERY CONFUSING. A driver reset, a laptop
+  // switching between its two GPUs, or a software adapter giving up under a load it cannot sustain
+  // all end the same way: the device is lost, three keeps being called by the animation loop, and
+  // every render becomes a no-op. rAF goes on firing at 60 fps, so nothing looks wrong except that
+  // the picture has stopped -- which reads as a bug in the scene rather than as a lost device.
+  // Observed for real on the software adapter this page was built against: the device went at about
+  // twenty seconds and the frame counter then climbed at a happy 60 fps, drawing nothing at all.
+  // three does not surface this, so ask the device directly.
+  {
+    const dev=renderer.backend&&renderer.backend.device;
+    if(dev&&dev.lost) dev.lost.then(info=>{
+      if(info&&info.reason==='destroyed') return;    // ordinary teardown: the tab is going away
+      renderer.setAnimationLoop(null);
+      say('The browser took the graphics device back, so the room has stopped.<br>'+
+          'Reloading should bring it up again.', true);
+    });
+  }
+
+  // The environment, prefiltered. After init() because PMREM renders, and rendering needs a device.
+  {
+    const pm=new THREE.PMREMGenerator(renderer);
+    const sky=skyTexture();
+    scene.environment=pm.fromEquirectangular(sky).texture;
+    scene.environmentIntensity=ENV_INT;
+    sky.dispose(); pm.dispose();
+  }
+
+  try{ await Promise.all(WORKS.map(hangWork)); }
+  catch(e){ say('The room is built, but its paintings did not load.<br>'+
+                'Reloading usually fixes it.',true); throw e; }
+
+  // Everything the beam can land on: the water, the walls, and the canvases themselves. Not the
+  // mouldings -- aiming at a frame should light the picture in it, and the frame is 8 cm nearer.
+  pickList=[water];
+  scene.traverse(o=>{ if(o.isMesh&&o!==volMesh&&o!==water&&o.material!==frameMat) pickList.push(o); });
+
+  // One ring already crossing the room when the lights come up, so the floor is legibly water
+  // before anyone has touched it. Off-centre, because a ring centred in a symmetrical room reads
+  // as a texture rather than as something that happened.
+  splash(-2.2, -1.4, DROP_A*0.7);
+
+  backendEl.hidden=false;
+  backendEl.textContent=isWebGPU ? 'drawn with WebGPU' : 'WebGPU unavailable \u2014 drawn with WebGL2';
+  statusEl.classList.add('gone');
+  setTimeout(()=>{statusEl.hidden=true;}, 600);
+  resetBtn.disabled=true;
+
+  resize();
+  new ResizeObserver(resize).observe(stage);
+  t0=performance.now()/1000;
+  renderer.setAnimationLoop(frame);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sizing. The canvas is a CSS box with a fixed aspect, so the drawing buffer follows the box rather
+// than the window. Capped at 2x and at a total pixel count: this scene renders itself three times
+// over (the lamp's view, the reflection, the room) and a 4K panel at full ratio buys nothing a
+// 16:9 stage 1000 px wide can show.
+// ADAPTIVE RESOLUTION. This scene renders itself four times over every frame -- the lamp's view of
+// the room, the reflection, the room itself, and a forty-step march through the air -- and the last
+// of those is the one that scales with pixels. A machine that cannot hold 60 fps at full ratio can
+// almost always hold it at two thirds, and dropping resolution is invisible next to dropping frames.
+//
+// IT ONLY EVER GOES DOWN. A controller that climbs back oscillates between two resolutions on any
+// machine sitting near the boundary, and a picture that visibly changes sharpness twice a second is
+// worse than one that settled on the lower.
+const QUALITY=[1, 0.82, 0.66, 0.52];
+let qi=0;
+function resize(){
+  const r=stage.getBoundingClientRect();
+  const cap=Math.sqrt(2600000/Math.max(r.width*r.height,1));
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2, cap)*QUALITY[qi]);
+  renderer.setSize(r.width, r.height, false);
+  camera.aspect=r.width/Math.max(r.height,1);
+  camera.updateProjectionMatrix();
+  nudge();
+}
+
+// ---------------------------------------------------------------------------------------------
+// The loop.
+//
+// REDUCED MOTION TAKES AWAY THE RESTLESSNESS, NOT THE ROOM. What is switched off is everything that
+// moves with nobody asking: the lamp's breath, the swell on the water, and the slow drip. What is
+// kept is everything the visitor causes -- turning, stepping closer, aiming the lamp, and the rings
+// a touch sends across the floor, which are the point of the floor. Same line the museum page draws
+// next door, where the light stops travelling but can still be served by hand.
+// It also stops DRAWING once the room has gone quiet, which the animated version can never do: a
+// still room re-rendered sixty times a second is a battery bill for an identical picture.
+// Frames slower than this are what the resolution ladder above reacts to. 55 ms is a little worse
+// than 20 fps sustained; the run length means a single hitch (a texture upload, another tab waking)
+// cannot cost anyone their sharpness.
+const SLOW_MS=0.055, SLOW_RUN=48;
+let slowRun=0;
+function adaptQuality(dt){
+  if(dt>SLOW_MS) slowRun++; else slowRun=Math.max(0, slowRun-2);
+  if(slowRun>SLOW_RUN && qi<QUALITY.length-1){ qi++; slowRun=0; resize(); }
+}
+
+const DRIP_MIN=3.4, DRIP_MAX=7.0;
+// settleUntil is when a still room may stop being redrawn. It starts a few seconds out rather than
+// at infinity: at infinity the reduced-motion branch below is unreachable and the saving never
+// happens, which is how it shipped the first time. The opening seconds are needed -- the textures
+// land, the first ripple crosses, and the resolution ladder wants a few frames to judge.
+let t0=performance.now()/1000, tPrev=0, nextDrip=DRIP_MIN, busy=false, settleUntil=9;
+function nudge(){ settleUntil=performance.now()/1000-t0+6; }   // "something happened; keep drawing"
+['pointerdown','wheel','keydown'].forEach(k=>canvas.addEventListener(k,nudge,{passive:true}));
+
+function frame(){
+  if(busy) return;                       // a slow adapter must not queue frames behind itself
+  // TWO DIFFERENT DELTAS, and sharing one variable made the quality ladder dead code. `raw` is how
+  // long the last frame actually took, which is what adaptQuality has to see; `dt` is what the
+  // simulation is allowed to advance by, clamped so that a hitch or a backgrounded tab cannot
+  // integrate the water forward half a second in one step and blow it up. The clamp was 0.05 and
+  // the slow threshold 0.055, so the condition was unreachable.
+  const t=performance.now()/1000-t0, raw=t-tPrev, dt=Math.min(raw,0.05); tPrev=t;
+  const still=reduced.matches;
+  if(still && t>settleUntil) return;     // nothing is moving and nobody is asking
+  busy=true;
+  try{
+    uTime.value=t;
+    uSwell.value=still?0:SWELL;
+
+    if(!still && t>nextDrip){            // the room leaks, gently
+      nextDrip=t+DRIP_MIN+Math.random()*(DRIP_MAX-DRIP_MIN);
+      splash((Math.random()*2-1)*8.5, ROOM_D[0]+1.5+Math.random()*10, DROP_A*0.3);
+    }
+
+    // The beam eases to where it was sent, and breathes around it.
+    aimShown.lerp(aim, 1-Math.exp(-AIM_S*dt));
+    const w=still?0:WANDER, k=t*WANDER_S*6.2832;
+    lamp.target.position.set(aimShown.x+Math.sin(k)*w,
+                             aimShown.y+Math.sin(k*1.37+1.1)*w*0.6,
+                             aimShown.z+Math.cos(k*0.83+2.3)*w);
+    lamp.target.updateMatrixWorld();
+
+    const dir=lamp.target.position.clone().sub(lamp.position).normalize();
+    // The can hangs mouth-down, so its local -y is the beam.
+    fitting.quaternion.setFromUnitVectors(new THREE.Vector3(0,-1,0), dir);
+    uLampDir.value.copy(dir);
+    uLampPos.value.copy(lamp.position);
+
+    adaptQuality(raw);
+    stepWater();
+    bakeLightDepth();
+    paintLabel(nearestWork());
+    renderer.render(scene, camera);
+  }finally{ busy=false; }
+}
+// A change of preference mid-visit must start the loop again, or a visitor who turns reduced motion
+// off sits looking at a frozen room.
+reduced.addEventListener('change',()=>{nudge();});
+
+boot();
+</script>
+</body>
+</html>

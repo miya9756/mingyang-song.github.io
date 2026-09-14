@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Museum — Mingyang Song</title>
+<link rel="icon" type="image/png" sizes="64x64" href="../../assets/web_icon.png">
+<link rel="apple-touch-icon" href="../../assets/web_icon.png">
+<meta name="description" content="A painting captured as 3D Gaussians and hung on a web page: Bernardo Bellotto's ruins of the Kreuzkirche, filmed in a gallery, compressed to 2.4 MB and rasterised in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="theme-color" content="#f4f2ec"><!-- must track --bg; Safari tints its chrome from this -->
+
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  /* Miscellany's palette, inherited deliberately: this is a room inside that shelf, not a new
+     destination. See ../index.html for why it borrows the landing page's warm paper. */
+  :root{
+    color-scheme:light;
+    --bg:#f4f2ec; --surface:#fdfbf6; --ink:#16181d; --muted:#5f6672;
+    --line:#e6e2d8; --accent:#6f4468; --shadow:rgba(16,24,40,.16);
+    /* Tokenised only because the room can go dark (below). They were literals — a white pill and a
+       paper-coloured keycap — which is fine on one palette and glaring on two. */
+    --pill:rgba(255,255,255,.6); --pill-hi:#fff; --kbd:#efece4; --err:#a3352b;
+  }
+  /* TURNING THE LIGHT OFF. The whole page follows, not just the stage: the conceit is that the ROOM
+     went dark, and a black rectangle inside warm paper reads as a broken image rather than as a
+     gallery after hours. Same tokens re-tuned, never re-invented, so every rule below keeps working
+     untouched. Two things make it correct rather than merely dark:
+       - it is on <html>, not <body>, because `html{background:var(--bg)}` resolves the variable on
+         that element — put the class on body and the page canvas behind everything stays paper.
+       - the accent lightens to a plum that clears 8.7:1 on the new ground; the light one sits at
+         2.4:1 there, which is a link nobody can read.
+     `color-scheme` follows so the scrollbar and the focus rings do too, and the script switches
+     <meta name="theme-color"> to match — the site's page-chrome rule, applied to a palette that moves. */
+  html.dark{
+    color-scheme:dark;
+    --bg:#0b0c0e; --surface:#15171a; --ink:#e8e6e1; --muted:#8b9199;
+    --line:#23262b; --accent:#c9a3c0; --shadow:rgba(0,0,0,.5);
+    --pill:rgba(255,255,255,.05); --pill-hi:rgba(255,255,255,.1); --kbd:#1c1f24; --err:#e6786c;
+  }
+  *{box-sizing:border-box}
+  /* The lights coming down is a change of state worth seeing happen, so both grounds cross-fade
+     rather than cut. Only colour animates — no layout, no compositing work over the canvas. */
+  html{-webkit-text-size-adjust:100%;background:var(--bg);transition:background-color .5s ease}
+  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased;transition:background-color .5s ease,color .5s ease}
+  .inner{max-width:860px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{padding:30px 0 0}
+  .back{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:var(--pill);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:var(--pill-hi);text-decoration:none}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow{transform:translateX(-3px)}
+  h1{margin:16px 0 0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(28px,4.2vw,42px);line-height:1.05;letter-spacing:-.018em}
+  .subtitle{margin:9px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
+            font-size:clamp(15px,2vw,20px);opacity:.9;line-height:1.3}
+
+  /* THE PAINTING HANGS ON THE PAGE — there is deliberately no canvas frame here: no border, no
+     radius, no plate, no dark viewport box. The scene is a pruned capture (the gallery wall was
+     removed before packing), so the splats end exactly at the gilt frame's outer edge and the
+     paper shows through everywhere else. That only works because the GL context is alpha:true +
+     premultipliedAlpha:true and clears to (0,0,0,0): the splat blend is a front-to-back `under`
+     operator, so clearing to an opaque colour would leave DST_ALPHA at 1 and multiply every splat
+     by zero — a blank canvas. Same contract as projects/spdef/field.html. */
+  .stage{position:relative;width:min(60vw,1000px);aspect-ratio:4/3;margin:44px auto 0}
+  /* The last four declarations are for the press-and-hold easter egg (see the script). A two-second
+     press is its gesture, and a two-second press is also what a touch OS reads as "select this":
+     holding the canvas raised iOS's selection callout and magnifier over the painting. Suppressing
+     it on `pointerdown` does not work — the callout comes off the touch sequence rather than the
+     pointer event — so it has to be refused in CSS, and Android's long-press menu is refused by the
+     `contextmenu` handler the script already installs for right-drag. Same four declarations, and
+     the same reason, as the SMV viewer's movement pad. */
+  #gl{position:absolute;inset:0;width:100%;height:100%;display:block;
+      touch-action:none;cursor:grab;outline:none;
+      -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+      -webkit-tap-highlight-color:transparent}
+  #gl.drag{cursor:grabbing}
+  /* Keyboard focus must stay visible — it is the only way anyone navigating by key can tell the
+     picture is the thing they are about to turn. But POINTER focus must not show it: the script
+     focuses the canvas on pointerdown so the arrow keys work straight after a drag, and a browser
+     that matches :focus-visible on a programmatic focus() then draws a 2px rectangle around the
+     picture the moment you touch it — which on this page reads as exactly the frame the whole
+     design removes. `.quiet` is set for pointer focus and cleared on the next key or blur. */
+  #gl:focus-visible{outline:2px solid var(--accent);outline-offset:6px}
+  #gl.quiet:focus-visible{outline:none}
+  /* On a phone 60vw is a postage stamp, and the page has nothing else competing for the width. */
+  @media(max-width:760px){.stage{width:min(92vw,560px);margin-top:28px}}
+
+  /* Status sits OVER the stage rather than above it, so nothing reflows when it goes away —
+     a caption that jumps 24px the moment the scene lands reads as a bug. */
+  #status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+          text-align:center;padding:0 20px;color:var(--muted);font-size:13.5px;
+          font-variant-numeric:tabular-nums}
+  #status.err{color:var(--err)}
+  #status[hidden]{display:none}
+
+  /* The wall label. A museum caption, so it is set like one: centred, small, the title in italic
+     display serif, the technical line last and quietest. */
+  .label{margin:26px auto 0;max-width:560px;text-align:center}
+  .label .who{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+  .label .what{margin:.35em 0 0;font-family:'Fraunces',Georgia,serif;font-style:italic;font-size:19px;line-height:1.35}
+  .label .med{margin:.35em 0 0;font-size:13px;color:var(--muted)}
+  .label .prov{margin:.5em 0 0;font-size:12.5px;color:var(--muted)}
+  /* The two catalogue references. Same size as the provenance line and directly under it, because
+     they are the source of it rather than further reading. */
+  .label .refs{margin:.5em 0 0;font-size:12.5px}
+  .hints{margin:22px auto 0;max-width:620px;display:flex;flex-wrap:wrap;gap:8px 18px;
+         justify-content:center;font-size:12.5px;color:var(--muted)}
+  .hints b{color:var(--ink);font-weight:600}
+  .hints kbd{font:inherit;font-size:11px;background:var(--kbd);border:1px solid var(--line);border-bottom-width:2px;
+             border-radius:5px;padding:1px 6px;color:var(--ink)}
+  .hints .reset{font:inherit;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;
+                text-decoration:underline;text-underline-offset:2px}
+  .hints .reset:disabled{color:var(--muted);text-decoration:none;cursor:default;opacity:.6}
+  /* Only meaningful while the light is out, so it is not in the row until then. It IS in the row,
+     though: serving the light is a control, and the hints are this page's contract for the controls
+     — the more so under reduced motion, where the light does not travel and a click is the only way
+     to move it at all. (The press-and-hold egg stays unlisted; that is the difference between an
+     easter egg and a feature.) */
+  #serve[hidden]{display:none}
+
+  /* The switch. A pill, like the back button, because it is the same kind of object — one small
+     deliberate act — and it sits on its own line under the hints rather than inside them: the hints
+     describe what the picture already does, this changes what the room is. */
+  .lamps{display:flex;justify-content:center;margin:18px auto 0}
+  .lamp{font:inherit;font-size:13px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+        color:var(--muted);background:var(--pill);border:1px solid var(--line);border-radius:999px;
+        padding:6px 15px;transition:color .16s,border-color .16s,background-color .16s}
+  .lamp:hover{color:var(--accent);border-color:var(--accent);background:var(--pill-hi)}
+  /* The bulb glyph is the state: filled and warm while the room is lit, a hollow ring once it is
+     out. It is aria-hidden — the button's own label already says which way it will go. */
+  .lamp .bulb{width:9px;height:9px;border-radius:50%;background:#e8c37a;box-shadow:0 0 0 3px rgba(232,195,122,.22);
+              transition:background-color .3s,box-shadow .3s}
+  html.dark .lamp .bulb{background:transparent;box-shadow:inset 0 0 0 1.5px var(--muted)}
+
+  /* THE WAY THROUGH TO THE OTHER ROOM. This page is one wall with two works on it; misc/museum/room/
+     is a different exhibit with a different renderer (three.js on WebGPU, against this page's
+     hand-written WebGL2 splats), so it is a DOOR rather than a third entry in SCENES -- there is no
+     bundle to swap and no wall label to build, and putting it in .picks would promise that there
+     was. Same pill as .back and .lamp, because it is the same kind of object: one small deliberate
+     act. It sits under the switch, last, so nothing comes between the picture and its own controls. */
+  .nextroom{display:flex;justify-content:center;margin:30px auto 0}
+  .nextroom a{display:inline-flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);
+              text-decoration:none;padding:6px 15px;border:1px solid var(--line);border-radius:999px;
+              background:var(--pill);transition:color .16s,border-color .16s,background-color .16s}
+  .nextroom a:hover{color:var(--accent);border-color:var(--accent);background:var(--pill-hi);text-decoration:none}
+  .nextroom em{font-style:normal;color:var(--ink)}
+  .nextroom .narrow{display:inline-block;transition:transform .16s}
+  .nextroom a:hover .narrow{transform:translateX(3px)}
+
+  /* The room selector. Two works on one wall, so this is a label, not a control panel: text only,
+     the hung one in ink and the other muted, sized like the hints it sits above. */
+  .picks{display:flex;flex-wrap:wrap;gap:6px 20px;justify-content:center;margin:24px auto 0}
+  .pick{font:inherit;font-size:13px;letter-spacing:.02em;color:var(--muted);background:none;border:0;
+        padding:2px 0 4px;cursor:pointer;border-bottom:1.5px solid transparent;
+        transition:color .18s,border-color .18s}
+  .pick:hover{color:var(--ink)}
+  .pick[aria-pressed=true]{color:var(--ink);font-weight:600;border-bottom-color:var(--accent);cursor:default}
+  .pick[disabled]{opacity:.5;cursor:progress}
+
+  /* SWAPPING BETWEEN WORKS. The wait is a real fetch + decode of 0.8–2.4 MB, so the transition is
+     NOT one timed animation across it: it is a fixed exit, an indeterminate hold, and a fixed
+     entrance fired by the load actually finishing. Only opacity and transform are animated — both
+     compositor-only, so nothing here costs the renderer a frame — and the stage keeps its size, so
+     the label below cannot jump while the picture changes. The new work's framing is computed while
+     the canvas is at zero opacity, which is what makes a hard camera cut invisible.
+     .swap's duration and SWAP_MS in the script are a PAIR; change one and change the other. */
+  #gl,.label{transition:opacity .38s ease,transform .38s ease}
+  #gallery.swap #gl{opacity:0;transform:scale(.99)}
+  #gallery.swap .label{opacity:0}
+  main{padding-bottom:10px}
+  footer{border-top:1px solid var(--line);margin-top:46px;padding:26px 0 48px;color:var(--muted);font-size:13px}
+  footer p{margin:0 0 8px}
+  :where(a,button):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){
+    .back,.back .barrow{transition:none}.back:hover .barrow{transform:none}
+    .nextroom a,.nextroom .narrow{transition:none}.nextroom a:hover .narrow{transform:none}
+    /* The room still goes dark — that is the feature, not decoration — it just cuts. (The bouncing
+       itself is dealt with in the script: under this setting the light parks and is aimed by
+       clicking instead of travelling for ever.) */
+    html,body,.lamp,.lamp .bulb{transition:none}
+    /* The swap still hides the old work while the new one loads — that is the point of it, not
+       decoration — it just cuts instead of fading, and never scales. */
+    #gl,.label{transition:none}
+    #gallery.swap #gl{transform:none}
+  }
+</style>
+</head>
+<body>
+<header class="inner">
+  <a class="back" href="../"><span class="barrow" aria-hidden="true">←</span> Miscellany</a>
+  <h1>Digital Museum</h1>
+  <p class="subtitle">One painting, carried out of the gallery as 3D Gaussians and hung here instead.</p>
+</header>
+
+<main id="gallery">
+  <div class="stage">
+    <!-- No role="img": the script makes this focusable and drag-turnable, and a static image role
+         would tell a screen reader the opposite. The label describes what is on it; the turn is
+         reachable from the keyboard (arrows, 0 to reset) for anyone who cannot drag. -->
+    <canvas id="gl"
+            aria-label="A gilt-framed oil painting of the ruined Kreuzkirche in Dresden, reconstructed in 3D. Drag, or use the arrow keys, to turn it; press 0 to reset the view."></canvas>
+    <div id="status">Loading the painting…</div>
+  </div>
+
+  <!-- Which work is hung. Two buttons rather than a <select>: there are two of them, they are the
+       page's only real choice, and a native menu would hide half of it behind a click. -->
+  <div class="picks" role="group" id="picks" aria-label="Choose a work"></div>
+
+  <!-- The label is BUILT FROM THE SCENES TABLE, not written here, because it swaps with the work.
+       Its text comes from the catalogue record where there is one and from the gallery's own wall
+       label where there is not — see the table for which is which, and edit it there. -->
+  <div class="label" id="label"></div>
+
+  <div class="hints">
+    <span><b>drag</b> to turn</span>
+    <span><b>scroll</b> or pinch to zoom</span>
+    <span><kbd>Shift</kbd>-drag or two fingers to pan</span>
+    <span id="serve" hidden><b>click</b> to send the light from there</span>
+    <button class="reset" id="reset" disabled>reset view</button>
+  </div>
+
+  <!-- The switch. Its label is its state: it always says what pressing it will do. -->
+  <div class="lamps">
+    <button class="lamp" id="lamp" type="button"><span class="bulb" aria-hidden="true"></span><span id="lampTxt">Turn off the light</span></button>
+  </div>
+
+  <!-- The other room. Not a third entry in SCENES: that table is for captured works this page's
+       splat renderer can hang, and the Painted Room is modelled rather than captured and is drawn
+       by a different renderer entirely. See the .nextroom rule above. -->
+  <div class="nextroom">
+    <a href="room/">Next room: <em>The Painted Room</em> <span class="narrow" aria-hidden="true">→</span></a>
+  </div>
+</main>
+
+<footer class="inner">
+  <p>Built with <a href="https://github.com/101arrowz/fflate" target="_blank" rel="noopener">fflate</a>;
+     the WebGL2 splat rasteriser is adapted from antimatter15's
+     <a href="https://github.com/antimatter15/splat" target="_blank" rel="noopener">splat</a>, after
+     <a href="https://www.cs.umd.edu/~zwicker/publications/EWASplatting-TVCG02.pdf" target="_blank" rel="noopener">EWA splatting</a>
+     (Zwicker et al. 2002) and
+     <a href="https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/" target="_blank" rel="noopener">3D Gaussian Splatting</a>
+     (Kerbl et al. 2023).</p>
+  <!-- The reserved-rights line covers Mingyang's own capture, code and text. The painting itself is
+       long out of copyright, and the label above is the museum's own catalogue data, credited and
+       linked to it — which is why there is no separate permission line here. -->
+  <p>&copy; 2026 Mingyang Song &middot; All rights reserved. Third-party code remains under its own licence.</p>
+</footer>
+
+<script type="module">
+// One compressed STATIC scene, hung on the page and nothing else. Renderer core (shaders, RGBA32UI
+// splat texture, bucketed depth sort) is web/demo/index.html's verbatim, itself after
+// antimatter15/splat; the decode path is shared with the SMV viewer — a static bundle's
+// reference.npz is byte-identical in layout to a GOP keyframe, so decode.js is imported rather than
+// copied, and its own './vendor/fflate.js' resolves module-relative to projects/smv/.
+// What is NOT ported from the demo: the dark viewport, the loader ring, the fullscreen button and
+// the render-settings bar. This page is a wall, not an instrument.
+import { parseNpz, buildKeyframe } from '../../projects/smv/decode.js';
+
+// The works on the wall. Everything that differs between them lives here — the bundle, the picker
+// name, the canvas's accessible description and the whole wall label — so hanging a third one is an
+// entry in this array and nothing else.
+//
+// PROVENANCE OF THE LABEL TEXT DIFFERS BETWEEN THE TWO, and that is why `refs` is per-work:
+// the Bellotto is in the museum's online catalogue and the label is reconciled against it, so it
+// cites the record. The van de Velde pair is a private loan — not in the catalogue, and not in
+// Google Arts & Culture either (both were searched) — so its label can only be the gallery's own
+// wall text, and it says so instead of linking. Do not invent an inventory number for it.
+const SCENES=[
+  {id:'kunst', url:'scenes/kunst/scene.json', pick:'Bellotto',
+   aria:'A gilt-framed oil painting of the ruined Kreuzkirche in Dresden, reconstructed in 3D.',
+   who:'Bernardo Bellotto · 1721 Venice – 1780 Warsaw',
+   what:['Rovine della Kreuzkirche di Dresda','The Ruins of the Kreuzkirche in Dresden'],
+   med:'1765 · oil on canvas · 84.5 × 107.3 cm',
+   prov:'Kunsthaus Zürich, The Betty and David Koetser Foundation, 1994 · Inv. KS 70',
+   refs:[['Kunsthaus Zürich','https://collection.kunsthaus.ch/en/collection/item/471/'],
+         ['Google Arts & Culture','https://artsandculture.google.com/asset/the-ruins-of-the-kreuzkirche-in-dresden-bernardo-bellotto/MwGFEGKLmmoojQ?hl=en']]},
+  {id:'kunst_02', url:'scenes/kunst_02/scene.json', pick:'van de Velde',
+   aria:'Two small octagonal oil panels by Esaias van de Velde, hung side by side, reconstructed in 3D.',
+   who:'Esaias van de Velde · 1587–1630',
+   what:['Dorfszene mit Brücke und Kirche, 1622',
+         'Landschaft mit Gehöft und Landweg, 1625'],
+   // +1.77° clockwise: the principal axes level the cloud, the panels' own centres are 1.77° off it.
+   // Measured, not eyeballed — support-function centres, stable to ±0.08° over 0.5–2% thresholds.
+   roll:1.77,
+   // …and then look at the midpoint of the two panels rather than at the middle of their bounding
+   // box: the right panel is the larger one (outline radius 1.51 against 1.30), so the box centre
+   // sits 0.087 to its side. Vertical is 0.000 — the roll above already levelled that.
+   centre:[-0.087,0],
+   med:'oil on oak · a pair, hung side by side',
+   prov:'On loan from a Swiss private collection, 2016 · Kunsthaus Zürich',
+   refs:[], note:'Transcribed from the gallery label'},
+];
+const canvas=document.getElementById('gl'),stage=document.querySelector('.stage'),statusEl=document.getElementById('status'),resetBtn=document.getElementById('reset');
+const labelEl=document.getElementById('label'),picksEl=document.getElementById('picks');
+function say(msg,err){statusEl.hidden=false;statusEl.textContent=msg;statusEl.classList.toggle('err',!!err);}
+const gl=canvas.getContext('webgl2',{antialias:false,premultipliedAlpha:true,alpha:true});
+if(!gl){say('This page needs WebGL2, which this browser did not provide.',true);throw new Error('no webgl2');}
+
+const VERT=`#version 300 es
+precision highp float;precision highp int;uniform highp usampler2D u_tex;uniform highp sampler2D u_sh;uniform mat4 u_proj,u_view;uniform vec2 u_focal,u_viewport;uniform vec3 u_campos;uniform bool u_hasSH;uniform float u_lowpass;
+uniform int u_shCols;   // SH codebook entries per texture row (2D-tiled so height stays within MAX_TEXTURE_SIZE)
+// The easter egg's wave, in WORLD space: a front at radius u_waveR out from u_seed, u_waveW thick.
+// Everything it has passed is drawn as a hard-edged ellipsoid squeezed to u_squeeze of its radius.
+// Idle it costs nothing to leave in: u_waveR is 0, so the phase is 0 for every splat and the
+// squeeze is 1. It is flat, not smooth — the phase is a property of the splat, not of the pixel.
+uniform vec3 u_seed;uniform float u_waveR,u_waveW,u_squeeze;
+// The bouncing light (see "the light that bounces" in the JS below). Ported from web/demo's
+// relight() MINUS its shadow cube map: that pass is six full re-renders of the cloud, and the demo
+// gets away with it only because its light re-renders when it MOVES — here the light moves every
+// frame. What is left costs nothing extra: it is per-splat work inside a pass that already runs,
+// and it is free when the room is lit, since u_lightOn is false and the branch is never taken.
+uniform highp sampler2D u_norm;   // per-splat xyz = the covariance's minor axis, w = planarity in [0,1]
+uniform bool u_lightOn;
+uniform vec3 u_lightPos,u_lightCol;
+uniform float u_intensity,u_ambient,u_specK,u_shin,u_falloff;
+in vec2 a_pos;in uint a_index;out vec4 vColor;out vec2 vPos;flat out float vPhase;
+vec3 shRest(vec3 d,int e){float x=d.x,y=d.y,z=d.z,xx=x*x,yy=y*y,zz=z*z,xy=x*y,yz=y*z,xz=x*z;vec3 r=vec3(0.0);
+ int row=e/u_shCols, b=(e-row*u_shCols)*15;   // tile (col,row): coeff k at column b+k
+ r+=-0.4886025119*y*texelFetch(u_sh,ivec2(b+0,row),0).rgb; r+=0.4886025119*z*texelFetch(u_sh,ivec2(b+1,row),0).rgb; r+=-0.4886025119*x*texelFetch(u_sh,ivec2(b+2,row),0).rgb;
+ r+=1.0925484306*xy*texelFetch(u_sh,ivec2(b+3,row),0).rgb; r+=-1.0925484306*yz*texelFetch(u_sh,ivec2(b+4,row),0).rgb; r+=0.3153915653*(2.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+5,row),0).rgb;
+ r+=-1.0925484306*xz*texelFetch(u_sh,ivec2(b+6,row),0).rgb; r+=0.5462742153*(xx-yy)*texelFetch(u_sh,ivec2(b+7,row),0).rgb;
+ r+=-0.5900435899*y*(3.0*xx-yy)*texelFetch(u_sh,ivec2(b+8,row),0).rgb; r+=2.8906114426*xy*z*texelFetch(u_sh,ivec2(b+9,row),0).rgb; r+=-0.4570457995*y*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+10,row),0).rgb;
+ r+=0.3731763326*z*(2.0*zz-3.0*xx-3.0*yy)*texelFetch(u_sh,ivec2(b+11,row),0).rgb; r+=-0.4570457995*x*(4.0*zz-xx-yy)*texelFetch(u_sh,ivec2(b+12,row),0).rgb; r+=1.4453057213*z*(xx-yy)*texelFetch(u_sh,ivec2(b+13,row),0).rgb; r+=-0.5900435899*x*(xx-3.0*yy)*texelFetch(u_sh,ivec2(b+14,row),0).rgb;
+ return r;}
+// The capture already has the gallery's own lighting baked into it, so this MULTIPLIES rather than
+// replaces: the DC colour is treated as albedo and modulated by (ambient + one point light). It is
+// not physically based and does not claim to be — nothing here removes the light the room had.
+// The normal is the gaussian's flattest direction, flipped toward the viewer (its sign is not
+// observable), and the planarity weight fades the directional term out on gaussians round enough
+// that no single direction is "the" normal — those keep their captured appearance instead of
+// picking up a lambert term off an arbitrary axis.
+vec3 relight(vec3 alb,vec3 wp,vec3 nrm,float planar){
+ vec3 rel=u_lightPos-wp;float d=length(rel);vec3 L=rel/max(d,1e-6);
+ vec3 V=normalize(u_campos-wp);
+ vec3 n=dot(nrm,V)<0.0?-nrm:nrm;
+ float f=d/u_falloff;float att=1.0/(1.0+f*f);
+ float nl=max(dot(n,L),0.0);
+ float diff=mix(1.0,nl*0.75+0.25,planar);   // 0.25 wrap: the far side dims, it does not die
+ vec3 c=alb*(u_ambient+u_lightCol*(u_intensity*att*diff));
+ if(u_specK>0.0&&nl>0.0){vec3 h=normalize(L+V);
+  c+=u_lightCol*(u_specK*planar*u_intensity*att*pow(max(dot(n,h),0.0),u_shin));}
+ return c;}
+void main(){uint i=a_index;uvec4 cen=texelFetch(u_tex,ivec2((i&0x3ffu)<<1,i>>10),0);vec3 wp=uintBitsToFloat(cen.xyz);
+ vPhase=clamp((u_waveR-distance(wp,u_seed))/u_waveW,0.0,1.0);   // assigned before every early return
+ vec4 cam=u_view*vec4(wp,1.0);vec4 p=u_proj*cam;float clip=1.2*p.w;
+ if(p.z<-clip||p.x<-clip||p.x>clip||p.y<-clip||p.y>clip){gl_Position=vec4(0.,0.,2.,1.);return;}
+ uvec4 cov=texelFetch(u_tex,ivec2(((i&0x3ffu)<<1)|1u,i>>10),0);vec2 u1=unpackHalf2x16(cov.x),u2=unpackHalf2x16(cov.y),u3=unpackHalf2x16(cov.z);
+ mat3 Vrk=mat3(u1.x,u1.y,u2.x,u1.y,u2.y,u3.x,u2.x,u3.x,u3.y);
+ mat3 J=mat3(u_focal.x/cam.z,0.,-(u_focal.x*cam.x)/(cam.z*cam.z),0.,-u_focal.y/cam.z,(u_focal.y*cam.y)/(cam.z*cam.z),0.,0.,0.);
+ mat3 T=transpose(mat3(u_view))*J;mat3 cov2d=transpose(T)*Vrk*T;
+ cov2d[0][0]+=u_lowpass;cov2d[1][1]+=u_lowpass;   // screen-space low-pass (gsplat/3DGS eps2d=0.3)
+ float mid=(cov2d[0][0]+cov2d[1][1])/2.0;
+ float rad=length(vec2((cov2d[0][0]-cov2d[1][1])/2.0,cov2d[0][1]));float l1=mid+rad,l2=mid-rad;if(l2<0.0)return;
+ vec2 dv=normalize(vec2(cov2d[0][1],l1-cov2d[0][0]));vec2 maj=min(sqrt(2.0*l1),1024.0)*dv;vec2 mn=min(sqrt(2.0*l2),1024.0)*vec2(dv.y,-dv.x);
+ float sq=mix(1.0,u_squeeze,vPhase);maj*=sq;mn*=sq;   // the squeeze: the quad spans +/-2 std-devs, so scaling it IS scaling the radius
+ vec3 base=vec3(float((cov.w)&0xffu),float((cov.w>>8)&0xffu),float((cov.w>>16)&0xffu))/255.0;float al=float((cov.w>>24)&0xffu)/255.0;
+ if(u_hasSH)base=clamp(base+shRest(normalize(wp-u_campos),int(cen.w)),0.0,1.0);   // view-dependent specular: the varnish
+ // …and then the added light, on top of the captured appearance including that varnish — the order
+ // web/demo uses, so the two pages shade the same cloud the same way.
+ if(u_lightOn){vec4 nr=texelFetch(u_norm,ivec2(int(i)&2047,int(i)>>11),0);
+  base=clamp(relight(base,wp,nr.xyz,nr.w),0.0,1.0);}
+ vColor=clamp(p.z/p.w+1.0,0.0,1.0)*vec4(base,al);
+ vPos=a_pos;vec2 c=vec2(p)/p.w;gl_Position=vec4(c+a_pos.x*maj/u_viewport+a_pos.y*mn/u_viewport,0.0,1.0);}`;
+const FRAG=`#version 300 es
+precision highp float;uniform float u_opacity,u_hardR;uniform bool u_egg;in vec4 vColor;in vec2 vPos;flat in float vPhase;out vec4 frag;
+void main(){float d2=dot(vPos,vPos);
+ // The egg's branch is on a UNIFORM, not on vPhase: fwidth() is undefined in non-uniform control
+ // flow, and a per-splat varying is exactly that. Idle, the shader is the line below and nothing more.
+ if(u_egg){float d=sqrt(d2),aa=max(fwidth(d),1e-4);
+  // soft EWA footprint -> the ellipsoid's hard silhouette out to u_hardR std-devs (1px AA), mixed
+  // by how long ago the front passed. Same hard-edge form as the SMV viewer's ellipsoid control.
+  float A=mix(exp(-d2),1.0-smoothstep(u_hardR-aa,u_hardR+aa,d),vPhase);
+  if(d2>4.0||A<=0.0)discard;float B=A*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);return;}
+ float A=-d2;if(A<-4.0)discard;float B=exp(A)*vColor.a*u_opacity;frag=vec4(B*vColor.rgb,B);}`;
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o;}
+const prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VERT));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));gl.useProgram(prog);
+const u_proj=gl.getUniformLocation(prog,'u_proj'),u_view=gl.getUniformLocation(prog,'u_view'),u_focal=gl.getUniformLocation(prog,'u_focal'),u_viewport=gl.getUniformLocation(prog,'u_viewport'),u_op=gl.getUniformLocation(prog,'u_opacity'),u_texL=gl.getUniformLocation(prog,'u_tex'),u_lowpassL=gl.getUniformLocation(prog,'u_lowpass');
+const u_shL=gl.getUniformLocation(prog,'u_sh'),u_camposL=gl.getUniformLocation(prog,'u_campos'),u_hasSHL=gl.getUniformLocation(prog,'u_hasSH'),u_shColsL=gl.getUniformLocation(prog,'u_shCols');
+const u_eggL=gl.getUniformLocation(prog,'u_egg'),u_seedL=gl.getUniformLocation(prog,'u_seed'),u_waveRL=gl.getUniformLocation(prog,'u_waveR'),u_waveWL=gl.getUniformLocation(prog,'u_waveW'),u_squeezeL=gl.getUniformLocation(prog,'u_squeeze'),u_hardRL=gl.getUniformLocation(prog,'u_hardR');
+const L_u={};for(const k of['u_norm','u_lightOn','u_lightPos','u_lightCol','u_intensity','u_ambient','u_specK','u_shin','u_falloff'])L_u[k]=gl.getUniformLocation(prog,k);
+const MAX_TEX=gl.getParameter(gl.MAX_TEXTURE_SIZE);
+// Per-splat normals, for the light. Nothing new is stored on disk for this and nothing needs to be:
+// a gaussian's flattest direction is the minor axis of its own covariance, which is quat + scale,
+// both of which the keyframe already carries. Rebuilt per work, from the CPU, once at load.
+const normTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,normTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,1,1,0,gl.RGBA,gl.FLOAT,new Float32Array(4));   // texture-complete before any scene lands
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+// xyz = unit minor axis, w = planarity = 1 - s_min/s_mid: 0 for a sphere or a needle, where no one
+// direction is "the" normal, 1 for a flat disc. Measured on the shipped clouds, the median is 0.63
+// (Bellotto) / 0.69 (van de Velde), so most splats do carry a usable one.
+function uploadNormals(){
+  const W=2048,H=Math.max(1,Math.ceil(N/W)),d=new Float32Array(W*H*4);
+  for(let i=0;i<N;i++){
+    const s=[baseScale[3*i],baseScale[3*i+1],baseScale[3*i+2]];
+    let a=0;if(s[1]<s[a])a=1;if(s[2]<s[a])a=2;                 // minor axis
+    const mid=s[0]+s[1]+s[2]-s[a]-Math.max(s[0],s[1],s[2]);    // middle of the three
+    const R=quatRotMat(baseQuat[4*i],baseQuat[4*i+1],baseQuat[4*i+2],baseQuat[4*i+3]);
+    const nx=R[a],ny=R[3+a],nz=R[6+a],L=Math.hypot(nx,ny,nz)||1,o=4*i;
+    d[o]=nx/L;d[o+1]=ny/L;d[o+2]=nz/L;d[o+3]=mid>1e-9?Math.max(0,1-s[a]/mid):0;
+  }
+  gl.bindTexture(gl.TEXTURE_2D,normTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,W,H,0,gl.RGBA,gl.FLOAT,d);}
+const shTex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,shTex);
+gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,1,1,0,gl.RGBA,gl.FLOAT,new Float32Array(4));   // 1×1 placeholder so it's texture-complete
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+let shData=null,shHas=false,shIdx=null,shCols=1;
+function uploadSH(cb){   // cb: Float32Array(entries*45) coeff-major, or null to disable SH
+  if(!cb){shHas=false;return;}
+  const K=cb.length/45|0,maxRows=Math.max(1,(MAX_TEX/2)|0);
+  shCols=Math.max(1,Math.ceil(K/maxRows));while(shCols*15>MAX_TEX)shCols--;
+  const rows=Math.ceil(K/shCols),W=shCols*15;
+  if(!shData||shData.length!==W*rows*4)shData=new Float32Array(W*rows*4);else shData.fill(0);
+  for(let e=0;e<K;e++){const col=e%shCols,row=(e/shCols)|0,ob=e*45,rb=(row*W+col*15)*4;
+    for(let k=0;k<15;k++){const o=rb+k*4,c=ob+k*3;shData[o]=cb[c];shData[o+1]=cb[c+1];shData[o+2]=cb[c+2];}}
+  gl.bindTexture(gl.TEXTURE_2D,shTex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,W,rows,0,gl.RGBA,gl.FLOAT,shData);shHas=true;}
+const vao=gl.createVertexArray();gl.bindVertexArray(vao);
+const qb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,qb);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-2,-2,2,-2,2,2,-2,2]),gl.STATIC_DRAW);
+const a_pos=gl.getAttribLocation(prog,'a_pos');gl.enableVertexAttribArray(a_pos);gl.vertexAttribPointer(a_pos,2,gl.FLOAT,false,0,0);
+const a_index=gl.getAttribLocation(prog,'a_index');const ib=gl.createBuffer();gl.enableVertexAttribArray(a_index);gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.vertexAttribIPointer(a_index,1,gl.UNSIGNED_INT,0,0);gl.vertexAttribDivisor(a_index,1);
+const tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+gl.disable(gl.DEPTH_TEST);gl.enable(gl.BLEND);gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);gl.blendEquation(gl.FUNC_ADD);
+const _f=new Float32Array(1),_i=new Int32Array(_f.buffer);
+function toHalf(v){_f[0]=v;const x=_i[0];let b=(x>>16)&0x8000,m=(x>>12)&0x07ff,e=(x>>23)&0xff;if(e<103)return b;if(e>142){b|=0x7c00;b|=((e==255)?0:1)&&(x&0x007fffff);return b;}if(e<113){m|=0x0800;b|=(m>>(114-e))+((m>>(113-e))&1);return b;}b|=((e-112)<<10)|(m>>1);b+=m&1;return b;}
+function packHalf2(a,b){return (toHalf(a)|(toHalf(b)<<16))>>>0;}
+function quatRotMat(w,x,y,z){return[1-2*(y*y+z*z),2*(x*y-w*z),2*(x*z+w*y),2*(x*y+w*z),1-2*(x*x+z*z),2*(y*z-w*x),2*(x*z-w*y),2*(y*z+w*x),1-2*(x*x+y*y)];}
+let N=0,baseCenter,baseScale,baseQuat,baseColor,texW,texH,texU32,texF32,depthIndex,needSort=false;
+function writeSplat(i,cx,cy,cz,quat,rgba){const o=8*i;texF32[o]=cx;texF32[o+1]=cy;texF32[o+2]=cz;
+ const R=quatRotMat(quat[0],quat[1],quat[2],quat[3]);const sx=baseScale[3*i],sy=baseScale[3*i+1],sz=baseScale[3*i+2];
+ const M=[R[0]*sx,R[1]*sy,R[2]*sz,R[3]*sx,R[4]*sy,R[5]*sz,R[6]*sx,R[7]*sy,R[8]*sz];
+ const s0=M[0]*M[0]+M[1]*M[1]+M[2]*M[2],s1=M[0]*M[3]+M[1]*M[4]+M[2]*M[5],s2=M[0]*M[6]+M[1]*M[7]+M[2]*M[8];
+ const s3=M[3]*M[3]+M[4]*M[4]+M[5]*M[5],s4=M[3]*M[6]+M[4]*M[7]+M[5]*M[8],s5=M[6]*M[6]+M[7]*M[7]+M[8]*M[8];
+ texU32[o+3]=shIdx?shIdx[i]:0;     // per-splat SH codebook index (shader reads cen.w)
+ texU32[o+4]=packHalf2(4*s0,4*s1);texU32[o+5]=packHalf2(4*s2,4*s3);texU32[o+6]=packHalf2(4*s4,4*s5);texU32[o+7]=rgba;}
+function buildTexture(){texW=2048;texH=Math.ceil(N/1024);texU32=new Uint32Array(texW*texH*4);texF32=new Float32Array(texU32.buffer);
+ for(let i=0;i<N;i++)writeSplat(i,baseCenter[3*i],baseCenter[3*i+1],baseCenter[3*i+2],baseQuat.subarray(4*i,4*i+4),baseColor[i]);}
+function uploadTexture(){gl.bindTexture(gl.TEXTURE_2D,tex);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32UI,texW,texH,0,gl.RGBA_INTEGER,gl.UNSIGNED_INT,texU32);}
+let counts=new Uint32Array(65536),sortSamp=null,sortDepth=null,sortBucket=null;
+// 65 536-bucket counting sort over float depths, bucket range from a 0.5–99.5 percentile sample;
+// the two saturated end buckets are re-sorted exactly.
+function sortSplats(view){if(!depthIndex||depthIndex.length!==N)depthIndex=new Uint32Array(N);
+ if(!sortDepth||sortDepth.length!==N){sortDepth=new Float32Array(N);sortBucket=new Int32Array(N);}
+ if(!N)return;
+ const v2=view[2],v6=view[6],v10=view[10],v14=view[14],P=texF32,dz=sortDepth,bk=sortBucket;
+ for(let i=0;i<N;i++){const o=8*i;const z=v2*P[o]+v6*P[o+1]+v10*P[o+2]+v14;dz[i]=z===z?z:-Infinity;}
+ const step=Math.max(1,N/8192|0),ns=Math.ceil(N/step);if(!sortSamp||sortSamp.length!==ns)sortSamp=new Float32Array(ns);
+ for(let s=0,i=0;i<N;i+=step)sortSamp[s++]=dz[i];
+ sortSamp.sort();let dlo=sortSamp[Math.floor(ns*0.005)],dhi=sortSamp[Math.floor(ns*0.995)];
+ if(!(dhi>dlo)){dlo=sortSamp[0];dhi=sortSamp[ns-1];}
+ const sc=65535/((dhi-dlo)||1);counts.fill(0);
+ for(let i=0;i<N;i++){const t=(dz[i]-dlo)*sc;const b=t>=0?(t<=65535?t|0:65535):0;bk[i]=b;counts[b]++;}
+ const st=new Uint32Array(65536);for(let i=1;i<65536;i++)st[i]=st[i-1]+counts[i-1];
+ const off0=st[0],offN=st[65535];
+ for(let i=0;i<N;i++)depthIndex[st[bk[i]]++]=i;
+ const cmp=(p,q)=>dz[p]<dz[q]?-1:dz[p]>dz[q]?1:0;
+ if(counts[0]>1)depthIndex.subarray(off0,off0+counts[0]).sort(cmp);
+ if(counts[65535]>1)depthIndex.subarray(offN,offN+counts[65535]).sort(cmp);
+ gl.bindBuffer(gl.ARRAY_BUFFER,ib);gl.bufferData(gl.ARRAY_BUFFER,depthIndex,gl.DYNAMIC_DRAW);}
+
+// ===== camera =====
+// Orbit turntable, as in web/demo — but where that page takes its up axis and opening pose from the
+// dataset's held-out camera, this one takes them FROM THE PAINTING. The bundle is pruned to the
+// canvas and its frame, so the cloud is a slab: its principal axes ARE the picture plane (measured
+// on the shipped scene: std 2.28 × 1.65 × 0.12 world units). The largest two span the picture, the
+// smallest is its normal — so a dead-on, level, centred opening view is derivable and no camera
+// block has to be embedded or kept in step. Signs are fixed by the capture: world up is -y for
+// these COLMAP scenes and the photographer stood on the -z side of the wall.
+const UP=[0,-1,0];
+let camPos=[0,0,0],halfW=1,halfH=1,fitBase=6,panMax=1;
+let roll=0;      // degrees, per work; set from the SCENES entry just before frameScene() reads it
+let centre=null; // [dw,dh] in the picture plane, likewise — see the framing block in frameScene()
+const cross3=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const norm3=a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];};
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const cam={yaw:0,pitch:0,dist:6,target:[0,0,0]};
+let home={yaw:0,pitch:0,dist:6,target:[0,0,0]};
+// The picture's own plane, kept because frameScene() is the only place it can be known: the cloud
+// is a slab, so its smallest principal axis IS the canvas normal. The easter egg drops the press
+// point onto this plane to seed its wave, which is what makes the wave start where you pressed
+// rather than at the centre of a bounding box.
+// …and the two axes that span it, which the bouncing light needs: it is a 2-D point living on this
+// plane, and (planeW, planeH) is the frame it bounces in. They are the same `w` and `h` the extents
+// are measured along, so |x| <= halfW and |y| <= halfH is exactly "inside the picture".
+let planeN=[0,0,-1],planeP=[0,0,0],planeW=[1,0,0],planeH=[0,1,0],planeFront=0;
+let _e1=[1,0,0],_e2=[0,0,1];
+function setUp(up){const n=norm3(up);UP[0]=n[0];UP[1]=n[1];UP[2]=n[2];
+  const ref=Math.abs(dot3(UP,[0,0,1]))<0.9?[0,0,1]:[1,0,0];
+  _e1=norm3(cross3(UP,ref));_e2=cross3(UP,_e1);}
+setUp(UP);
+// Cyclic Jacobi on a symmetric 3×3 packed as [a00,a01,a02,a11,a12,a22]; returns the eigenvectors as
+// columns, ordered by descending eigenvalue. Checked against numpy's SVD on the shipped cloud (axes
+// agree to 0.0000°) — a wrong basis here would open the page on a view of the painting's edge.
+function eig3(a){const A=[[a[0],a[1],a[2]],[a[1],a[3],a[4]],[a[2],a[4],a[5]]],V=[[1,0,0],[0,1,0],[0,0,1]];
+ for(let it=0;it<12;it++){let p=0,q=1,off=0;
+  for(let i=0;i<3;i++)for(let j=i+1;j<3;j++)if(Math.abs(A[i][j])>off){off=Math.abs(A[i][j]);p=i;q=j;}
+  if(off<1e-12)break;
+  const th=(A[q][q]-A[p][p])/(2*A[p][q]),t=(th>=0?1:-1)/(Math.abs(th)+Math.sqrt(th*th+1)),c=1/Math.sqrt(t*t+1),s=t*c;
+  for(let k=0;k<3;k++){const kp=A[k][p],kq=A[k][q];A[k][p]=c*kp-s*kq;A[k][q]=s*kp+c*kq;}
+  for(let k=0;k<3;k++){const pk=A[p][k],qk=A[q][k];A[p][k]=c*pk-s*qk;A[q][k]=s*pk+c*qk;}
+  for(let k=0;k<3;k++){const kp=V[k][p],kq=V[k][q];V[k][p]=c*kp-s*kq;V[k][q]=s*kp+c*kq;}}
+ const ord=[0,1,2].sort((i,j)=>A[j][j]-A[i][i]);
+ return ord.map(i=>[V[0][i],V[1][i],V[2][i]]);}
+function camBasis(){
+ const cp=Math.cos(cam.pitch),sp=Math.sin(cam.pitch),cy=Math.cos(cam.yaw),sy=Math.sin(cam.yaw);
+ const eye=[0,0,0];
+ for(let c=0;c<3;c++)eye[c]=cam.target[c]+cam.dist*(cp*(sy*_e1[c]+cy*_e2[c])+sp*UP[c]);
+ const f=norm3([cam.target[0]-eye[0],cam.target[1]-eye[1],cam.target[2]-eye[2]]);
+ const u=norm3([-(UP[0]-f[0]*dot3(UP,f)),-(UP[1]-f[1]*dot3(UP,f)),-(UP[2]-f[2]*dot3(UP,f))]);
+ return{eye,f,u,r:cross3(u,f)};}
+function viewMatrix(){const{eye,f,r,u}=camBasis();camPos=eye;
+ return[r[0],u[0],f[0],0,r[1],u[1],f[1],0,r[2],u[2],f[2],0,-dot3(r,eye),-dot3(u,eye),-dot3(f,eye),1];}
+function projMatrix(w,h,fx,fy){const zn=Math.min(0.5,Math.max(0.02,cam.dist*0.02)),zf=cam.dist*20+100;
+ return[2*fx/w,0,0,0,0,-2*fy/h,0,0,0,0,zf/(zf-zn),1,0,0,-(zf*zn)/(zf-zn),0];}
+const FOVY=1.1;
+// How far back the opening view stands, as a multiple of "the picture exactly fills the canvas".
+// 1.12 was the first value and it framed the picture tightly — too tightly: the splats at the
+// silhouette are large and nearly transparent, so they extend well past the frame's nominal edge
+// (the 99.5-percentile extents this fit is built from deliberately exclude them) and the canvas
+// clipped them into a straight cut. 1.40 is that 1.12 opened up by a further 25%, i.e. the picture
+// opens at 80% of the size it used to — enough paper around it for the soft edge to fall off on its
+// own. It is a framing choice, so it lives here rather than in the extents.
+const FIT=1.40;
+// Distance at which the whole picture fits, for the canvas's CURRENT aspect: the vertical half-angle
+// is fixed, the horizontal one follows the canvas, so a narrow phone needs to stand further back.
+function fitDist(){const a=(canvas.width/canvas.height)||1,tv=Math.tan(FOVY/2);
+ return Math.max(halfH/tv,halfW/(a*tv))*FIT;}
+function frameScene(){if(!N)return;
+ const step=Math.max(1,N/20000|0);let n=0,cx=0,cy=0,cz=0;
+ for(let i=0;i<N;i+=step){cx+=baseCenter[3*i];cy+=baseCenter[3*i+1];cz+=baseCenter[3*i+2];n++;}
+ cx/=n;cy/=n;cz/=n;
+ const m=[0,0,0,0,0,0];
+ for(let i=0;i<N;i+=step){const dx=baseCenter[3*i]-cx,dy=baseCenter[3*i+1]-cy,dz=baseCenter[3*i+2]-cz;
+  m[0]+=dx*dx;m[1]+=dx*dy;m[2]+=dx*dz;m[3]+=dy*dy;m[4]+=dy*dz;m[5]+=dz*dz;}
+ for(let k=0;k<6;k++)m[k]/=n;
+ const ax=eig3(m);
+ let up=ax[1].slice(),nr=ax[2].slice();
+ if(up[1]>0)up=up.map(v=>-v);      // world up is -y for these captures
+ if(nr[2]>0)nr=nr.map(v=>-v);      // the camera side of the wall
+ // A ROLL about the normal, in degrees, for the one thing the principal axes cannot know: what the
+ // work itself says is level. PCA levels the point CLOUD, and for a pair of panels the second axis
+ // is set by how the mass happens to sit, not by the line through their centres — on kunst_02 the
+ // two disagree by 1.8°, which is small enough to look like a mistake and large enough to see.
+ // Positive rolls the picture clockwise on screen (Rodrigues about nr, which points at the viewer,
+ // turns the camera's up anticlockwise and so the scene the other way). Measured per work, offline,
+ // from the panels' support-function centres — never guessed by eye; see CLAUDE.md.
+ if(roll){const a=roll*Math.PI/180,ca=Math.cos(a),sa=Math.sin(a),cr=cross3(nr,up);
+  up=norm3([up[0]*ca+cr[0]*sa,up[1]*ca+cr[1]*sa,up[2]*ca+cr[2]*sa]);}
+ // Extents in the frame the camera will actually use — derived from the rolled up axis rather than
+ // from the raw principal axes, so a roll cannot leave the fit measuring a box the view is not in.
+ const w=norm3(cross3(up,nr)),h=up,lenS=Math.ceil(N/step),pw=new Float32Array(lenS),ph=new Float32Array(lenS),pn=new Float32Array(lenS);
+ let s=0;for(let i=0;i<N;i+=step){const dx=baseCenter[3*i]-cx,dy=baseCenter[3*i+1]-cy,dz=baseCenter[3*i+2]-cz;
+  pw[s]=dx*w[0]+dy*w[1]+dz*w[2];ph[s]=dx*h[0]+dy*h[1]+dz*h[2];pn[s]=dx*nr[0]+dy*nr[1]+dz*nr[2];s++;}
+ const pct=(arr,q)=>{const a=arr.slice(0,s).sort();return a[Math.min(s-1,Math.max(0,Math.floor(s*q)))];};
+ const wlo=pct(pw,0.005),whi=pct(pw,0.995),hlo=pct(ph,0.005),hhi=pct(ph,0.995);
+ // How far the cloud stands proud of its own plane on the viewer's side — the frame's moulding,
+ // mostly. The bouncing light has to clear it, and a work with a deeper frame than these two would
+ // otherwise have the light travelling INSIDE its own carving. Measured here because this is the
+ // only place the plane is known; see lampWorld() for what the clearance is set to.
+ planeFront=Math.max(0,pct(pn,0.995));
+ // Where the camera looks. The extents midpoint centres the picture's BOUNDING BOX, which is not
+ // what the eye centres on when a work is two panels of unequal size: the bigger one drags the box
+ // toward it, and the pair reads as sitting off to one side. `centre` shifts the view onto what the
+ // work is actually about — for kunst_02, the midpoint of the two panels' own centres, which is
+ // 0.087 to the left of the box centre. Measured with the same support-function fit as `roll`.
+ let mw=(whi+wlo)/2,mh=(hhi+hlo)/2;
+ if(centre){mw+=centre[0];mh+=centre[1];}
+ // Half-extents are then measured ABOUT THAT CENTRE rather than as half the box, so an offset
+ // centre cannot push the far side of the picture outside the fit. With no offset the two are the
+ // same number by construction, which is why this changes nothing for a work that needs no shift.
+ halfW=Math.max(whi-mw,mw-wlo);halfH=Math.max(hhi-mh,mh-hlo);
+ const target=[cx+w[0]*mw+h[0]*mh,cy+w[1]*mw+h[1]*mh,cz+w[2]*mw+h[2]*mh];
+ planeN=nr.slice();planeP=target.slice();planeW=w.slice();planeH=h.slice();
+ setUp(up);
+ fitBase=fitDist();panMax=0.5*Math.max(halfW,halfH);
+ home={yaw:Math.atan2(dot3(nr,_e1),dot3(nr,_e2)),pitch:Math.asin(clamp(dot3(nr,UP),-1,1)),dist:fitBase,target};
+ resetView();}
+// The turn is bounded to ±45° about the opening view on BOTH axes, which is the page's one real
+// interaction rule: the capture is one pass across the front of a picture on a wall, so a free
+// turntable spends most of its range behind a slab that was never filmed at all.
+// 45 is NOT "the edge of what was observed" — measured on the 22 held-out views, the pass covers
+// ±71° of yaw but only +21°/−35° of pitch, always close in (3.1–6.4 units from the picture centre).
+// It is where the result stops holding up: at 60 the picture is oblique enough that the floaters
+// off the frame's edge come into view, and the low-elevation coverage means pitch runs out first.
+// Zoom and pan are bounded for the same reason — you cannot lose the painting off the page.
+const LIM=45*Math.PI/180;
+let touched=false;
+function markTouched(){if(!touched){touched=true;resetBtn.disabled=false;}}
+function resetView(){cam.yaw=home.yaw;cam.pitch=home.pitch;cam.dist=home.dist;cam.target=home.target.slice();
+ touched=false;resetBtn.disabled=true;}
+// Focus follows the pointer so the arrow keys work straight after a drag — but the focus RING is
+// suppressed for that path (see the .quiet rule in the CSS) and restored the moment a key is used
+// or focus leaves. Tabbing in still shows it, which is the only thing the outline exists for.
+let quietFocus=false;
+function focusQuiet(){quietFocus=true;canvas.classList.add('quiet');canvas.focus();}
+function loudFocus(){if(quietFocus){quietFocus=false;canvas.classList.remove('quiet');}}
+canvas.addEventListener('keydown',loudFocus,true);
+canvas.addEventListener('blur',loudFocus);
+resetBtn.onclick=()=>{resetView();focusQuiet();};
+
+// ===== pointer input =====
+let lx=0,ly=0;
+canvas.tabIndex=0;
+const _ptrs=new Map();let _mode=null,_pinch0=0,_dist0=0;
+// Where the press started and how far it has strayed since — measured from the ORIGIN, not summed
+// per event, because jitter accumulates and a slow drag would otherwise still count as a click.
+// This is what separates "serve the light here" from "turn the painting".
+let _pdx=0,_pdy=0,_far=0;
+const _mid=()=>{const v=[..._ptrs.values()];return[(v[0].x+v[1].x)/2,(v[0].y+v[1].y)/2];};
+const _spread=()=>{const v=[..._ptrs.values()];return Math.hypot(v[0].x-v[1].x,v[0].y-v[1].y)||1;};
+function panBy(dx,dy){const{r,u}=camBasis(),s=cam.dist*0.0015;
+ const t=[0,0,0];for(let c=0;c<3;c++)t[c]=cam.target[c]-r[c]*dx*s-u[c]*dy*s;   // u is screen-down, hence -u
+ const o=[t[0]-home.target[0],t[1]-home.target[1],t[2]-home.target[2]],l=Math.hypot(o[0],o[1],o[2]);
+ const k=l>panMax?panMax/l:1;
+ for(let c=0;c<3;c++)cam.target[c]=home.target[c]+o[c]*k;}
+function zoomTo(d){cam.dist=clamp(d,fitBase*0.42,fitBase*2.4);}
+canvas.addEventListener('pointerdown',e=>{
+ focusQuiet();canvas.setPointerCapture(e.pointerId);canvas.classList.add('drag');
+ _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(_ptrs.size===1){_mode=(e.shiftKey||e.button===2)?'pan':'orbit';lx=e.clientX;ly=e.clientY;_pdx=e.clientX;_pdy=e.clientY;_far=0;}
+ // A second finger ends any chance this was a click: a pinch that happens to finish near where it
+ // began is still a pinch, and serving the light out of one would be the page answering a gesture
+ // nobody made.
+ else if(_ptrs.size===2){_mode='pinch';_pinch0=_spread();_dist0=cam.dist;[lx,ly]=_mid();_far=Infinity;}
+ // Arm the easter egg on a plain single press only — a shift- or right-press is a pan, and a second
+ // finger is a pinch. A second finger AFTER it has fired is left alone, so you can pinch into it.
+ if(_ptrs.size===1&&_mode==='orbit')eggArm(e.clientX,e.clientY);else eggDisarm();});
+canvas.addEventListener('pointermove',e=>{
+ if(!_ptrs.has(e.pointerId))return;
+ _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(_ptrs.size===1)_far=Math.max(_far,Math.hypot(e.clientX-_pdx,e.clientY-_pdy));
+ // Measured from where the press STARTED, not per event: jitter accumulates, so a per-event
+ // threshold would let a slow drag through. Only the arming window cares — once the egg has fired,
+ // dragging turns the dissolved cloud like anything else, which is half the fun of it.
+ if(eggArmed&&(Math.abs(e.clientX-eggX)>EGG_MOVE_TOL||Math.abs(e.clientY-eggY)>EGG_MOVE_TOL))eggDisarm();
+ if(_mode==='pinch'&&_ptrs.size>=2){zoomTo(_dist0*_pinch0/_spread());
+   const[mx,my]=_mid();panBy(mx-lx,my-ly);lx=mx;ly=my;markTouched();return;}
+ if(_ptrs.size!==1)return;
+ const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;
+ if(_mode==='pan')panBy(dx,dy);
+ else{cam.yaw=clamp(cam.yaw+dx*0.006,home.yaw-LIM,home.yaw+LIM);
+      cam.pitch=clamp(cam.pitch-dy*0.006,home.pitch-LIM,home.pitch+LIM);}
+ markTouched();});
+const _drop=e=>{const mode=_mode;_ptrs.delete(e.pointerId);eggDisarm();
+ if(_ptrs.size===1){_mode='orbit';const v=[..._ptrs.values()][0];lx=v.x;ly=v.y;}
+ else if(!_ptrs.size){_mode=null;canvas.classList.remove('drag');
+  // A press that stayed still, was not a pan or a pinch, and never became the egg: that is a click,
+  // and a click serves the light. `!eggOn` covers the retreat as well as the held state, so letting
+  // go of the egg cannot also throw the light somewhere.
+  if(e.type==='pointerup'&&e.button===0&&mode==='orbit'&&!eggOn&&_far<CLICK_SLOP)lampServe(e.clientX,e.clientY);
+  eggRelease();}};
+canvas.addEventListener('pointerup',_drop);canvas.addEventListener('pointercancel',_drop);
+canvas.addEventListener('contextmenu',e=>e.preventDefault());     // right-drag is pan, not a menu
+canvas.addEventListener('dblclick',()=>resetView());
+canvas.addEventListener('wheel',e=>{e.preventDefault();eggDisarm();zoomTo(cam.dist*Math.exp(e.deltaY*0.001));markTouched();},{passive:false});
+// Keyboard: the same bounded turn, so the painting is reachable without a pointer at all.
+canvas.addEventListener('keydown',e=>{const A=0.06,K={ArrowLeft:[-A,0],ArrowRight:[A,0],ArrowUp:[0,A],ArrowDown:[0,-A]}[e.key];
+ if(K){cam.yaw=clamp(cam.yaw+K[0],home.yaw-LIM,home.yaw+LIM);cam.pitch=clamp(cam.pitch+K[1],home.pitch-LIM,home.pitch+LIM);markTouched();e.preventDefault();return;}
+ if(e.key==='0'||e.key==='Home'){resetView();e.preventDefault();}});
+// ===== the easter egg: hold, and the painting comes apart =====
+// Press and hold anywhere on the picture, without moving, and it dissolves into the gaussians it is
+// actually made of: each splat hardens from its soft EWA footprint into the ellipsoid's silhouette
+// and is squeezed, spreading out from the exact point you pressed until it has crossed the whole
+// picture. It stays for as long as the press does; letting go runs the front back the way it came
+// and the painting reassembles. Nothing on the page mentions it, which is the point.
+// It is deliberately cheap: the wave is world-space and the geometry never changes, so there is no
+// re-sort, no texture rewrite and no per-frame CPU work — four uniforms and a flat varying.
+const EGG_HOLD_MS=2000;    // how long the press has to last
+const EGG_MOVE_TOL=6;      // CSS px of slop while arming; a resting finger is never actually still
+const EGG_OUT_MS=1300;     // the front's travel time across the whole cloud, and
+const EGG_BACK_MS=2500;    // back again, at three quarters of that speed — the picture reassembling
+                           // is the part worth watching, so it is the slower half of the gesture
+const EGG_FRONT=0.22;      // thickness of the front, as a fraction of the picture's half-diagonal
+const EGG_SQUEEZE=0.45;    // what the radius is squeezed to. Below ~0.3 the splats go sub-pixel and
+                           // sparkle instead of reading as ellipsoids; at 1.0 only the edge hardens.
+const EGG_HARD_R=1.0;      // hard-edge radius in std-devs, as in the SMV viewer's ellipsoid control
+const EGG_REDUCE=matchMedia('(prefers-reduced-motion:reduce)');
+let eggOn=false,eggDir=0,eggR=0,eggTravel=0,eggW=1,eggLast=0,eggTimer=0,eggArmed=false,eggX=0,eggY=0;
+const eggSeed=[0,0,0];
+// A pointer position, dropped onto the picture plane — where on the painting you actually touched.
+// Shared by the egg (which seeds its wave there) and the light (which is served from there); it is
+// named for the plane rather than for either of them because both are just asking the same question.
+// Ray directions are built from the camera basis rather than by inverting the projection: this
+// renderer's u points DOWN the screen (the projection flips Y), so the two have to agree, and
+// building it from camBasis() is how they cannot disagree.
+function planePick(clientX,clientY){
+  const b=canvas.getBoundingClientRect();
+  const nx=(clientX-b.left)/(b.width||1)*2-1,ny=1-(clientY-b.top)/(b.height||1)*2;
+  const fy=0.5*canvas.height/Math.tan(FOVY/2),fx=fy;
+  const{eye,f,u,r}=camBasis(),sx=nx*canvas.width/(2*fx),sy=-ny*canvas.height/(2*fy);
+  const dir=[0,0,0];for(let c=0;c<3;c++)dir[c]=r[c]*sx+u[c]*sy+f[c];
+  const den=dot3(planeN,dir);
+  if(Math.abs(den)<1e-6)return cam.target.slice();
+  const t=(dot3(planeN,planeP)-dot3(planeN,eye))/den;
+  return t>0?[eye[0]+dir[0]*t,eye[1]+dir[1]*t,eye[2]+dir[2]*t]:cam.target.slice();}
+function eggDisarm(){if(eggTimer){clearTimeout(eggTimer);eggTimer=0;}eggArmed=false;}
+function eggArm(x,y){eggDisarm();if(!N)return;eggArmed=true;eggX=x;eggY=y;
+  eggTimer=setTimeout(()=>{eggTimer=0;if(eggArmed)eggFire(x==null?cam.target.slice():planePick(x,y));},EGG_HOLD_MS);}
+function eggFire(seed){
+  eggSeed[0]=seed[0];eggSeed[1]=seed[1];eggSeed[2]=seed[2];
+  const step=Math.max(1,N/20000|0);let mx=0;
+  for(let i=0;i<N;i+=step){const dx=baseCenter[3*i]-seed[0],dy=baseCenter[3*i+1]-seed[1],dz=baseCenter[3*i+2]-seed[2];
+   const d=dx*dx+dy*dy+dz*dz;if(d>mx)mx=d;}
+  mx=Math.sqrt(mx);
+  // Under reduced motion the front is made as wide as the cloud, so the change arrives everywhere
+  // at once: the same reveal, without a wave travelling across the page. The duration is fixed
+  // either way, since the speed is derived from the distance actually to be covered.
+  eggW=Math.max(1e-3,EGG_REDUCE.matches?mx:EGG_FRONT*Math.hypot(halfW,halfH));
+  eggTravel=mx+eggW;eggOn=true;eggDir=1;eggLast=performance.now();}
+// Release. Reversing the same scalar retreats the front the way it came — the far side reassembles
+// first and the point under your finger last — and it works just as well from a wave that was only
+// half way out, so letting go early is not a special case.
+function eggRelease(){if(eggOn&&eggDir>=0){eggDir=-1;eggLast=performance.now();}}
+// Swapping works clears the wave outright instead of letting it retreat: eggTravel and eggW were
+// measured on the OLD cloud, so carrying them across would animate a front sized for a picture that
+// is no longer there. The canvas is already at zero opacity by then, so nothing is seen to cut.
+function eggReset(){eggDisarm();eggOn=false;eggDir=0;eggR=0;}
+function eggStep(){if(!eggDir)return;
+  const now=performance.now(),dt=Math.min(50,now-eggLast);eggLast=now;   // clamped: a backgrounded tab must not jump the front
+  eggR+=eggDir*eggTravel*dt/(eggDir>0?EGG_OUT_MS:EGG_BACK_MS);
+  if(eggR>=eggTravel){eggR=eggTravel;eggDir=0;}
+  else if(eggR<=0){eggR=0;eggDir=0;eggOn=false;}}
+// Reachable without a pointer, like the turn is: hold the space bar. There is no press point to
+// unproject, so it seeds at the centre of what is on screen.
+canvas.addEventListener('keydown',e=>{if(e.key===' '&&!e.repeat&&!eggOn){e.preventDefault();eggArm(null,null);}});
+canvas.addEventListener('keyup',e=>{if(e.key===' '){eggDisarm();eggRelease();}});
+addEventListener('blur',()=>{eggDisarm();eggRelease();});
+
+// ===== the light that bounces =====
+// Turn the room lights off and one point light is left, travelling across the picture and relighting
+// it as it goes — brick-breaker with nothing to break. It is a toy, and it is also the most direct
+// demonstration this page can give that what hangs here is a 3-D reconstruction and not a
+// photograph: a photograph cannot be relit.
+//
+// THE BALL LIVES ON THE PICTURE PLANE, NOT ON THE CANVAS. frameScene() already derives that plane
+// from the cloud's own principal axes, so the light is a 2-D point in (planeW, planeH) bouncing
+// inside |x| <= halfW, |y| <= halfH — which is exactly the picture's own edges — held a little
+// clear of the surface along the normal. Bouncing in screen space instead would need reprojecting
+// every frame and would slide off the painting the moment anyone turned it; this cannot, and it
+// costs three multiply-adds. It is also free for the renderer: the splats do not move, so there is
+// no re-sort and no texture rewrite — the light is four uniforms.
+//
+// The constants below were MEASURED rather than guessed, on both shipped clouds, by evaluating this
+// same shading equation offline (the working is in CLAUDE.md). The one that matters is the falloff:
+// the diffuse term uses each gaussian's own minor axis as its normal, and those axes are NOT all
+// square to the canvas (|mean unit normal| is 0.50 / 0.40), so the risk was per-splat sparkle rather
+// than a pool of light. Binned over the picture, the across-the-picture variation beats the
+// splat-to-splat variation by 3.3x at this falloff and by only 1.9x at twice it — so the tighter
+// pool is not a look, it is what makes the thing read as a light at all.
+const LAMP_STAND=0.28;     // how far the light stands off the canvas, in half-heights
+const LAMP_FALL=0.30;      // inverse-square half-brightness distance, in half-diagonals
+const LAMP_INT=2.2;        // peak 1.6-2.0x albedo at the hotspot, ~1% of splats clipped: a bulb, not a wash
+const LAMP_AMB=0.10;       // what survives where the light does not reach — dim, never black (1st pct ~0.15)
+const LAMP_SPEC=0.30,LAMP_SHIN=24.0;   // Blinn-Phong off the varnish and the gilt, weighted by planarity
+const LAMP_COL=[1.0,0.96,0.90];        // multiplies the capture's own colour, so it tints rather than replaces
+const LAMP_SPEED=0.42;     // half-diagonals per second: about 4 s to cross either picture
+const CLICK_SLOP=5;        // CSS px below which a press counts as a click rather than a drag
+// The room dims rather than cutting, and this is PAIRED with the .5s colour transition on html/body
+// in the CSS above — change one and change the other. It is not decoration: the page cross-fades
+// either way, so a painting that snapped to relit while the paper was still fading would read as
+// two unrelated things happening. Ambient and intensity are ramped together, from (1, 0) — exactly
+// the captured appearance, which is what makes "off" bit-identical to before this feature existed —
+// to (LAMP_AMB, LAMP_INT).
+const LAMP_FADE_MS=500;
+const LAMP_REDUCE=matchMedia('(prefers-reduced-motion:reduce)');
+// The page's two <meta name="theme-color"> values, and they are a PAIR with the two --bg tokens in
+// the CSS above: the browser tints its own chrome from this, so a palette that moves without it
+// leaves the phone's toolbars lit while the page is dark.
+const BG_LIT='#f4f2ec',BG_DARK='#0b0c0e';
+const themeMeta=document.querySelector('meta[name=theme-color]');
+const lampBtn=document.getElementById('lamp'),lampTxt=document.getElementById('lampTxt'),serveHint=document.getElementById('serve');
+// `on` is the switch; `mix` is how far the dimmer has actually travelled, in [0,1]. Everything the
+// renderer reads is `mix`, so the light is genuinely absent at 0 — not merely turned down.
+const lamp={on:false,mix:0,x:0,y:0,vx:0,vy:0,t:0};
+let lampPos=[0,0,0];
+// A direction 25-65 degrees off the horizontal, in one of the four quadrants. Never near an axis:
+// a light sliding along the frame's edge, or straight up and down for ever, is a screensaver.
+function lampAim(){const a=(25+Math.random()*40)*Math.PI/180,q=Math.random()*4|0;
+ return[Math.cos(a)*(q&1?-1:1),Math.sin(a)*(q&2?-1:1)];}
+// Under reduced motion the light does not travel at all — it is placed and it stays, and clicking is
+// how you move it. The room still goes dark and the painting is still relit; what is removed is the
+// object that moves for ever, which is the thing that setting is actually about.
+function lampSpeed(){return LAMP_REDUCE.matches?0:LAMP_SPEED*Math.hypot(halfW,halfH);}
+function lampReset(){lamp.x=0;lamp.y=0;const[dx,dy]=lampAim(),s=lampSpeed();
+ lamp.vx=dx*s;lamp.vy=dy*s;lamp.t=performance.now();}
+// Where the light actually is. The stand-off is a fraction of the picture's height — but never less
+// than clear of the cloud's own front surface, because a picture is not flat: the frame's moulding
+// stands proud of the canvas, and on the van de Velde pair its outermost splat reaches +0.417 with
+// a nominal stand-off of 0.410, i.e. the light would graze the carving it is meant to be lighting.
+// 1.6x the 99.5-percentile front extent (not the max, which one floater can set) clears it. This is
+// inert on the Bellotto, where the fraction already wins 0.770 to 0.454 — it is here for the next
+// work hung, whose frame nobody has measured yet.
+function lampWorld(){const s=Math.max(LAMP_STAND*halfH,planeFront*1.6);
+ return[0,1,2].map(c=>planeP[c]+planeW[c]*lamp.x+planeH[c]*lamp.y+planeN[c]*s);}
+function lampStep(){
+ const now=performance.now(),dt=Math.min(50,now-lamp.t)/1000;lamp.t=now;   // clamped: a backgrounded tab must not teleport it
+ // The dimmer. Reduced motion takes it in one step — the room still changes, it just does not
+ // animate — matching how the CSS transitions are switched off for the same reader.
+ const want=lamp.on?1:0,rate=LAMP_REDUCE.matches?1:dt*1000/LAMP_FADE_MS;
+ lamp.mix=want>lamp.mix?Math.min(want,lamp.mix+rate):Math.max(want,lamp.mix-rate);
+ // It keeps travelling while it fades out, rather than freezing and then vanishing: a light that
+ // stops dead the instant the switch is thrown looks like the page dropped a frame.
+ if((lamp.on||lamp.mix>0)&&N){
+  lamp.x+=lamp.vx*dt;lamp.y+=lamp.vy*dt;
+  // Reflect about the edge it crossed, rather than pinning it there and flipping — pinning makes a
+  // light that grazes a corner sit in it for a frame, which reads as sticking.
+  if(lamp.x>halfW){lamp.x=2*halfW-lamp.x;lamp.vx=-lamp.vx;}else if(lamp.x<-halfW){lamp.x=-2*halfW-lamp.x;lamp.vx=-lamp.vx;}
+  if(lamp.y>halfH){lamp.y=2*halfH-lamp.y;lamp.vy=-lamp.vy;}else if(lamp.y<-halfH){lamp.y=-2*halfH-lamp.y;lamp.vy=-lamp.vy;}
+  // One reflection is not a proof: a dt spike, or a work swapped for a smaller one, can leave it
+  // outside the frame entirely. The clamp is what guarantees it is never lighting the page.
+  lamp.x=clamp(lamp.x,-halfW,halfW);lamp.y=clamp(lamp.y,-halfH,halfH);}
+ lampPos=lampWorld();}
+// Serving. The press is dropped onto the picture plane by the same unprojection the egg uses, so the
+// light starts under your finger and leaves in a fresh direction. It is the only thing to *do* here,
+// and it is the whole of the interaction budget this page is willing to spend on a game.
+function lampServe(clientX,clientY){if(!lamp.on||!N)return;
+ const p=planePick(clientX,clientY),d=[p[0]-planeP[0],p[1]-planeP[1],p[2]-planeP[2]];
+ lamp.x=clamp(dot3(d,planeW),-halfW,halfW);lamp.y=clamp(dot3(d,planeH),-halfH,halfH);
+ const[dx,dy]=lampAim(),s=lampSpeed();lamp.vx=dx*s;lamp.vy=dy*s;}
+function lampSet(on){
+ lamp.on=on;if(on)lampReset();
+ document.documentElement.classList.toggle('dark',on);
+ if(themeMeta)themeMeta.setAttribute('content',on?BG_DARK:BG_LIT);
+ lampTxt.textContent=on?'Turn the light back on':'Turn off the light';
+ serveHint.hidden=!on;
+ setAria();}
+lampBtn.addEventListener('click',()=>lampSet(!lamp.on));
+
+// The bulb: one additive sprite at the light, drawn after the splats and deliberately NOT occluded
+// by them. A ball you cannot find is not a ball — and since the light stands off the canvas it would
+// otherwise vanish behind the frame's moulding at the edges, which is where it spends half its time.
+const GVERT=`#version 300 es
+precision highp float;uniform mat4 u_proj,u_view;uniform vec3 u_lp;uniform vec2 u_vp;uniform float u_size;
+in vec2 a_pos;out vec2 vP;
+void main(){vec4 p=u_proj*(u_view*vec4(u_lp,1.0));
+ if(p.w<=0.0){gl_Position=vec4(0.,0.,2.,1.);return;}
+ vec2 q=a_pos*0.5;vP=q;gl_Position=vec4(vec2(p)/p.w+q*(2.0*u_size)/u_vp,0.0,1.0);}`;
+const GFRAG=`#version 300 es
+precision highp float;in vec2 vP;out vec4 frag;uniform vec3 u_col;
+void main(){float d=length(vP);if(d>1.0)discard;float g=pow(1.0-d,2.5)+(d<0.28?0.9:0.0);
+ frag=vec4(u_col*g,g);}`;
+const gprog=gl.createProgram();gl.attachShader(gprog,sh(gl.VERTEX_SHADER,GVERT));gl.attachShader(gprog,sh(gl.FRAGMENT_SHADER,GFRAG));
+gl.linkProgram(gprog);if(!gl.getProgramParameter(gprog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(gprog));
+const g_u={};for(const k of['u_proj','u_view','u_lp','u_vp','u_size','u_col'])g_u[k]=gl.getUniformLocation(gprog,k);
+const gvao=gl.createVertexArray();gl.bindVertexArray(gvao);gl.bindBuffer(gl.ARRAY_BUFFER,qb);
+{const ga=gl.getAttribLocation(gprog,'a_pos');gl.enableVertexAttribArray(ga);gl.vertexAttribPointer(ga,2,gl.FLOAT,false,0,0);}
+gl.bindVertexArray(vao);
+function drawBulb(proj,view,mix){
+ gl.useProgram(gprog);gl.bindVertexArray(gvao);
+ gl.uniformMatrix4fv(g_u.u_proj,false,proj);gl.uniformMatrix4fv(g_u.u_view,false,view);
+ gl.uniform3fv(g_u.u_lp,lampPos);gl.uniform2f(g_u.u_vp,canvas.width,canvas.height);
+ gl.uniform1f(g_u.u_size,15.0*Math.min(devicePixelRatio||1,2));
+ // The light's own colour lifted a third of the way to white: a bulb reads as a bulb by being
+ // brighter than the thing it lights, and the swatch alone gives a flat dot rather than a source.
+ // Scaled by the dimmer, since the sprite is drawn additively — so it arrives and leaves with it.
+ gl.uniform3f(g_u.u_col,...LAMP_COL.map(c=>(c*0.67+0.33)*mix));
+ gl.blendFunc(gl.ONE,gl.ONE);gl.drawArrays(gl.TRIANGLE_FAN,0,4);
+ gl.blendFuncSeparate(gl.ONE_MINUS_DST_ALPHA,gl.ONE,gl.ONE_MINUS_DST_ALPHA,gl.ONE);
+ gl.useProgram(prog);gl.bindVertexArray(vao);}
+
+function resize(){const dpr=Math.min(devicePixelRatio||1,2);
+ canvas.width=Math.max(1,Math.floor(stage.clientWidth*dpr));canvas.height=Math.max(1,Math.floor(stage.clientHeight*dpr));
+ if(!N)return;
+ const f=fitDist();
+ // Refit only while the view is untouched: after the visitor has moved, the framing is theirs.
+ if(!touched){fitBase=f;cam.dist=f;home.dist=f;}else fitBase=f;}
+addEventListener('resize',resize);
+
+// ===== draw loop =====
+let started=false,lastView=null;
+function frame(){requestAnimationFrame(frame);
+ if(!N)return;
+ eggStep();    // the wave moves the front, not the splats: no re-sort, no texture rewrite
+ lampStep();   // and the light moves through them, which is likewise not a change to the scene
+ const fy=0.5*canvas.height/Math.tan(FOVY/2),fx=fy;
+ const view=viewMatrix(),proj=projMatrix(canvas.width,canvas.height,fx,fy);
+ let moved=!lastView;if(lastView)for(let i=0;i<16;i++)if(Math.abs(view[i]-lastView[i])>1e-6)moved=true;lastView=view.slice();
+ if(moved||needSort){sortSplats(view);needSort=false;}
+ gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);gl.viewport(0,0,canvas.width,canvas.height);
+ gl.useProgram(prog);gl.bindVertexArray(vao);gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(u_texL,0);
+ gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,shTex);gl.uniform1i(u_shL,1);
+ gl.uniform3fv(u_camposL,camPos);gl.uniform1i(u_hasSHL,shHas?1:0);gl.uniform1i(u_shColsL,shCols);
+ gl.uniformMatrix4fv(u_proj,false,proj);gl.uniformMatrix4fv(u_view,false,view);
+ gl.uniform2f(u_focal,fx,fy);gl.uniform2f(u_viewport,canvas.width,canvas.height);gl.uniform1f(u_op,1.0);
+ gl.uniform1f(u_lowpassL,1.2);   // 0.3px screen-space low-pass, in this renderer's units
+ gl.uniform1i(u_eggL,eggOn?1:0);gl.uniform3fv(u_seedL,eggSeed);gl.uniform1f(u_waveRL,eggR);
+ gl.uniform1f(u_waveWL,eggW);gl.uniform1f(u_squeezeL,EGG_SQUEEZE);gl.uniform1f(u_hardRL,EGG_HARD_R);
+ gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,normTex);gl.uniform1i(L_u.u_norm,2);
+ // At mix 0 the branch is not taken at all, so the picture is bit-identical to what this page
+ // rendered before the light existed. The dimmer interpolates ambient from 1 (the capture's own
+ // appearance, untouched) down to LAMP_AMB, and the light itself up from nothing.
+ const mx=lamp.mix;
+ gl.uniform1i(L_u.u_lightOn,mx>0?1:0);
+ if(mx>0){gl.uniform3fv(L_u.u_lightPos,lampPos);gl.uniform3fv(L_u.u_lightCol,LAMP_COL);
+  gl.uniform1f(L_u.u_intensity,LAMP_INT*mx);gl.uniform1f(L_u.u_ambient,1+(LAMP_AMB-1)*mx);
+  // specK is NOT ramped: the highlight term is already multiplied by u_intensity inside relight(),
+  // so ramping both would fade the gloss in as mix squared — noticeably behind the rest of the room.
+  gl.uniform1f(L_u.u_specK,LAMP_SPEC);gl.uniform1f(L_u.u_shin,LAMP_SHIN);
+  gl.uniform1f(L_u.u_falloff,LAMP_FALL*Math.hypot(halfW,halfH));}
+ gl.drawArraysInstanced(gl.TRIANGLE_FAN,0,4,N);
+ if(mx>0)drawBulb(proj,view,mx);
+ gl.activeTexture(gl.TEXTURE0);}
+
+// ===== load =====
+// `gen` is the swap generation this fetch belongs to: a superseded download keeps draining (aborting
+// mid-stream would poison the HTTP cache for the reload that usually follows) but stops narrating,
+// so it cannot write progress for a work the visitor has already clicked away from.
+async function fetchBuf(url,gen){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);
+ const total=+r.headers.get('content-length')||0;const rd=r.body.getReader();const chunks=[];let recv=0;
+ for(;;){const{done,value}=await rd.read();if(done)break;chunks.push(value);recv+=value.length;
+  if(gen===swapGen)say(total?`Loading the painting… ${Math.round(recv/total*100)}%`:`Loading the painting… ${(recv/1e6).toFixed(1)} MB`);}
+ const out=new Uint8Array(recv);let o=0;for(const c of chunks){out.set(c,o);o+=c.length;}return out;}
+
+// The wall label, rebuilt per work. Text nodes rather than innerHTML: the titles carry an ampersand
+// and non-ASCII, and only the refs need markup at all.
+function renderLabel(s){
+  labelEl.textContent='';
+  const add=(tag,cls,txt)=>{const el=document.createElement(tag);el.className=cls;if(txt!=null)el.textContent=txt;labelEl.appendChild(el);return el;};
+  add('div','who',s.who);
+  const what=add('p','what');
+  s.what.forEach((line,i)=>{if(i)what.appendChild(document.createElement('br'));what.appendChild(document.createTextNode(line));});
+  add('p','med',s.med);
+  add('p','prov',s.prov);
+  if(s.refs&&s.refs.length){
+    const p=add('p','refs');
+    s.refs.forEach(([name,href],i)=>{
+      if(i)p.appendChild(document.createTextNode(' · '));
+      const a=document.createElement('a');a.href=href;a.target='_blank';a.rel='noopener';a.textContent=name;p.appendChild(a);});
+  }else if(s.note)add('p','refs',s.note);
+  curScene=s;setAria();
+}
+// The canvas's description is built from BOTH the hung work and the state of the room, because the
+// light changes what is on screen as much as swapping the work does — and it is a button press away,
+// so a description that only ever mentioned the painting would go stale the moment it was pressed.
+let curScene=null;
+function setAria(){const s=curScene;if(!s)return;
+  canvas.setAttribute('aria-label',s.aria+' Drag, or use the arrow keys, to turn it; press 0 to reset the view.'
+    +(lamp.on?' The room lights are off: a single point light is travelling across the picture and lighting it as it goes. Click the picture to send the light from that point.':''));
+}
+
+const gallery=document.getElementById('gallery');
+const SWAP_MS=380;          // paired with the .swap transition duration in the CSS above
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let current=-1,swapGen=0;
+
+async function loadScene(i,firstTime){
+  const s=SCENES[i],gen=++swapGen;
+  picks.forEach(b=>b.disabled=true);
+  if(!firstTime){
+    // Exit: fixed and short. Everything after this point happens behind a canvas at zero opacity,
+    // which is what lets the camera cut to the new work's framing without anyone seeing it.
+    eggReset();
+    gallery.classList.add('swap');
+    say('Hanging the other work…');
+    await sleep(SWAP_MS);
+    if(gen!==swapGen)return;
+  }
+  try{
+    const scene=await (await fetch(s.url)).json();
+    if(gen!==swapGen)return;
+    const g=scene.gops&&scene.gops[0];
+    if(!g)throw new Error('scene.json has no GOPs');
+    // A static bundle is one GOP with no offset streams. Anything animated belongs in the SMV
+    // viewer; this page has no timeline and would silently show frame 0 for ever.
+    if(scene.num_frames>1||scene.gops.length>1||Object.keys(g.streams||{}).length)
+      throw new Error('not a static bundle');
+    const rb=await fetchBuf(s.url.replace(/[^/]*$/,'')+g.reference_path,gen);
+    if(gen!==swapGen)return;
+    say('Unpacking…');
+    // Same decode as compression/decoder.py: dequantise, VQ-SH lookup, DC -> rgba.
+    const kf=buildKeyframe(parseNpz(rb),null,0);
+    baseCenter=kf.center;baseScale=kf.scale;baseQuat=kf.quat;baseColor=kf.color;
+    N=kf.numTotal;shIdx=kf.shIndex||null;uploadSH(kf.shCodebook||null);
+    roll=s.roll||0;centre=s.centre||null;
+    buildTexture();uploadTexture();uploadNormals();resize();frameScene();needSort=true;
+    // The light's frame is this work's picture plane and its bounds are this work's extents, so it
+    // is re-served at the centre rather than carried across: the two works are different sizes, and
+    // a ball mid-flight in the old one's coordinates would arrive outside the new one.
+    lampReset();
+    if(gen!==swapGen)return;
+    current=i;
+    renderLabel(s);
+    picks.forEach((b,k)=>{b.setAttribute('aria-pressed',String(k===i));b.disabled=false;});
+    statusEl.hidden=true;
+    if(!started){started=true;requestAnimationFrame(frame);}
+    // Entrance: fired by the load finishing, never by a timer that guessed how long it would take.
+    gallery.classList.remove('swap');
+  }catch(e){
+    console.error(e);
+    if(gen!==swapGen)return;
+    // A failed swap leaves the previous work hanging rather than an empty wall: the old cloud is
+    // still resident, so bringing the canvas back shows it, and only the message is new.
+    picks.forEach((b,k)=>{b.setAttribute('aria-pressed',String(k===current));b.disabled=false;});
+    if(N){gallery.classList.remove('swap');say('That one could not be loaded: '+(e.message||e),true);}
+    else say('The painting could not be loaded: '+(e.message||e),true);
+  }
+}
+
+const picks=SCENES.map((s,i)=>{
+  const b=document.createElement('button');
+  b.className='pick';b.type='button';b.textContent=s.pick;b.setAttribute('aria-pressed','false');
+  b.addEventListener('click',()=>{if(i!==current)loadScene(i,false);});
+  picksEl.appendChild(b);return b;});
+
+loadScene(0,true);
+</script>
+</body>
+</html>

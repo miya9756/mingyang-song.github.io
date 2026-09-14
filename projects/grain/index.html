@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Camera Noise Synthesis</title>
+<link rel="icon" type="image/png" sizes="64x64" href="../../assets/web_icon.png">
+<link rel="apple-touch-icon" href="../../assets/web_icon.png">
+<meta name="description" content="Digital Camera Noise Synthesis. The playground is temporarily offline ahead of a patent filing.">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta name="theme-color" content="#f2f3f4"><!-- must track --bg; Safari tints its chrome from this -->
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
+<style>
+  /* Placeholder while the playground is withdrawn ahead of a patent filing. Same palette and bones
+     as the page it stands in for (graphite + darkroom amber, Fraunces, back pill, footer), so the
+     landing card still leads somewhere that belongs to the family. */
+  :root{
+    color-scheme:light;
+    --bg:#f2f3f4; --surface:#ffffff; --ink:#16181a; --muted:#5c6266; --line:#d9dcdf; --accent:#a85a12;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);
+       font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+  .inner{width:100%;max-width:1180px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  header{background:linear-gradient(180deg,#fafbfb,#eff1f2);border-bottom:1px solid var(--line);padding:32px 0 26px}
+  .back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;font-size:13px;color:var(--muted);
+        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
+        background:rgba(255,255,255,.6);transition:color .16s,border-color .16s,background-color .16s}
+  .back:hover,.back:focus-visible{color:var(--accent);border-color:var(--accent);background:#fff}
+  .back .barrow{display:inline-block;transition:transform .16s}
+  .back:hover .barrow,.back:focus-visible .barrow{transform:translateX(-3px)}
+  h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
+     font-weight:600;font-size:clamp(32px,5vw,50px);line-height:1.02;letter-spacing:-.018em}
+  .byline{margin:14px 0 0;font-size:13.5px;line-height:1.75;color:var(--muted)}
+  .byline .authors{color:var(--ink);font-weight:500}
+  .byline .affil{display:block;font-size:12px}
+  .byline sup{color:var(--accent);font-size:.7em;padding:0 1px}
+  .byline .authors a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);transition:color .15s,border-color .15s}
+  .byline .authors a:hover,.byline .authors a:focus-visible{color:var(--accent);border-bottom-color:var(--accent)}
+  /* main.inner, not main: .inner's padding shorthand is a class rule and would zero a type rule's
+     vertical padding; padding-block keeps .inner's side gutter */
+  main.inner{flex:1;padding-block:48px 64px}
+  .notice{max-width:620px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:26px 28px}
+  .notice .kicker{margin:0 0 8px;font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+  .notice h2{margin:0 0 10px;font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:24px}
+  .notice p{margin:0;font-size:14.5px;line-height:1.65;color:var(--muted)}
+  .notice p + p{margin-top:12px}
+  .notice a{color:var(--accent)}
+  footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;color:var(--muted)}
+  @media(prefers-reduced-motion:reduce){.back,.back .barrow,.byline .authors a{transition:none}.back:hover .barrow,.back:focus-visible .barrow{transform:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="inner">
+    <a class="back" href="../../"><span class="barrow" aria-hidden="true">←</span> Mingyang Song</a>
+    <h1>Digital Camera Noise Synthesis</h1>
+    <div class="byline">
+      <span class="authors">Mingyang Song<sup>1,2</sup>, <a href="https://scholar.google.com/citations?user=gwP_ARgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Yang Zhang</a><sup>2</sup>, <a href="https://scholar.google.com/citations?user=E0fxZeUAAAAJ&amp;hl=en" target="_blank" rel="noopener">Tun&ccedil; O. Ayd&#305;n</a><sup>2</sup>, Elham Amin Mansour<sup>1,2</sup>, <a href="https://scholar.google.com/citations?user=j0nCulgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Christopher Schroers</a><sup>2</sup></span>
+      <span class="affil"><sup>1</sup>ETH Zürich, Switzerland &nbsp;&nbsp; <sup>2</sup>DisneyResearch|Studios, Switzerland</span>
+    </div>
+  </div>
+</header>
+
+<main class="inner">
+  <section class="notice">
+    <p class="kicker">Temporarily offline</p>
+    <h2>Back soon</h2>
+    <p>The interactive playground is offline while a patent application is being prepared. It will return once that is done.</p>
+    <p>The published paper is still available: <a href="https://arxiv.org/abs/2303.09199" target="_blank" rel="noopener">A Generative Model for Digital Camera Noise Synthesis</a> (arXiv:2303.09199).</p>
+  </section>
+</main>
+
+<footer>
+  <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved.</div>
+</footer>
+</body>
+</html>

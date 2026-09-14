@@ -1,0 +1,25 @@
+.DS_Store
+__pycache__/
+*.pyc
+_site/
+node_modules/
+
+# JVM/HotSpot crash dumps
+hs_err_pid*.log
+*.log
+
+# Backdrop-photo masters for the landing page. 14-15 MB each; only the derived
+# assets/bg_landscape.jpg / bg_portrait.jpg ship. See CLAUDE.md.
+assets/horizontal_bg.png
+assets/vertical_bg.png
+
+# Painted Room masters. 14-20 MB each, 86 MB the set; only the derived
+# misc/museum/room/paintings/*.webp ship. tools/bake_room_paintings.py, and CLAUDE.md.
+assets/oil_tune_*.png
+
+# The Painted Room's cached render, so tools/bake_room_type.py can re-tone without driving a
+# browser again. Derived, and minutes to rebuild rather than an asset anyone needs.
+assets/.room_type_raw.png
+
+# Film-grain analyzer spec: the calibration recipe. Never commit (withdrawn 2026-09-14 ahead of a patent filing).
+assets/grain-analyzer-spec.md

@@ -1,0 +1,2452 @@
+# CLAUDE.md
+
+Guidance for AI agents working in this repo. Read this before editing.
+
+## What this is
+
+Mingyang Song's personal site (GitHub Pages, user site). Fully static: **no backend,
+no build step, no bundler, no npm**. The only "build" is regenerating
+`projects/smv/scenes.json` from the committed scenes.
+
+The landing page is `index.html` at the root, and it links four project pages:
+`projects/smv/` (SmoothMotionVectors), `projects/spdef/` (Spline Deformation Field),
+`projects/grain/` (camera-noise playground) and `projects/tempformer/` (the sliding-block
+machine). The substantial piece is
+`projects/smv/` — a 100 % client-side player for compressed dynamic 3D-Gaussian
+("4D-GS") scenes, the results site for *SmoothMotionVectors* (SIGGRAPH 2026).
+
+**The landing page's backdrop is a full-bleed photograph now, and there are two of them.**
+`assets/bg_landscape.jpg` and `assets/bg_portrait.jpg` — Mingyang's own paintings of the lake —
+are picked by `@media(orientation:portrait)`, since `cover` throws away the long axis and the 16:9
+frame would arrive on a phone as a slice of water. They replaced the corner line drawing;
+`assets/web_bg.png` and `tools/bake_web_bg.py` are still in the repo but nothing references them.
+The masters (14-15 MB) are gitignored, only the derived JPEGs ship, and **the opacities are
+run at full strength, and the text's legibility is carried by a separate frosted sheet**
+(`.wrap::before`, a translucent `--bg` veil plus `backdrop-filter`) rather than by the painting's
+opacity — so `--art-op` / `--art-filter` are a taste control and `--sheet` is the measured one.
+Unveiled, `--fg` reads 1.18:1 over the painting's dark city, which is why no text colour and no
+`contrast-color()` can solve this and the text needs a ground instead. Full rationale in the
+*Backdrop photograph and the frosted sheet* section of `.claude/skills/site-design/SKILL.md`.
+
+Under *Elsewhere* it also links two image-backed cards: the external Pixiv gallery and
+`misc/` (**Miscellany**), a shelf for things that belong to no project. That page is not a
+project page — it borrows the landing page's warm paper rather than picking a temperature of
+its own, since it is a continuation of the personal site rather than a new destination, and it
+carries only the family bones (Fraunces headings, back pill, footer). It holds a shelf whose two
+items are `misc/museum/` (**Digital Museum**, below) and **Oil Paint Tuner** — which since
+2026-09-06 is an **outbound link** to <https://miya9756.github.io/Oil-Paint-Tuner/> rather than a
+page in this repo (see its section below). A shelf item is a `.marquee` anchor in that list and
+nothing else, so where it points is not something the pattern cares about.
+
+**The shelf is drawn, and it is drawn in CSS.** `.shelf` is a case: two hairline uprights, a thin
+board at the top (its underside — you see the edge, not the top), a 3px board under every item, and
+a soft cast shadow below each board. Three tokens carry it (`--board-top`, `--board-face`,
+`--board-cast`), so it follows the palette rather than baking colours into an asset, and it stays
+crisp at any zoom. **The boards overhang the uprights by 5px and that is the whole trick** — a box's
+edges meet at the corner, a shelf's board runs past its sides, and without the overhang the case
+reads as one more bordered rectangle. The overhang is 5px on both the top board (`left/right:-6px`
+off `.shelf`'s padding box) and the item boards (`-26px` off `.marquee`'s, which is inset a further
+20px by the case's padding) — change one and you must change the other or the case goes crooked.
+Every item brings its own board, so the case grows a compartment per entry with no extra markup.
+Kept deliberately suggested: no wood texture, no bevel, no shadow under the case itself.
+
+**THERE IS A STILL LIFE STANDING ON THE BOARD, and it is Mingyang's own drawing.**
+`assets/misc_shelf.png` — books, a pourover, a cup, and a tablecloth over the table's edge. One
+compartment holding one line of type read as a diagram of a shelf; an object standing in it is what
+makes the case furniture. It replaced a vector pile drawn in inline SVG (plum/wine/slate spines,
+sampled off `assets/grain_example.jpg`, with a leaner whose foot was solved against its neighbour's
+top corner). That drawing and its ten `--bk-*` tokens are **gone, deliberately** — an illustration
+by the site's own author beats a pastiche of one, and it is not something to reinstate.
+
+- **THE ILLUSTRATION OVERLAPS THE TITLE ON PURPOSE.** At the widest layout the last `m` of *Museum*
+  passes behind the tablecloth and the word still reads. Two flat things that merely abut read as
+  two panels; one in front of the other reads as depth, which is cheaper and truer than any shadow.
+  The cost is real and is bounded on purpose: this is the link's own label, so the overlap is kept
+  to the tail of the last word, never a whole one, and the kicker, description and call to action
+  stay clear at every width. Measured with the real Fraunces at wght 600 and the page's `-.022em`
+  tracking, since the whole placement turns on where the title actually ends (440.6px at 64px).
+- **IT IS BIGGER THAN THE COMPARTMENT AND BREAKS THE CASE, which is the effect rather than a side
+  effect.** It overhangs the right upright by 76px and its cloth drapes over the bottom board and
+  down past the footer's rule, so the object is in FRONT of the furniture instead of parked inside
+  it. A drawing that fits neatly in its box reads as an inserted picture; one that does not fit
+  reads as a thing someone put there. Two things make it work: **`z-index:1`** (`.marquee::after`
+  is the board and is the last child, so without it the board paints over the drape and cuts it in
+  a straight line at the shelf's front edge — and since `.marquee` is `position:relative` with
+  `z-index:auto` it opens no stacking context, which is also what lets the drape cross the footer
+  rule), and **`pointer-events:none`**, now required rather than tidy — the drape hangs far outside
+  the compartment and the image lives inside the `<a>`, so without it a strip of cloth over the
+  footer would be a live link target in the middle of nowhere.
+- **The hang is 132px against the 140px between the board and the page's bottom edge.** Give it
+  more and the page grows a few pixels of scroll for a decoration: an absolutely positioned box
+  still counts toward scrollable overflow, and the footer's own padding is all that absorbs it.
+- **The PNG is cropped to its ink, which is what keeps every offset meaningful.** They are measured
+  from the cloth's real lowest fold and the drawing's rightmost ink, not from whatever transparent
+  margin the artwork carried (the master is A4, 2480x3508, with the drawing floating inside it).
+  `tools/bake_shelf_still.py` crops to the alpha bounding box and downscales to 2x the 360 CSS px
+  the page paints.
+- **It is NOT quantised, unlike `assets/web_bg.png` — do not reuse that script's FASTOCTREE step.**
+  That asset is line art, which quantises almost losslessly. This is a painting whose tablecloth is
+  a wide smooth gradient: at 192 colours the mean error is a respectable 2.1/255, but it lands
+  exactly where the eye reads a smooth surface, and the cloth breaks into blotchy contour patches
+  with the ink speckling along its edges. 532 KB unquantised is in family with the rest of
+  `assets/` (smv_teaser 564 KB, web_bg 490 KB). If the page must get lighter the answer is WebP
+  (~113 KB, same size, no banding), not fewer colours.
+- **`.marquee` is a bottom-aligned flex column** because the compartment is now taller than its
+  type (`min-height` is set by the still life): everything in a case rests on the same board rather
+  than hanging from the shelf above. Below the breakpoint that drops the vignette there is no
+  min-height in play, so `flex-end` lays out exactly as the old block did — inert on a phone rather
+  than a second layout to keep in step.
+- Widths are 360px, then 290px below 960px, then hidden below 680px. Below the top tier the object
+  shrinks AND stops escaping, because the escape is what costs page margin — the two move together.
+  Checked against the description (one ~356px line, which it must not run under) and against the
+  viewport's right edge: 33px of margin to spare at 681px, 83px at 961px, so no width in any band
+  produces a horizontal scrollbar.
+- Nothing moves on hover, so there is nothing to add to the reduced-motion block. It keeps its
+  pointer events, unlike the drawing it replaced: it sits inside the `<a>`, so the whole
+  compartment including the object is one target.
+
+**The master is `assets/misc_asset_1.png` and is deliberately NOT committed** — same rule as
+`web_bg.png`'s master. It is 2.6 MB of A4 canvas; only the derived 720x955 asset ships. Move it out
+of the repo or leave it untracked, but do not `git add` it.
+
+**THE STILL LIFE MOVED TO THE LAST COMPARTMENT when the second item was added, and it moves again
+whenever one is added below.** Its whole effect is that it breaks the case, and only the bottom
+board has anything to break out of: left on the compartment above, the drape hangs neatly *inside*
+the shelf and, worse, paints across the next item's description, which every offset in `.still` was
+measured to keep clear. So the shelf carries **one object, at the bottom**, not one per item — a
+shelf whose every compartment holds the same still life would be a wallpaper. **A future item with a
+drawing of its own takes this slot**, and this one either moves up or goes.
+
+**Each item's title window is a per-item custom property, not a second rule.** `.mtitle` reads
+`--type-img` (and `--type-pos`), set on the `.marquee` by a `.m-<name>` class, so the clip, the
+opaque resting fill, the reveal and the descender fix are written once however many compartments
+the case grows. Both windows were measured as text on this page's paper before shipping: the
+museum's render is worst **3.5:1**, the tuner's painting worst **3.6:1**, both clearing the 3:1 bar
+large text has to meet. Raw they were 1.9:1 and **1.2:1** and neither would have passed.
+`tools/bake_oilpaint_type.py` bakes the second one — it runs the real pipeline (from
+`~/oil-paint-hack`, the only copy left) on the tuner's own sample, blends the result toward `--ink`
+and puts the chroma back, and **measures the JPEG it wrote
+rather than the array it encoded** (the encode costs 0.33 of a ratio at the worst pixel, which is a
+bright edge where ringing lands exactly where the margin already is), deleting the file and exiting
+non-zero if it lands under 3:1.
+
+**A shelf item's description must be ONE SHORT LINE** while the object stands beside it. Measured at
+681px, the tightest width the vignette survives to: the museum's ends 33px clear of it and the
+tuner's 29px. The first draft of the tuner's ran to two lines, the first of which passed *under* the
+cloth.
+
+**A shelf item is TYPE, not a tile — do not give it back the card chrome.** It was a bordered box
+with an `<h3>`, a line of prose and an arrow, which is precisely the landing page's `.card`, and
+repeating it here made the shelf read as a fourth section of published work. A `.marquee` has no
+box, no surface and no lift: hairline rules above and below, a small uppercase kicker, and the
+title set at `clamp(34px,7.5vw,64px)` Fraunces so the words *are* the object.
+
+The title's letterforms are a **window onto what they link to**: `assets/museum_type.jpg`, a render
+of the actual reconstruction, clipped to the glyphs with `background-clip:text` and revealed on
+hover or focus (always visible under `@media(hover:none)`, since a touch screen has no hover).
+Three things are load-bearing:
+
+- **Both the image and the clip live inside `@supports`.** Without `background-clip:text` the image
+  would paint as a plain rectangle behind the words — the failure is ugly rather than absent, which
+  is why the landing page's unguarded gradient-text usage is not the model to copy here.
+- **The resting state keeps an opaque `-webkit-text-fill-color`** over the clipped image, so the
+  picture appears only on the reveal; both `color` and `-webkit-text-fill-color` are set and
+  transitioned, per the site rule that Safari ignores `color` alone on clipped text.
+- **`padding-bottom:.16em` with `margin-bottom:-.16em` is ONE declaration in two halves, and it is
+  what keeps the `g` of *Digital* whole.** The clip paints inside the padding box; `line-height:1`
+  makes that box 1em tall against Fraunces's ~1.24em ascent-to-descent, so the bottom ~.12em of
+  every descender falls outside it and receives no image — invisible at rest, hollow on hover. The
+  padding grows the paint area, the negative margin takes the space straight back, so the
+  description below does not move. Both are in `em`, so the `clamp()`ed title carries it to every
+  width. Removing either half brings the bug back or shifts the layout.
+- **The fill was measured as TEXT before shipping**, because every pixel of it is a glyph on
+  `#f4f2ec` paper: blended toward `--ink` at 0.45 with saturation restored, it comes out at worst
+  **3.5:1**, median **10.3:1**, so it clears the 3:1 bar large text must meet even at the brightest
+  point of the painting. Re-measure if the render is replaced — the raw render was 1.9:1 and would
+  have failed. It is built by the offline preview renderer, not by the page. Its cover is
+`assets/misc_card.jpg`, applied by a `.card.art.misc` modifier that overrides the image and focal
+point only — the scrim, the hover drift and the text colours stay shared with the Pixiv card.
+
+## `misc/museum/` — two works, hung one at a time
+
+**`SCENES` is the wall.** Everything that differs between works — the bundle URL, the picker name,
+the canvas's `aria-label` and the entire wall label — is one entry in that array at the top of the
+module, and the label is *built* from it (`renderLabel`) rather than written in the markup. Hanging
+a third work is an entry and nothing else. The two currently hung:
+
+| | `kunst` | `kunst_02` |
+| --- | --- | --- |
+| work | Bellotto, *Ruins of the Kreuzkirche*, 1765 | Esaias van de Velde, a **pair** of octagonal panels, 1622 & 1625 |
+| capture | 33.6 s video, 170 frames registered | video, 170 of 200 frames registered |
+| gaussians | 94,148 fitted → **86,277** pruned | **24,719** pruned |
+| bundle | 2.4 MB | 0.77 MB |
+| roll | none | +1.77° (panel centres) |
+| label source | the museum's catalogue records | **the gallery's wall label only** |
+
+**A third work was staged and then dropped.** `kunst_03` (Jan van Goyen, *Fischerboote beim Abrüsten
+am Abend*, 1655, 42,877 gaussians, 1.25 MB, from
+`/cluster/scratch/misong/4dre/static/kunst_03/bundle_pruned_packed`) was hung on 2026-08-12 and
+removed the same day: the capture itself is deficient, not the framing. The bundle is still in
+scratch, so re-staging is the usual two commands if it is ever re-captured — but do not put the old
+capture back.
+
+**`kunst_02` is a private loan, and that is why it carries no links.** Its plaque reads *Leihgabe
+Schweizer Privatsammlung, 2016*, and the Kunsthaus's own site explains what that is: the **Knecht
+Collection**, 45 Dutch and Flemish old masters that came to the museum in 2016 as a permanent loan
+from a private collection and hang in the Moser building. It does **not** name the individual works,
+and the museum's online catalogue lists what it *owns* — so this pair cannot be cited from a record,
+and its label is the gallery's wall text, marked as such. Do not upgrade that inference into a
+citation. (The same line was on the dropped `kunst_03` plaque, so expect it again on that wall.)
+
+**The labels are sourced differently and the page says so.** The Bellotto is in the Kunsthaus
+online catalogue, so its label is reconciled against it and cites it. The van de Velde pair is
+*Leihgabe Schweizer Privatsammlung, 2016* — a private loan, which is **not** in the museum's online
+collection (that lists owned works) and **not** in Google Arts & Culture either; both were searched
+on 2026-08-12 and neither has it. So that entry carries `refs:[]` and a `note` reading *Transcribed
+from the gallery label*, which `renderLabel` shows in place of the links. **Do not invent an
+inventory number for it** — a web search will offer a plausible-looking `D.2016-…` accession that no
+primary source confirms.
+
+Two smaller things about that label: the German titles' first words (*Dorf*szene, *Landsch*aft) are
+**reconstructed** — every capture frame cuts the plaque's left edge — from the visible fragments plus
+the English lines beside them, and the reading is consistent but not photographed. And the pair is
+**public domain regardless of the loan**: van de Velde died in 1630, and owning a panel is not owning
+a copyright in it. What a loan can carry is the gallery's *photography policy*, which is house rules
+between the visitor and the museum, not a licensing question the page can settle.
+
+A **static** Gaussian-splat capture of a framed Bellotto in a gallery, hung and turnable — plus one
+thing it can do that a photograph cannot, which is be relit (see the bouncing-light entry below).
+Provenance, since none of it is stated on the page any more (see the *keep it a card* note below):
+a **33.6 s handheld video** (`/cluster/scratch/misong/datasets/my_static/kunst.mp4`) → 200 frames
+sampled, blurriest 15 % dropped, **170 registered** by COLMAP (all of them; `preprocess_meta.json`
+records this) → **94,148 gaussians fitted, 86,277 after pruning** the wall away → **2.4 MB**
+(`reference.npz`, 2,396,760 bytes). Do not describe the capture as photographs; it is one video pass. Ported on 2026-08-11 from
+`~/4d-relight/web/demo/` (`index.html` + `build_demo.py`), scene staged from
+`/cluster/scratch/misong/4dre/static/kunst/bundle_pruned_packed`. The renderer core (shaders,
+`RGBA32UI` splat texture, full-range bucket sort) is that page's verbatim; the **decode path is
+imported, not copied** — `../../projects/smv/decode.js`, whose own `./vendor/fflate.js` resolves
+module-relative, so there is one copy on disk. No ffmpeg: a static bundle is one GOP with no
+offset streams, so nothing on this page touches wasm.
+
+- **The bundle is the PRUNED one — the gallery wall was removed before packing.** That is what the
+  whole page design rests on: the splats stop at the gilt frame's outer edge, so the painting can
+  hang on the paper with **no canvas frame at all** — no border, no radius, no dark viewport box.
+  The GL context is `alpha:true` + `premultipliedAlpha:true` cleared to `(0,0,0,0)`, for the reason
+  `field.html` documents: the splat blend is a front-to-back `under` operator, so an opaque clear
+  leaves `DST_ALPHA` at 1 and multiplies every splat by zero. Staging an unpruned bundle here would
+  put a rectangle of wall back on the page and the design would have to change with it.
+- **The opening view is derived FROM THE PAINTING, not from a dataset camera**, which is why
+  `scene.json` carries `"camera": null` and none has to be embedded or kept in step. The pruned
+  cloud is a slab (measured on the shipped scene: std **2.28 × 1.65 × 0.12**), so its principal
+  axes *are* the picture plane: the largest two span the picture, the smallest is its normal.
+  `frameScene()` runs a **cyclic Jacobi eigensolver on the 3×3 covariance** (`eig3`) and reads the
+  up axis, the normal, the 0.5/99.5-percentile extents and hence the fit distance off it. Signs are
+  fixed by the capture: world up is `-y` for these COLMAP scenes, and the photographer stood on the
+  `-z` side of the wall. **`eig3` was checked against numpy's SVD on the shipped cloud — axes agree
+  to 0.0000°.** Re-check it the same way if it is touched; a wrong basis opens the page on the
+  painting's edge and nothing else would catch it.
+- **`roll` is the one thing the principal axes cannot know, and it is measured, not eyeballed.**
+  PCA levels the point *cloud*; for a pair of panels the second axis is set by how the mass happens
+  to sit, so it can disagree with the line through the panels' own centres — on `kunst_02` by
+  **1.77°**, small enough to read as a mistake and large enough to see. The `SCENES` entry carries
+  `roll` in degrees and `frameScene()` rotates the up axis about the normal (Rodrigues) before
+  anything else is derived from it, so the extents and the fit follow the rolled frame rather than
+  measuring a box the view is not in. **Positive is clockwise on screen** — `nr` points at the
+  viewer, so turning the camera's up anticlockwise turns the scene the other way.
+  **How the number is obtained depends on what the work is, and there are two recipes.**
+
+  *A single rectangular frame — the recipe to use for the next one, validated on the dropped
+  `kunst_03`:* measure the frame's own edges, by sweeping the rotation and taking the angle whose
+  robust (0.5/99.5) bounding box has the **smallest area** — a rectangle's own axes are the ones
+  that bound it tightest. A second, independent estimator agreed to the sample step there: the angle
+  maximising the share of the outline lying within a thin band of the box edges. At that angle the
+  box was **13.2 % tighter** than at the PCA angle, i.e. PCA was 7.8° out — deep carved mouldings
+  put a frame's mass nowhere near its silhouette, which is exactly when PCA fails. The minimum was
+  sharp to about ±0.5°, and applying the roll returned a residual of +0.000° (against −15.650° with
+  the sign flipped). A single rectangle needs no `centre`: once level, the extents midpoint and the
+  fitted rectangle's centre agreed to 0.0001.
+
+  *A pair of panels (`kunst_02`, +1.77°):* there is no single rectangle to fit, so use the line
+  through the two panels' centres. Split the cloud at the widest gap along the wide axis, then fit
+  each panel's centre by its **support function** (the midpoint of the projection onto each of 36
+  directions, least-squares solved). That is content-independent,
+  which matters — a brightness centroid is pulled by whichever painting has more sky, and the plain
+  centroid is pulled by whichever has more frame; on this pair those two estimators give +0.3° and
+  −0.05° against the true 1.77°. **Verified by applying the page's own roll block and re-measuring:**
+  +1.77° leaves a residual of 0.013° (0.05 px), 0° leaves 1.774° (7.6 px), and the wrong sign
+  doubles it to 3.54°. At `roll:0` the new derivation reproduces the old half-extents to 4e-16 on
+  both works, so adding this changed nothing about the Bellotto.
+- **`centre` is its counterpart for where the camera LOOKS**, and it exists for the same reason: the
+  extents midpoint centres the picture's bounding *box*, which is not what the eye centres on when a
+  work is two panels of unequal size. `kunst_02`'s right panel is the larger (outline radius 1.51
+  against 1.30), so the box centre sits **0.087 to its side** of the midpoint between the two
+  panels' own centres; `centre:[-0.087,0]` shifts the view onto that midpoint. The vertical
+  component is 0.000 — `roll` had already levelled it. Same support-function measurement, stable to
+  ±0.003 over 0.5–2% thresholds. **Verified end to end**: with both applied, the midpoint of the two
+  panel centres lands on the canvas centre to **0.0 px**, against (−6.8, +3.5) px with neither.
+  Two things about the implementation:
+  - **The half-extents are measured about the view centre, not as half the box**
+    (`max(hi-m, m-lo)`), so an offset centre can never push the far side of the picture outside the
+    fit. With no offset the two expressions are equal by construction, which is why this is inert on
+    a work that needs no shift.
+  - That does cost a little framing: `kunst_02`'s halfW goes 2.893 → 2.980 and the camera stands
+    back 4.95 → 5.10, i.e. the pair arrives about 3 % smaller. That is the correct trade — it is
+    what guarantees nothing clips — and not a number to tune out.
+- **The turn is clamped to ±45° on both axes** about that opening view (`LIM`), and zoom
+  (0.42–2.4× fit) and pan (`panMax`) are bounded too. The capture is a shallow arc in front of one
+  wall: a free turntable spends most of its range showing the back of a slab no photograph ever
+  saw. It was 60° first and came down after looking at it — at 60 the floaters off the frame's edge
+  come into view, so the limit is set by where the reconstruction stops holding up, not by a round
+  number. **It is not the edge of what was observed, and the page must not claim that it is** — that
+  claim was on the page and was wrong. Measured on the 22 held-out views: the pass covers **±71° of
+  yaw** but only **+21°/−35° of pitch**, always close in (3.1–6.4 units from the picture centre,
+  against an opening distance of 6.3). So yaw is bounded well inside the observed arc and pitch is
+  the axis that actually runs out. Re-measure if the scene is re-captured or re-pruned.
+- **`FIT` (1.40) is the opening framing and is deliberately loose.** It was 1.12, i.e. the picture
+  just filling the canvas, and that clipped the silhouette: the outermost splats are large and
+  nearly transparent, so they reach well past the 99.5-percentile extents the fit is computed from,
+  and the canvas edge cut them off in a straight line. 1.40 opens that out by a further 25% — the
+  picture arrives at 80% of the size it did — so the soft edge falls off on paper instead. It is a
+  framing constant, not a property of the scene, which is why it is not folded into the extents. `resetView()` is the counterpart — bound to the *reset view* button, double-click, `0` and
+  `Home` — and `touched` is what makes `resize()` refit only while the visitor has not moved yet.
+- Keyboard arrows turn it under the same clamp, so the object is reachable without a pointer. The
+  canvas deliberately carries **no `role="img"`** (it is focusable and drag-turnable; a static image
+  role would say the opposite) and `#status[hidden]{display:none}` is load-bearing — `display:flex`
+  on the author rule would otherwise outrank the UA's `[hidden]`.
+- **There is an easter egg, and it is NOT documented on the page.** Press and hold for two seconds
+  without moving and the picture comes apart into the gaussians it is made of: each splat hardens
+  from its soft EWA footprint to the ellipsoid's silhouette and is squeezed to `EGG_SQUEEZE` of its
+  radius, spreading out from the press point until it has crossed the whole picture. It holds while
+  the press does; releasing runs the front back the way it came and the painting reassembles. Do
+  **not** add it to the `.hints` row or the canvas's `aria-label` — that row is the visitor-facing
+  contract for the controls, and an egg named in it is not an egg. Everything tunable is a named
+  constant in one block (`EGG_HOLD_MS`, `EGG_OUT_MS`/`EGG_BACK_MS`, `EGG_FRONT`, `EGG_SQUEEZE`,
+  `EGG_HARD_R`); `EGG_SQUEEZE` is the one to nudge if the dissolved state reads wrong — too low and
+  the splats go sub-pixel and sparkle, at 1.0 only the edge hardens. What is load-bearing:
+  - **It is free when idle, so the uniforms LOOK dead and are not.** `u_waveR` is 0, so every
+    splat's phase clamps to 0 and the squeeze is 1 — the picture is bit-identical to before the egg
+    existed. Do not delete `u_seed`/`u_waveR`/`u_waveW`/`u_squeeze` as unused, and do not fold the
+    phase into a CPU pass: nothing about the scene changes, so there is no re-sort, no texture
+    rewrite and no per-frame CPU work at all.
+  - **The fragment branch is on the `u_egg` UNIFORM, never on `vPhase`.** `fwidth()` is undefined in
+    non-uniform control flow and a per-splat varying is exactly that, so the hard-edge term cannot be
+    computed under `if(vPhase>0.0)`. Same hard-edge form as the SMV viewer's ellipsoid control;
+    `vPhase` is `flat` on both sides and nothing here checks that they stay in step.
+  - **The squeeze is `maj`/`mn` scaled in the vertex shader**, which is the radius: the quad spans
+    ±2 std-devs, so scaling the quad scales the footprint. It squeezes past the screen-space
+    low-pass too, which is what makes the splats separate instead of merely hardening.
+  - **The wave is seeded on the PICTURE PLANE, not in screen space** — the press point is
+    unprojected onto `planeN`/`planeP`, which `frameScene()` stores from the same principal axis the
+    opening view is derived from. The ray is built from `camBasis()` rather than by inverting the
+    projection, because this renderer's `u` points *down* the screen and the two have to agree.
+    **Checked**: round-tripped against the renderer's own projection over 2000 random poses, tilted
+    planes and non-square canvases — worst error 1.6e-14 world units. Re-check it the same way if it
+    is touched; a sign error seeds a mirrored point and still looks like a wave.
+  - **Movement cancels the ARMING only.** The threshold is measured from where the press started,
+    not per event (jitter accumulates, and a per-event test lets a slow drag through), and once the
+    egg has fired dragging turns the dissolved cloud like anything else — which is half the point of
+    it. A second finger disarms the wait but is left alone after it has fired, so you can pinch in.
+  - **Under `prefers-reduced-motion` the front is widened to the whole cloud**, so the change
+    arrives everywhere at once: the same reveal without a wave travelling across the page. The
+    duration is unchanged either way, since the speed is derived from the distance to be covered.
+  - **The four `-webkit-touch-callout`/`user-select`/`tap-highlight` declarations on `#gl` are part
+    of the feature.** A two-second press is also what a touch OS reads as *select this*, and it
+    raised iOS's callout and magnifier over the painting; `preventDefault()` on `pointerdown` does
+    not stop it. Android's long-press menu is refused by the `contextmenu` handler that was already
+    there for right-drag. Same lesson, same four declarations, as the SMV viewer's movement pad.
+  - Holding **space** does the same thing from the keyboard, seeded at the centre of what is on
+    screen since there is no press point to unproject.
+  - **The shaders ARE glslangValidator-checked** (see the bouncing-light entry above; this said
+    otherwise while the box had no network). A compile error here throws at module top level and
+    leaves the page sitting on *Loading the painting…* for ever, so run the validator over all four
+    if you touch them — the Khronos release tarball is a `curl` away:
+    `curl -sL github.com/KhronosGroup/glslang/releases/download/16.5.0/glslang-16.5.0-linux-x86_64-release.tar.gz | tar xz`.
+- **The swap is three phases, not one animation, because the wait is a real download.** Changing
+  works fetches and decodes 0.8–2.4 MB, so a single timed transition would either end on an empty
+  wall or sit there after the work was ready. `loadScene()` is: a **fixed exit** (`SWAP_MS`, paired
+  with the `.swap` transition in the CSS — change one, change the other), an **indeterminate hold**
+  during which the status line narrates the download, and an **entrance fired by the load finishing**.
+  Only `opacity`/`transform` are animated, both compositor-only, so the transition costs the
+  renderer nothing. Four things fall out of it and are load-bearing:
+  - **The camera cut happens at zero opacity.** `frameScene()` re-frames on the new work's own
+    principal axes, which is a hard jump; it is invisible because it runs while the canvas is
+    faded out. Never move it after the fade-in.
+  - **`swapGen` guards every await.** Clicking the other work mid-load must not let the abandoned
+    one write into the page. A superseded fetch is left to drain rather than aborted (aborting
+    mid-stream poisons the HTTP cache for the reload that usually follows) but stops narrating —
+    hence `fetchBuf(url, gen)`.
+  - **A failed swap leaves the previous work hanging.** The old cloud is still resident, so the
+    catch removes `.swap` and shows the message over it, rather than emptying the wall.
+  - **`eggReset()` runs at the swap, not `eggRelease()`.** `eggTravel`/`eggW` were measured on the
+    old cloud; letting the wave retreat across the new one would animate a front sized for a
+    picture that is no longer there.
+- **THE LIGHT BOUNCES, AND THAT IS THE ONE THING ON THIS PAGE THAT IS A GAME.** *Turn off the
+  light* takes the whole room dark and leaves one point light travelling across the picture,
+  relighting it in real time — brick-breaker with nothing to break. Relighting needs **nothing new
+  on disk**: the normal is the minor axis of each gaussian's own covariance, i.e. quat + scale,
+  both of which the keyframe already carries, so `uploadNormals()` derives it on the CPU at load and
+  the two shipped scenes work unchanged. `relight()` in the vertex shader is `web/demo`'s verbatim
+  **minus its shadow cube map** — that pass is six full re-renders of the cloud, and the demo gets
+  away with it only because its light re-renders when it *moves*; here the light moves every frame.
+  What is load-bearing:
+  - **The ball lives on the PICTURE PLANE, not on the canvas.** It is a 2-D point in
+    `(planeW, planeH)` — the same axes `frameScene()` measures the extents along — bouncing inside
+    `|x| <= halfW, |y| <= halfH`, which is exactly the picture's own edges. Bouncing in screen space
+    would need reprojecting every frame and would slide off the painting the moment anyone turned
+    it. It is also free for the renderer: the splats do not move, so no re-sort and no texture
+    rewrite — the light is four uniforms.
+  - **The constants were measured, not chosen, and the falloff is the one that matters.** The
+    diffuse term uses each gaussian's minor axis as its normal, and those axes are *not* square to
+    the canvas (`|mean unit normal|` = 0.50 / 0.40), so the risk was per-splat sparkle rather than a
+    pool of light. Binned over the picture and opacity-weighted, the across-the-picture variation
+    beats the splat-to-splat variation by **3.3× at `LAMP_FALL` 0.30** and by only **1.9× at twice
+    it** — the tight pool is not a look, it is what makes it read as a light. At the shipped
+    settings (intensity 2.2, ambient 0.10) the peak is 1.55 / 1.97 × albedo with ~1 % of splats
+    clipped, the 1st-percentile floor is 0.19 on both, and moving the light from one side to the
+    other *anti*-correlates the cell brightnesses (−0.57 / −0.70), i.e. the pool genuinely travels.
+    Re-measure with the same offline script if a work is re-pruned.
+  - **The stand-off is derived, because a picture is not flat.** `planeFront` is the 99.5-percentile
+    extent along the normal (the frame's moulding), and the light stands at
+    `max(0.28·halfH, 1.6·planeFront)`. On the Bellotto the fraction wins (0.770 vs 0.454) and the
+    clause is inert; on the van de Velde pair the nominal 0.410 would sit **behind** its frontmost
+    splat at +0.417, so it lifts to 0.469 and clears it. Zero splats end in front of the light on
+    either work — verified. **The sign was checked too**: the opening eye is +1.0000 along `+nr`,
+    so `+planeN·stand` is the viewer's side. Get that backwards and the light lights the wall.
+  - **The dimmer is a ramp, not a switch**, paired with the 0.5 s colour transition on `html`/`body`
+    in the CSS — change one, change the other. `lamp.mix` interpolates ambient from **1** (the
+    captured appearance, untouched, so "off" is bit-identical to before this existed) down to
+    `LAMP_AMB`, and the light up from nothing. `u_specK` is deliberately **not** ramped: the
+    highlight is already multiplied by `u_intensity` inside `relight()`, and ramping both fades the
+    gloss in as mix².
+  - **The dark theme is on `<html>`, not `<body>`** — `html{background:var(--bg)}` resolves the
+    variable on that element, so a class on `body` leaves the page canvas behind everything warm.
+    The script switches `<meta name="theme-color">` to match, and `BG_LIT`/`BG_DARK` are a pair with
+    the two `--bg` tokens. The accent lightens to a plum at 8.7:1 on the dark ground; the light one
+    sits at 2.4:1 there.
+  - **Under `prefers-reduced-motion` the light does not travel** — it is placed and it stays, and
+    clicking is how you move it. The room still goes dark and the picture is still relit; what is
+    removed is the object that moves for ever. The dimmer cuts rather than ramping, matching how the
+    CSS transitions are switched off for the same reader.
+  - **Clicking serves it**, and the click/drag test is `_far` measured from where the press started
+    (not summed per event, and `Infinity` the moment a second finger lands). It shares `planePick()`
+    with the easter egg — the function is named for the plane rather than for either caller, because
+    both are asking the same question of the same geometry.
+  - **The shaders ARE glslangValidator-checked now** (16.5.0): all four — the splat pair and the
+    bulb pair — compile clean as `#version 300 es` and both pairs link, and a deliberate typo was
+    confirmed to fail. The note below saying otherwise applied when there was no network on the box.
+- **The easter egg is deliberately NOT the swap transition.** Dissolving the old work into its
+  gaussians and assembling the new one out of them is the obvious and prettiest thing to do here,
+  and it would spend the egg: a discovery that fires on every click stops being one. If that trade
+  is ever judged worth it, the swap is the only place to change — hold the dispersed state through
+  the load instead of fading, i.e. `eggFire()` on exit and let the return pass play on entry.
+- **Keep it a card, not a paper.** The page had a paragraph under the picture stating the capture
+  and compression numbers; it was deleted on purpose — this is a shelf item, and a methods note
+  turns it into a project page. So the numbers live in this file, and the page carries only the
+  wall label, the hints and the credits. Do not put a technical paragraph back.
+- **Deliberately not ported from the demo:** the dark viewport, the loader ring and timer, the
+  fullscreen button, the fps line, and the render-settings bar (specular SH degree, hard ellipsoids,
+  radius). SH is simply always full `l3` — `u_shBands` and the hard-ellipsoid branch are gone from
+  the shaders rather than left unreachable. This page is a wall, not an instrument. The demo's
+  **relight controls** are not ported either, for the same reason: the whole `#lightbar` (intensity,
+  colour, ambient, gloss, shadows, show-bulb, drag-aims-light) is one button here, and the values
+  behind it are constants at the top of the module. **Do not grow it back into a panel** — if a
+  number is wrong, measure it and change the constant.
+- **The wall label comes from the catalogue records, not from the plaque.** It was first transcribed
+  off the gallery plaque visible in the capture frames, and that version was wrong in the ways a
+  half-legible photograph will be: the German title as the primary one, no date, no dimensions, no
+  inventory number and the foundation mistaken for the owning institution. It is now
+  Bernardo Bellotto (1721 Venice – 1780 Warsaw), *Rovine della Kreuzkirche di Dresda* / *The Ruins
+  of the Kreuzkirche in Dresden*, 1765, oil on canvas, 84.5 × 107.3 cm, **Kunsthaus Zürich, The
+  Betty and David Koetser Foundation, 1994, Inv. KS 70** — reconciled against the two records the
+  page links under the label ([collection.kunsthaus.ch item 471](https://collection.kunsthaus.ch/en/collection/item/471/)
+  and Google Arts & Culture). Edit that text from the record, never from the capture frames. The
+  two links under the label are titled by their **source** (*Kunsthaus Zürich*, *Google Arts &
+  Culture*) rather than by what they are, so the label cites where its data came from.
+  As a sanity check the reconstruction agrees with the record: the cloud's in-plane extents are
+  1.261:1 against the catalogue canvas's 107.3 : 84.5 = 1.270:1, the small shortfall being the
+  ornate frame, which is included in the cloud and slightly squarer than the canvas.
+  The painting is long out of copyright;
+  the footer's reserved-rights line covers the capture, the code and the text, and the *Built with*
+  block (fflate, antimatter15's `splat`, EWA splatting, 3DGS) is load-bearing beside it.
+
+Re-stage a scene with the demo's builder, then copy it in — there is no `scenes.json` here, the page
+names its scenes in the `SCENES` table:
+
+```bash
+# NAME=PATH pins the staged folder name, which matters when re-staging a work from a differently
+# named bundle: kunst_02 is on its SECOND prune (bundle_pruned_02_packed, floaters off the picture
+# plane removed), and without the prefix the builder would slug a new folder from the bundle dir.
+conda run -n 4dre python ~/4d-relight/web/demo/build_demo.py \
+  --bundle kunst_02=/cluster/scratch/misong/4dre/static/kunst_02/bundle_pruned_02_packed
+# then copy web/demo/scenes/<name>/ -> misc/museum/scenes/<name>/ and add a SCENES entry
+```
+
+**Re-pruning a work means re-checking its framing**, since the opening view is derived from the
+0.5/99.5-percentile extents and pruning moves them. For this re-prune the fit came out at 4.95
+against the previous 4.96 (half-extents 2.890 × 1.464, was 2.898 × 1.547), i.e. no visible change —
+but a heavier prune could shift it enough to be worth a look.
+
+**A new work must be checked against the two sign conventions before it is hung**, since the opening
+view is derived rather than embedded: world up is `-y`, and the camera stood on the `-z` side. The
+second is the one that can fail — verify it by dumping the dataset's camera centres and comparing
+them with the cloud's centroid along the normal (for `kunst_02`: cameras at z ∈ [−4.4, 1.4] against
+panels at z = 5.14 ✓). Get the sign wrong and the page opens on the back of the panels.
+
+**There is no `node` on this box, so the module is syntax-checked with `esprima`** — a top-level
+syntax error throws before anything renders and leaves the page on *Loading the painting…* for ever,
+which no other check here would catch:
+
+```bash
+pip install --target /tmp/pylibs esprima
+PYTHONPATH=/tmp/pylibs python3 - <<'PY'
+import re, esprima
+src = open('misc/museum/index.html', encoding='utf-8').read()
+code = re.search(r'<script type="module">(.*?)</script>', src, re.S).group(1)
+esprima.parseModule(code); print('module ok')
+PY
+```
+
+Do **not** pass `--scene_config`: embedding a held-out camera would override nothing (the page
+ignores `scene.camera`) but it would suggest the framing comes from the dataset when it does not.
+`reference.npz` is Git LFS, per the repo-wide `*.npz` rule.
+
+The viewer pipeline, all in the browser:
+1. keyframe `reference.npz` → unzipped + dequantised with **fflate** (`decode.js`)
+2. per-GOP HEVC motion streams (`xyz_u.mkv`, `rot_v.mkv`) → **ffmpeg.wasm** (`decode_motion.js`)
+3. per-frame offsets applied off-thread (`dequant_worker.js`)
+4. splats rasterised in **WebGL2** (EWA splatting, after antimatter15's `splat`) — all inside `index.html`
+
+## `misc/museum/room/` — The Painted Room, and the only page here that is modelled
+
+The museum's **third room**, built 2026-09-07, and the first exhibit on this site that is not a
+capture of anything. Next door two real paintings are 3D-Gaussian reconstructions of works hanging
+in the Kunsthaus, rasterised by a hand-written WebGL2 splat renderer. Here five of Mingyang's own
+photographs — repainted by his own Oil Paint Tuner, the same tool the shelf links to — hang in a
+flooded ruin that was **modelled**: broken fluted columns, gilded frames, a lamp you aim, and water
+that answers when you touch it.
+
+**It is a separate page rather than a third entry in `SCENES`, and that was not a close call.** That
+table is the wall next door: everything in it is a bundle the splat renderer can hang, framed by PCA
+off the point cloud and captioned from a catalogue record. This room has no bundle, no point cloud
+and no catalogue; it is a different renderer end to end. The museum page reaches it through a
+`.nextroom` pill under the light switch — a **door**, not a picker entry, because putting it in
+`.picks` would promise the picture was about to swap in place.
+
+### three.js, vendored
+
+**Why a library at all**, in a repo whose every other renderer is written out longhand: the room
+needs a shadowed light, a planar reflection, physically plausible materials, tone mapping and a post
+pass *at once*, and each of those is a solved thing with a subtle wrong version. What is hand-written
+is what makes the room its own — the ripple simulation, the water's shading and the volumetric pass,
+all three in TSL and none from an addon.
+
+**It is vendored, not fetched from a CDN**, exactly as `projects/smv/vendor/` is, and it is **two
+files**: `three.webgpu.min.js` imports `./three.core.min.js`, so they live beside each other and move
+together. r185, pinned. MIT, and the licence header is intact at the top of the file.
+
+`WebGPURenderer` falls back to three's own **WebGL2 backend** automatically and silently where WebGPU
+is missing, which is why the page says out loud which one it got (`.backend`, one muted line). That
+line is not an instrument panel — see the museum's note about not growing the render-settings bar
+back — it earns its place because the whole premise of the page is the backend.
+
+### Seeing it at all — the verification story, which is the awkward part
+
+**Playwright cannot screenshot a WebGPU canvas on this box.** Verified down to a minimal three.js
+cube whose `0x223355` clear colour never reached the image: the scene renders, `requestAdapter`
+succeeds, no errors, and the screenshot comes back as page background. Reading the framebuffer back
+instead (`readRenderTargetPixelsAsync`) fails differently — *"a valid external Instance reference no
+longer exists"* — because Dawn drops the instance mid-map under SwiftShader.
+
+So **the room is previewed through the WebGL2 backend**, which screenshots the way every other page
+here does. three compiles the same node graph for both, so it is the same picture. That is what
+`tools/bake_room_type.py` does, and it is the only way anyone on this box has ever seen this page.
+
+`tools/shoot.py` gained **`--webgpu`** in the same edit (see `WEBGPU_ARGS`). Two separate things have
+to be right and the first is usually what is wrong: `navigator.gpu` is gated on a **secure context**,
+so a probe on `about:blank` reports no WebGPU on a machine that has it — `shoot.py` already serves
+over `http://127.0.0.1`, which qualifies. The adapter then needs Dawn pointed at SwiftShader, since
+no GPU driver answers on this node. It renders the real pipeline, just at single-digit fps, so pair
+it with a generous `--wait`. **It still cannot photograph the canvas** — use it to check that the page
+initialises, reports its backend and throws nothing; use the WebGL2 route to look at the picture.
+
+### The ruin
+
+`ROOM_W` / `ROOM_D` / `ROOM_H` is a large, nearly-black enclosure whose only jobs are to bound the
+volumetric march and give the reflection something to mirror. What reads as "the room" is the ruin
+standing in the flood; everything past it falls into the dark, which is how the reference painting
+handles its own background.
+
+**EVERY PLACEMENT IS CHECKED AGAINST THE FRUSTUM, and skipping that wasted two rebuilds.** The first
+pass put two "foreground" columns at x = ±8 with the camera at z ≈ 4 — a bearing of 72°, against a
+horizontal half-angle of 37°. They were never in shot, and each attempt to make them read failed for
+a reason that had nothing to do with what was being changed. The lens is now **55°**, not the 46 it
+started at, and that is compositional: at 46 the frame is only ~3.4 m wide at the 4–5 m where a
+foreground column has to stand to be big, so there is physically nowhere to put one. Each entry in
+`COLUMNS` carries its screen bearing in a trailing comment; anything past 42.8° is not in the picture.
+
+**A BREAK IS MEASURED IN RADII, NOT IN THE COLUMN'S HEIGHT.** This was the most visible bug in the
+build. `flutedColumn`'s top was a fraction of `H`, so a 3 m shaft at `break 0.56` had a top sweeping
+**1.68 m** across a shaft **0.92 m** thick — 1.83 diameters, which is a scoop and not a fracture, and
+with a fan closing it the column rendered as a *sail hung between the others*. A real break is a
+roughly planar surface across the shaft, so its height range is set by the diameter and the angle it
+broke at. It is now `R·brk·(…)` with a leading `cos(a − seed)` — that term **is** the tilted plane,
+and the two higher harmonics are roughness on it. Shipped spans are **0.15–0.97 diameters**; check
+that ratio, not the absolute number, if a column is retuned. `H` now means the height the shaft
+survives to, which is also what the table is easier to read as.
+
+Two more things about that geometry. The flutes are **real geometry, not a normal map**, and have to
+be: the lamp swings, and a flute is only convincing when the highlight travels along the groove.
+There is a ~7 % **entasis**, which is most of what separates a classical column from a pipe. And
+**both ends are capped** — half of these are lying down, and a drum with an open end shows the inside
+of its own tube.
+
+**`ruinWall` is NON-INDEXED, and that is a correctness fix rather than a style.** Sharing one vertex
+between the front face, the back face and the broken top makes `computeVertexNormals()` average three
+normals pointing three ways, and the fragment shades as a soft curved sheet — the same *sail* symptom,
+from an unrelated cause, which is why it survived one round of chasing the columns. Masonry has hard
+arrises; every triangle carries its own corner. Its top edge is a **collapse, not a fringe**: a strong
+linear tilt decides which end stands, and the two fragments tilt opposite ways so the pair does not
+read as one wall with a gap in it.
+
+### Geometry and ornament repair (2026-09-08)
+
+The column side triangles and the frame sweep previously faced inward; the column caps were
+1.5% smaller than the side rims, the wall fragments lacked bottoms, and the frame section was
+not joined back to its starting edge. These are now closed with outward winding. Column wrap
+normals are averaged across the seam while the fracture caps retain hard edges. Paintings have
+solid wooden backs and the room bounds are solid slabs, centred on `ROOM_D`.
+
+`details.js` builds the additional relief and still life from closed meshes: gilded scrolls,
+leaf courses, voussoir arches, a velvet chair, a shaded lamp, sunflowers, books and a tea table.
+It merges decorative pieces by material to limit draw calls. Its `closedTube` caps open curves
+and joins loops without overlapping end caps. The palette follows Mingyang's illustration
+<https://www.pixiv.net/artworks/113329102>: violet marble, aged gold and warm practical lighting.
+The stage now reaches 1200 px and the opening view steps back to include more of the water.
+
+Run `python3 tools/check_room.py` for the mesh regression check. It uses the vendored three.js
+in Playwright without rendering, welds coincident positions for the audit, and checks that every
+edge has two oppositely oriented incident faces and the signed volume is positive. Columns,
+fallen drums, both wall slopes, the frame section and open/looped scrolls are covered.
+
+The lamp-depth cache now tracks its **target as well as position**; otherwise aiming the beam
+leaves the volumetric shadows frozen. The canvas is keyboard focusable. Reset, resize and long
+drags wake a reduced-motion render, and cancelled pointers cannot aim the lamp.
+
+### The frames
+
+**A moulding is a profile swept round a rectangle**, and building it that way rather than as an
+extruded outline is what buys the ornament. `frameSweep` takes a cross-section — `[how far out, how
+far forward]` — and rings it round the opening; **the corners mitre themselves**, because a rectangle
+grown outward by a constant meets its neighbour on the diagonal, which is what a mitre is. `MOULDING`
+is a real profile read outward from the picture: fillet, bead, hollow, ogee, flat, chamfer, then
+straight back to close it. Sixteen steps, so the lamp finds five or six separate highlights across
+the width instead of one. Non-indexed with face normals **deliberately** — a carved moulding wants its
+steps to catch, and smoothing across them turns the profile into one soft roll.
+
+Frame weight is clamped at both ends (`h/1.3`, 1.4–2.2). The first pass scaled at `h/1.9` and the
+mouldings came out at **4 %** of the picture's width, which reads as a passe-partout; a heavy gilt
+frame is nearer **7 %**.
+
+Two ornaments, both of which went wrong once:
+
+- **The bead course** is an `InstancedMesh`, so a hundred beads cost one draw call — the only reason
+  it is affordable across five frames. First pass used 2.5 cm beads standing proud of the moulding's
+  crest, and under a warm lamp on a dark frame they read as **a string of fairy lights**. Ornament has
+  to be the same material catching the same light: 6 mm, set back into the rabbet, and casting no
+  shadow (a 6 mm bead casts nothing anyone can see, and it is 100 casters).
+- **Corner bosses** sit *on* the moulding, over its crest. The first pass put them past the outer edge
+  and they read as four tabs stuck to the corners.
+
+### The water
+
+Two half-float targets holding `(height, height-last-step)` and a fullscreen pass integrating the
+wave equation between them. **Two steps per frame, always, and that is what makes the read side
+simple**: ping-ponging normally leaves the current state in a different target on alternate frames, so
+everything downstream has to be told which one to read. Stepping A→B then B→A puts it back in A every
+time, so the water material binds `simRT[0]` once and never thinks about it again. It also doubles
+the wave speed for free. `ClampToEdge` on the sim texture is load-bearing — a sample off the edge
+repeats the edge texel, which is a reflecting boundary, so rings **bounce off the walls of the grid**;
+the grid is sized to the room for that reason.
+
+It is **shaded by hand** rather than by a standard material: a nearly-black body, the planar
+reflection, a Fresnel mix, and one specular. Given one bright source and a flat surface, writing those
+four is shorter than persuading a PBR material to arrive at them — and it keeps the distortion, the
+ripple normal and the highlight reading from the *same* normal, which is what sells it.
+
+**The swell is not part of the simulation**, and keeping it out is deliberate: feeding a driving term
+into an explicit integrator is how one goes unstable, and the swell is not a wave — it is the reason a
+real pool is never a mirror. It is added to the *slope* at shading time, where reduced motion can turn
+it off without the water changing state.
+
+### The light, and the volumetric
+
+**Four lights, and only one of them moves or casts.** The **spot** is the lamp: aimed, not carried —
+a lamp you drag around the floor has to hang low, which makes its beam short and its cone a puddle,
+while one that hangs where a gallery would hang it and swings to where you point throws its beam right
+across the room, which is the only reason there is anything for the volumetric to integrate. Clicking
+sets the *target*. The three **static** lights — a cold directional through the gap in the roof and
+two lanterns standing in the flood — put a floor under the picture, and **none of them casts**: a
+shadow map is a full re-render per light per frame, and the beam is the only shadow anybody reads.
+
+**`scene.environment` is a procedural sky, not an `AmbientLight`**, and the difference is the point.
+Flat ambient adds the same grey to every surface whatever way it faces, so a fluted column lit by it
+is a flat disc and the gilding has nothing to reflect. `skyTexture()` builds a 128×64 equirect —
+cold above, almost nothing below, a warmer bright patch where the roof has fallen in — and PMREM
+prefilters it. No asset ships for it. **PMREM renders, so it happens inside `boot()`, after
+`renderer.init()`.**
+
+`LAMP_INT` is **solved, not guessed**: irradiance is `I/d²`, the throw is ~7.8 m, and a peak just
+under 1.5 linear on albedo-0.35 stone is what the ACES shoulder wants — about **260 cd**. It was
+1500 first, i.e. twenty times over, and the wall it was pointed at came out as a white hole.
+
+**THE VOLUMETRIC IS DRAWN AS GEOMETRY, NOT AS A POST PASS**, and that is the decision that makes it
+simple. The usual shape is a fullscreen pass that rebuilds each pixel's view ray from the screen
+coordinate and stops it at the depth buffer — two conventions (which way is screen y, which way is
+depth) that differ between backends and whose failure looks like a *plausible picture* rather than an
+error. Instead the volume is a **box the shape of the room, drawn back faces only**: every pixel
+already carries the world position where the ray leaves the air, in `positionWorld`, so the ray is
+`positionWorld − cameraPosition` and there is nothing to reconstruct. Inset 5 cm from the walls so
+ordinary depth testing does the occlusion. The cost of that shape: the march stops at the wall rather
+than at whatever is in front of it, so a pixel showing a picture gets *no* haze instead of the little
+in front of it — the pictures hang within 12 cm of their walls, so that is a twentieth of the room's
+depth, and it errs toward too little, which is the right direction.
+
+It is real single scattering with a **shadow test at every sample**, which is why the frames cast
+shafts. That needs its own view of the room: `bakeLightDepth()` re-renders the scene from the lamp
+into a small target holding **distance in metres** — the units the volumetric asks its question in,
+which removes a whole projection's worth of possible sign errors. It re-bakes only when the lamp has
+moved a centimetre, since the geometry is static.
+
+**`noBake` is load-bearing.** `bakeLightDepth()` overrides every material, so it renders whatever is
+*visible* regardless of `castShadow` — and the lantern halos are half-metre spheres of nothing while
+the globes are sources rather than obstacles. Left in, either one punches a hole in the beam. The
+fitting and the volume box are excluded for the same reason (the box cannot be its own input).
+
+### Two failure modes the loop has to survive
+
+**A LOST GPU IS SILENT AND LOOKS LIKE A BUG IN THE SCENE.** A driver reset, a laptop switching
+between its two GPUs, or an adapter giving up under a load it cannot sustain all end the same way:
+the device goes, three keeps being called by the animation loop, and every render becomes a no-op.
+`requestAnimationFrame` goes on firing at 60 fps, so the page looks perfectly alive and shows a
+frozen picture. Observed for real here: on the software adapter the frame counter sat at 2 for
+sixteen seconds and then climbed at a happy 60 fps while nothing was being drawn. three does not
+surface it, so `boot()` asks the device directly (`renderer.backend.device.lost`), stops the loop and
+says so. **`reason === 'destroyed'` is ordinary teardown and is ignored** — that is the tab going
+away, not a fault.
+
+*Not exercised on this box, and the reason is worth knowing.* The software adapter's own failure at
+~20 s does **not** resolve `device.lost`: it drops the Dawn *instance* (27 pending error scopes reject
+at once with *"Instance dropped in popErrorScope"*), which is the harness tearing the wire down rather
+than a WebGPU-level device loss. So the handler is the correct API answer to the real-world case and
+is cheap, but it has never been seen to fire. Do not "simplify" it away on the grounds that nothing
+triggers it.
+
+**Adaptive resolution** is the other half. The scene renders itself four times per frame — the lamp's
+view, the reflection, the room, and the march through the air — and the march is the one that scales
+with pixels. `QUALITY` steps the pixel ratio down after a sustained run of slow frames. **It only ever
+goes down**: a controller that climbs back oscillates on any machine near the boundary, and a picture
+that visibly changes sharpness twice a second is worse than one that settled on the lower.
+
+Two bugs in that loop, both found by reading it rather than by seeing them, and both silent:
+
+- **The simulation's `dt` and the frame time are different measurements and must not share a
+  variable.** `dt` is clamped to 50 ms so a hitch cannot integrate the water forward half a second in
+  one step and blow up the explicit integrator; the slow-frame threshold is 55 ms. Sharing one
+  variable made the condition unreachable and the whole quality ladder dead code.
+- **`settleUntil` started at `1e9`**, so the reduced-motion "stop drawing once the room is quiet"
+  branch could never be taken and the saving never happened. It starts a few seconds out instead —
+  the textures have to land, the first ripple has to cross, and the ladder wants frames to judge.
+
+### Assets
+
+Five paintings, `misc/museum/room/paintings/*.webp`, **794 KB the set** — a third of the Bellotto
+bundle next door. `tools/bake_room_paintings.py` derives them at 1600 px on the long edge, WebP q84,
+and the masters (`assets/oil_tune_*.png`, 86 MB) are **gitignored**, same rule as `web_bg.png` and the
+backdrop pair. Quality was settled **by eye at 1:1** against q90 and the uncompressed resize, because
+the metric cannot tell a lost bristle from lost sensor grain; the script's docstring carries both.
+
+**The five are preloaded from the markup**, and that earns its place twice: nothing fetches them until
+~1 MB of three.js has parsed and `boot()` has run, and — because the module builds their paths from a
+slug — no literal path exists anywhere for `verify.py` to resolve. The `<link rel="preload">` tags are
+those literals. **Keep them in step with the `WORKS` table.**
+
+**`crossorigin` on those tags is required and is not decoration.** three's `TextureLoader` sets
+`crossOrigin='anonymous'`, so it fetches in CORS mode; a preload without the attribute is a different
+credentials mode, the browser refuses to match the two, and **every painting is downloaded twice** —
+the preload turning into a 794 KB penalty rather than a saving. The only warning you get is a console
+line (*"a preload … is found, but is not used"*), which is how this one was caught.
+
+### On the shelf
+
+`misc/index.html` gains a third `.marquee`, `.m-room`, placed **directly under the museum rather than
+at the end**: ordering by subject keeps the two museum rooms adjacent, and it also means nothing is
+added *below* the last compartment, so the still life stays exactly where it is and none of its
+measured offsets move. A fourth item at the bottom would move the drawing — see the note on it there.
+
+Its title window is `assets/room_type.jpg`, baked by `tools/bake_room_type.py`, which drives the real
+page in a real browser rather than illustrating it. **The tone goes the opposite way from the other
+two windows**: the museum's render and the tuner's painting are both too *light* and are blended
+toward `--ink`, while this one is a dark room and is lifted toward the paper. So the check has a
+**ceiling as well as a floor** — under 3:1 the type is unreadable, over about 9.5:1 nothing survives
+but the lamp. It measures the JPEG it wrote rather than the array it encoded, the lesson
+`bake_oilpaint_type.py` learned, and deletes the file and exits non-zero if it misses either bound.
+
+### Checking it
+
+`verify.py` has the page in `PAGES`. The module is syntax-checked with **esprima**, exactly as the
+museum page documents — and note the module has **no top-level `await`** for that reason: esprima
+predates it, and `boot()` exists so the file stays parseable by the one check that catches a module
+which never evaluates. Do not reintroduce top-level await.
+
+```bash
+python3 .claude/skills/verify-site/verify.py
+pip install --target /tmp/pylibs esprima
+PYTHONPATH=/tmp/pylibs python3 - <<'PY'
+import re, esprima
+src = open('misc/museum/room/index.html', encoding='utf-8').read()
+esprima.parseModule(re.search(r'<script type="module">(.*?)</script>', src, re.S).group(1))
+print('module ok')
+PY
+```
+
+## `misc/oilpaint/` — the Oil Paint Tuner, which is NO LONGER IN THIS REPO
+
+**The tool moved out on 2026-09-06** and the shelf item is now an outbound link to
+<https://miya9756.github.io/Oil-Paint-Tuner/>. `misc/oilpaint/` — the page, the twelve-module JS
+package, `engine.worker.js`, `session.js`, the generated `schema.json` and the sample photograph —
+is **deleted**, and so is its entry in `verify.py`'s `PAGES` / `MODULES`.
+
+That is the port's own rule reaching its conclusion. The tool is **authored** in
+`~/oil-paint-hack/web/tune/` (whose `ship-to-site` skill states the direction: **edits go outward,
+never back**), so a published copy here was a second thing to keep in step for no gain once it
+could be published from its own repo. **Do not re-stage it.** If the tuner needs work, it happens
+upstream; if it needs a new home, that is a Pages setting in *that* repo, not a folder in this one.
+
+What this repo still owns of it, and must keep working:
+
+- **The shelf item.** `.marquee.m-paint` in `misc/index.html`, with `target="_blank" rel="noopener"`
+  the way the landing page's Pixiv card does it. It is still the **last** compartment, so the still
+  life stays where it is; the *one short line* rule for a description still applies (the tuner's
+  ends 29px clear of the vignette at 681px).
+- **`assets/oilpaint_type.jpg`**, the picture inside the title's letterforms. It is a painting the
+  tool itself made, so it is still exactly what the item links to, and it stays measured as text:
+  worst **3.6:1** toned (raw it was **1.2:1**). See the *title window* note near the top of this
+  file.
+- **`tools/bake_oilpaint_type.py`**, which re-bakes it. It always imported the pipeline from
+  `~/oil-paint-hack`, so nothing about it broke; only its `--src` default moved, from the deleted
+  `misc/oilpaint/div2k_0465.jpg` to `~/oil-paint-hack/assets/0465.png`, which is the same
+  photograph.
+- **The DIV2K credit, now in `misc/index.html`'s footer.** The sample is **image 0465 of the DIV2K
+  training set** (Agustsson & Timofte, *NTIRE 2017 Challenge on Single Image Super-Resolution*,
+  CVPR Workshops 2017); the numbering matches `0001.png`–`0900.png` exactly, and Mingyang settled
+  it — the upstream repo records no provenance and the file carries no EXIF. The tuner's colophon
+  used to carry the citation, and that page left; **the asset baked from that photograph did not**,
+  so the credit follows the asset. It is the only third-party clause on that page. Drop it only if
+  `assets/oilpaint_type.jpg` goes.
+
+### Tooling that page changed, and that outlived it
+
+All three are still in the repo and still doing work; the first two are the reason to read this
+section at all.
+
+- **`verify.py` learned the `$('#id')` form.** Its `$(...)` pattern was written for the grain page,
+  whose `$` is `getElementById` and takes a bare id; this page's `$` is `querySelector` and takes a
+  real selector, so its ~50 lookups were invisible and the check reported *0 referenced*. It now
+  saw 42, which mattered there more than elsewhere: the front row was built from a schema, so a
+  control that lost its container was a blank panel rather than a visible gap. **The pattern
+  stays** — any page whose `$` is `querySelector` needs it, and the check reporting *0 referenced*
+  is what a missing pattern looks like, not a clean page.
+- **`verify.py` gained `check_page_defaults()`**, which reads `PAGE_DEFAULTS` out of a page and
+  validates it against the `schema.json` beside it: every name must exist, a `choice` must name a
+  real option, and a number must be inside its range **and on its step grid**. Both failures are
+  silent in a browser and both arrive on a re-stage, since that is what replaces `schema.json`: a
+  value off the grid looks right until the first drag SNAPS it, so a touch meant as a no-op changes
+  the picture; a dead `choice` leaves the `<select>` on its first entry while `params` carries the
+  dead name to the engine. Confirmed to catch all three kinds by deliberately breaking one of each.
+  It skips silently on a page with no such table.
+- **`tools/contrast.py` now PROVES its two passes describe the same page.** `networkidle` does not
+  wait for this one: it renders its sample on its own clock, a draft lands at ~1 s and the refine
+  seconds later, and the stats line it writes changes height, so every panel below shifts. Capture
+  the lit page before that settles and the ground pass afterwards and the changed-pixel mask stops
+  being a glyph mask and becomes the whole page — which reads out as a spread of impossible
+  **1.00:1** failures on runs of text that are fine. A stillness heuristic was tried first and is
+  **not sufficient**: a page whose worker is busy can sit perfectly still for a second, satisfy it,
+  and then repaint. So the injected stylesheet is now **removed again** and every scroll position
+  re-shot; if the page comes back byte-identical to its lit frame nothing moved in between and the
+  mask is exact, and if it does not the capture is retried and finally reported as a failure rather
+  than measured. (Ruled out along the way: Playwright viewport screenshots do **not** fire `resize`,
+  so the repeated screenshots are not themselves what re-triggered the render — only `full_page=True`
+  fires one.) The proof needs a frame to reproduce byte for byte, so the page is
+  now measured under **`reduced_motion="reduce"`** — the landing page's `.live` dot pulses on a
+  2.4 s loop and would never hold still. That is a state every page here already promises
+  (everything that moves is switched off in its own reduced-motion block, by the site's own rule)
+  and contrast does not depend on motion, so it costs nothing — and it doubles as a check of that
+  rule: **a page that will not hold still here has something animating outside its
+  reduced-motion block.**
+
+Two consequences of the deletion. `check_page_defaults()` now has **no consumer** — nothing on the
+site carries a `PAGE_DEFAULTS` table — and is kept anyway, because it is generic and skips silently
+on a page that has neither half of the pair; its docstring says so. And `verify.py` sees no module
+worker at all any more, so the `$('#id')` form is currently exercised only by whatever page uses
+`querySelector` as its `$`.
+
+## Provenance of `projects/smv/` (IMPORTANT)
+
+It was assembled on 2026-07-25 from **two sources that had diverged in both
+directions**. Neither was a superset — do not "resync" from either one wholesale.
+
+| Source | Role |
+| --- | --- |
+| `/cluster/home/misong/SMV_webviewer` | former Pages mirror; source of the **page, renderer, UI, and all 19 scenes** |
+| `/cluster/home/misong/4d-relight/web/player_browser` | training repo; source of truth for the **decode path** |
+| `/cluster/home/misong/smoothmotionvector-assets/web/player_browser` | a third, later copy; source of the **split scene picker** (see below) |
+
+What was taken from where:
+
+- **Base = `SMV_webviewer/index.html`.** It carries PCA nav-alignment, the native-res
+  A/B parity toggle, the dataset citations, and the only scene set that matches
+  `scenes/` (player_browser knew about 2 stale dnerf scenes plus unpublishable
+  `neur3d`).
+- **`decode.js` / `dequant_worker.js`** — taken from player_browser; they were
+  byte-identical to the mirror's `decode_bundle.js` / `dequant_worker_bundle.js`
+  apart from the header comment. Modules were renamed to the player_browser names
+  and the two `import` lines in `index.html` updated.
+- **`decode_motion.js`** — taken from player_browser, which is genuinely newer: it
+  adds the 2-way ffmpeg decode pool (`POOL`, `HELPER_RESET`, `_helpers`) so a GOP's
+  xyz and rot streams decode concurrently instead of serially. Same exported API
+  (`ffmpegReady`, `recreateFFmpeg`, `decodeMotionGopBundle`), so it is a drop-in.
+- **`sw.js`** — ported from player_browser, plus its registration in the `<head>`
+  script block. Caches `vendor/` (the ~31 MB wasm core) across sessions.
+- **Visitor globe** — ported from player_browser: `places` / `setPlaces` / `setYou`
+  and the `VISITOR_API` fetch replace the hardcoded `CITIES` ambient arcs, the
+  `ipapi.co` call, and the abacus.jasoncameron.dev hit counter. `VISITOR_API` is
+  **empty** until the Worker in `tools/visitor_worker/` is deployed; empty falls back
+  to ipapi.co for your own arc only.
+
+- **Scene picker** — ported from `smoothmotionvector-assets`: a `methodSel` (dataset)
+  dropdown feeding a per-dataset `sceneSel`, replacing one flat list of 19
+  `dnerf/hellwarrior  (1.84 MB)`-style labels. `splitSceneName()` parses
+  `'<dataset>/<scene>  (<mb> MB)'` out of the scenes.json `name`, so nothing about the
+  generated manifest had to change. **`loadBtn` now resolves the scene via
+  `_selected()` (match on `sceneSel.value`), not `sceneList[sceneSel.selectedIndex]`** —
+  `sceneSel` is a per-dataset subset, so the index no longer indexes `sceneList`. Any
+  new code reading the selection must do the same. Switching dataset keeps the current
+  scene when a scene of that name exists in the target dataset (none do today — the
+  three datasets share no scene names — so it falls back to the first entry).
+
+**Deliberately NOT ported from player_browser** (do not "fix" these without a reason):
+
+- **Depth sort.** player_browser buckets over a sampled 0.5–99.5 percentile range and
+  re-sorts the two clamped end buckets. The mirror *replaced* that with exact
+  full-range 16-bit bucketing — its comment calls the percentile version "the old
+  code" and says the arbitrary intra-bucket order popped as the camera moved. The
+  full-range version is kept.
+- **Motion-vector tint.** Two parallel implementations of the same feature:
+  `offsetColorOn`/`offsetColorMix` (kept) vs `colorDynOn`/`colorDynWeight`.
+- **Windowed streaming buffer + preroll gating.** player_browser keeps a sliding
+  resident window of GOPs (`GOP_AHEAD=4`, `GOP_BEHIND=2`) with eviction and
+  re-decode from cached bytes, gated at play-start by `prerollReady()`. This viewer
+  decodes GOPs sequentially and never evicts, holding playback at `decodedEnd()`.
+  Porting the window is a real memory win for the larger nerfds/hypernerf scenes but
+  it is an architectural change to the streaming layer, not a patch. Preroll gating
+  alone is meaningless without it.
+
+The **VERT/FRAG splat shaders are identical** between the two sources (comments
+aside), so "the renderer" as such was never stale.
+
+The decode path **mirrors `compression/decoder.py` exactly** (verified to float
+epsilon). Do not "optimize" the dequant math, the png16-upper xyz add, or the
+logmap→expmap→quat-mul in `dequant_worker.js` without preserving exact parity — a
+mismatch silently corrupts the rendered geometry. For decode-path changes, prefer
+editing `4d-relight/web/player_browser/` and syncing here.
+
+## View options: the panel is the source of truth
+
+Scene state (`gops`, textures, `builtFrame`, `trajKey`) is torn down and rebuilt on every
+load, but the view options (`blendOn`, `shBands`, `trajOn`, `offsetColorOn`, `ellipOn`, …)
+live in vars that outlive it. `syncViewOptions()` re-reads every control
+after a load and is the only place that reconciles the two.
+
+**Deliberately re-read, not reset.** Resetting to defaults on load would destroy the A/B
+workflow this viewer exists for — you pick a setting, then flip between scenes to compare
+under it. So the control keeps its value and the renderer is brought to match.
+
+Two rules for anyone adding a control:
+
+1. Add it to `syncViewOptions()`. Otherwise it silently keeps the previous scene's value,
+   or its cache survives the scene swap. The bug that motivated this: `trajKey` is
+   `activeGop|gFrame|trajCount|trajTrail`, so loading two scenes back-to-back at frame 0
+   produces an identical key, `buildTraj()` never re-runs, and `drawTraj()` keeps drawing
+   the **previous scene's** trail buffer. `trajVerts` must be zeroed too.
+2. If the option needs something a scene may not have, gate it with `_gate(id, ok, why)`
+   and fold the capability into the effective var (`blendOn = checked && canBlend`). A
+   gated control is dimmed, disabled, and tagged `n/a`, with the reason in its tooltip —
+   its checked state is left alone, so the preference returns on a scene that supports it.
+
+Capabilities currently gated: blend (needs ≥2 GOPs *and* `overlap_frames > 0`), specular
+(needs an SH codebook), trajectories / colorized offsets (need dynamic gaussians).
+
+**`nativeRes` has no control any more.** Its "Native camera res" checkbox was removed from the
+Stream Monitor, so nothing sets the var and the `if(nativeRes&&camMeta)` branch in `frame()` —
+plus `fboN` / `ensureFBON()` — is unreachable. The render path is kept deliberately: it is the
+only way to compare splat footprint against the GPU reference at the training resolution. Flip
+it from the console, or re-add a control and wire it through `syncViewOptions()` (its old gate
+was `!!camMeta`).
+
+**Note:** all 19 shipped scenes have `overlap_frames = 0` (and 14 are single-GOP), so the
+blend checkbox is inert on every one of them and now always shows `n/a`. The image-space
+GOP cross-fade path in `frame()` is effectively dead code against the current scene set.
+If that's not intended, it's the packaging side (`build_web_bundle.py`) that needs to emit
+overlap, not the viewer.
+
+## Navigation: fly or orbit (added 2026-09-14)
+
+Ported from `~/4d-relight/web/player/index.html` (*Navigation: two modes, and the scene picks the
+one it opens on* in that repo's `web/README.md`). **Every scene opens orbiting** (drag turns the
+object, shift/right-drag pans the pivot, wheel/pinch dollies), at Mingyang's request on 2026-09-14;
+upstream orbits D-NeRF only and flies the real-world captures. The `Navigation` selector in the *Controls & navigation* panel switches either way at any time, and
+`?nav=orbit|fly` forces the mode for every scene.
+
+- **The opening mode travels with the scene.** `make_scenes_index.py` writes `nav` per entry
+  (`"orbit"` unless the dataset is in `FLY_DATASETS`, which is empty), and `loadScene(url,cam,nav)`
+  applies it; a missing `nav` also means orbit. The markup's initial state (orbit help shown, speed
+  and touch rows hidden) matches, so nothing flashes before `syncNav()` runs. A new scene re-opens in its own mode
+  rather than keeping the reader's last choice. That is deliberately NOT the `syncViewOptions()`
+  rule: navigation is a choice about the capture in front of you, not an A/B render setting.
+- **The turntable derives `camPos`/`camQ`, it does not replace them**, so the sort, trails and
+  `viewMatrix()` are untouched. Every fly handler bows out under `ORBIT()` and the pointer handlers
+  under its negation: a mouse press fires both event families, and two live paths would fly and
+  orbit the same drag. `syncNav()` is the one place the two modes' chrome is switched (help line,
+  speed dial, touch pad, `touch-action`). `#panel [hidden]{display:none}` is load-bearing, because
+  `.help` and `.settings label` both set `display`.
+- **Where this differs from upstream: the axis.** Upstream has no PCA alignment and declares `up`
+  per dataset (`[0,0,1]` for D-NeRF). This page keeps its PCA nav-alignment, so the turntable spins
+  about `worldUp`, the same axis the fly camera yaws about, **signed from the opening camera**
+  (`orbUp`). The sign matters: under PCA `worldUp` points screen-down, elsewhere it points up, and a
+  turntable levelled against the wrong sign opens upside down.
+- **Measured in headless Chromium on all 14 non-`_single` scenes** (when D-NeRF alone orbited; the
+  maths is per scene and unchanged). D-NeRF opens orbiting on exactly the fly opening pose: eye error ≤1e-15, view direction and roll 0.000°. Switching fly→orbit
+  keeps the eye and view direction exactly on every scene. **The orbit pivot sits straight ahead of the opening camera** (at
+  the centroid's depth along its ray), not on the centroid: aiming at the centroid, as upstream
+  does, turned the HyperNeRF and NeRF-DS held-out views 3–19° away, which stopped mattering only
+  while those scenes opened flying. Under PCA the two are the same point. The PCA axis sits 3–44° from D-NeRF's z (mutant 44°, hellwarrior 24°, others
+  ≤15°); if a turntable looks tilted, that is the number to revisit, not the orbit code.
+
+## `projects/spdef/` — the side-by-side
+
+The SpDef page hosts **four independent cards**, all driven by the one host script:
+
+1. **1×2, D-NeRF *bouncingballs*** — the same sequence trained with and without the temporal
+   regularizers (`xyz/rot_velocity_div_loss`, `xyz/rot_acceleration_loss`; the two runs'
+   `deform_config.yaml` differ in nothing else). 150 frames.
+2. **1×3, HyperNeRF *americano*** — a casual hand-held capture, showing knot count as a
+   regularizer: 33 knots (`spline_knot_ratio 0.2`, `temporal_capacity 13`) vs the full count
+   (`0.9` / `59`), plus full-count with `xyz/rot_velocity_div_loss` zeroed. 200 frames. Note
+   the *no-reg* run here zeroes only the velocity-divergence terms, not the acceleration ones
+   — unlike the bouncingballs pair, which zeroes both.
+3. **1×1, the fitted spline itself — with a picker for TWO examples that are DIFFERENT RENDERERS.**
+   Not a comparison: one at a time, showing that "the timeline is continuous because the spline is
+   evaluated, not replayed" is a property of the *field*, not of any one pipeline.
+   - **DeformingThings4D *astra / samba dancing*** (`points.html`, `kind:'points'`) — the GS-free
+     path: the field fitted straight to a mesh's vertices, no rasteriser, no decoder. 837 frames
+     from 105 knots. See the `points.html` section below.
+   - **D-NeRF *hook*** (`knotsplat.html`, `kind:'knot'`) — the same curve carrying a *compressed
+     gaussian scene*: 100 frames of 23,716 gaussians out of **15 stored knots**, 2.3 MB.
+     See the `knotsplat.html` section below.
+4. **1×2, the model taken apart — with a picker for TWO trained models.** What the model *stores*
+   and what it *predicts*, side by side: left, the canonical gaussians and the deformation field's
+   three tri-planes in one scene (`field.html`); right, a sample of those gaussians pushed to the
+   two knots bracketing the playhead, with their tangents and the arc between them (`knots.html`).
+   That is what makes it the last card — the three above show what the field *does*, this one
+   shows what it *is* and what it emits. **Two more renderers, one card**, and the entrance to
+   `triplanes.html`, which the card links. See the `field.html` and `knots.html` sections.
+
+   The two examples are **D-NeRF bouncingballs** (75 knots — one every 2 frames — rank 6) and
+   **D-NeRF lego** (`lego_02`: 7 knots over 50 frames — one every ~8 — rank 1), chosen to be far
+   apart on the one axis that decides whether the stored tangents mean anything. They are not a
+   like-for-like comparison and are not presented as one: the picker shows one at a time, and the
+   card's clock, camera and view options belong to whichever is loaded.
+
+**`kind` is the only axis the host branches on.** Two of them are **host-decoded** — `'splat'`
+(the first two cards, `viewer.html`) and `'knot'` (the third card's second example,
+`knotsplat.html`) — because a decoder per canvas is another copy of a ~32 MB ffmpeg core; both go
+through `pump()`, and `flush()` sends them a keyframe and then one payload per GOP/chunk, freed on
+the panel's ACK. Two are **self-loading** — `'points'` and `'field'` — needing no decoder at all,
+so `startGroup()` skips `pump()` and `flush()` sends them options and a seek rather than data.
+Anything per-kind — the required view-option keys (`OPT_KEYS`), what `viewState()`
+sends, which controls `pushView()` wires (`OPT_WIRING`), whether the camera flies and so wants the
+pad (`PAD_KINDS`) — is a table keyed by it, not an `if`
+scattered through the file. A group also opts into a **continuous clock** with `frac:true`, which
+changes `setFrame()`'s label and lets `tick()` advance in fractional frames.
+
+**`kind` is per SCENE, not per group — the trajectory card switches RENDERER with its picker.**
+`g.kind` follows the selected example (`applyScene()` sets it from the table); everything that
+branches reads it live. A group that can switch declares two extra fields:
+
+- **`kinds`** — every kind its option block must wire at boot, since re-wiring on a switch is one
+  more thing to forget. Overlapping keys are simply assigned the same handler twice.
+- **`optKind`** — the `OPT_KEYS` entry its block satisfies, i.e. the **union** of its kinds' keys
+  (`OPT_KEYS.traj`). `verify.py`'s `check_repeated_controls` matches `data-kind` against exactly
+  one entry, so the union has to be a named entry rather than something inferred — which is what
+  makes "added a control to `knot` and forgot the block" a check failure rather than a dead card.
+
+The controls belonging to the *other* example carry **`data-only="<kind>"`** and are hidden by
+`applyScene()`, which sweeps the whole card (`ui.root`) so a per-example control can sit in the
+transport as well as in the options block — the touch pad does. **That needs the CSS rule
+`[data-only][hidden]{display:none}`**: `.vrow` and `.tchk` both set `display`, and an author class
+selector outranks the UA stylesheet's `[hidden]`, so the attribute alone leaves the row on screen
+with only the script believing it is gone. (`.tbtn` sets no `display`, which is why the Load/Clear
+buttons' `hidden` has always worked.) The sibling rule beside it drops the separator a hidden row
+would otherwise leave above the visible one.
+
+**`kind` is not per PANEL, and the last card has two different renderers in one group.**
+That is deliberate and it is why nothing had to be re-keyed: `VIEW.field` emits *both* panels' option
+sets in one message and each panel reads the keys it knows (`sheets`/`cast`/… in `field.html`,
+`knSamples`/`knScale`/… in `knots.html`), which is exactly the idempotence the protocol already
+required. A new panel of a new kind inside an existing card needs an `OPT_KEYS` extension and more
+keys in that kind's `viewState()`, not a second group — a second group would mean a second clock and
+a second camera for one comparison. Two knock-ons: `status()` **joins** every panel's `note` rather
+than taking the first (each renderer is the only thing that can describe what it built), and a
+slider whose range depends on the data is clamped from the panel that owns it (`castMax` from
+`field.html`, `sampleMax` from `knots.html`).
+
+Optional transport controls are **simply absent from that card's `ui`, resolved to `null`, and
+guarded at every use**: `touch` (only the cards whose camera *flies*), `prev`/`next` and
+`speed` (only the trajectory card has marked-instant steppers and a playback rate). Adding a
+control to one kind must not force a dummy into the others. `g.el` is built by walking `g.ui`
+rather than by naming keys, and `verify.py` reads the same `ui:{…}` blocks for its id check — so
+a new control needs no edit in either place.
+
+**The steppers and the frame readout are driven by `marks`, not by "supervised frames".** A panel
+sends `marks` (a list of frame positions), `markOn` and `markOff` (what to call being on one and
+between them) with its `ready`, because what is marked depends on what shipped: `points.html`
+sends the frames the field was trained on ("supervised" / "inferred"), `knotsplat.html` sends
+where its 15 knots fall ("at a knot" / "between knots"). **Marks are floats and are matched
+exactly** — 15 knots over 100 frames is one every ~7.07, so the old integer `Set` could not have
+held them. The list is scanned linearly per label update; the longest here is 210 entries.
+
+**`ready` can arrive more than once from one panel**, and the host's opening seek fires on the
+first only. `knotsplat.html` reports at keyframe install and again when its knots land, because
+the parity margin in its `note` does not exist until then; without the `first` guard the second
+report would yank the playhead back to frame 0 under a visitor who scrubbed during the decode.
+
+Both splat comparisons' five scenes are the **single-GOP** packing: one keyframe,
+`overlap_frames = 0`. For
+bouncingballs the 4-GOP packing (`bundle_4_packed`) was tried and rolled back — it demonstrates
+worse, since a GOP boundary is a hard cut between two independently-keyframed point clouds when
+overlap is 0. The loader stays multi-GOP-capable either way.
+
+**Nothing loads until its Load button is pressed.** Six panels is ~18 MB of scenes, six WebGL
+contexts and a ~32 MB decoder — too much to spend on a visitor who came for the paper link. Until
+a group is started its iframes carry the viewer URL in **`data-src`, not `src`**, so no viewer,
+GL context or decoder exists for it. `startGroup()` assigns `src` and enqueues; groups run **one
+at a time** through `pump()`, because two quick clicks would otherwise put two decode chains on
+one wasm heap and race `disposeFFmpeg()` against a live decode. `verify.py` reads
+`data-src` for asset checking; without that it stopped seeing `viewer.html` entirely.
+
+**The decoder is kept while any loaded card still wants it, and that is deliberate.** It used to be
+disposed the moment the queue drained, which was wrong once three of the four cards decode:
+`disposeFFmpeg()` also **revokes the blob URLs the core was compiled from**, so loading a second
+decoding card re-fetched and re-compiled the whole 31 MB. This page cannot lean on the service
+worker to soften that either (`sw.js` is registered under `/projects/smv/` and its scope does not
+reach here, so the refetch falls back to the plain HTTP cache, or the network if that has evicted
+it). `decoderWanted()` is the rule now: any **started** group whose `kind` is in `DECODER_KINDS`
+holds the core; clearing the last of them releases it, so the memory still comes back on request.
+
+Two call sites, and the split matters. `releaseDecoder()` runs at pump()'s drain, where the queue
+is empty and nothing is mid-decode. `releaseDecoderSoon()` runs from `clearGroup()` and is
+**deferred by a tick**, because the example picker clears and restarts a card in one synchronous
+go: releasing on the spot would race `disposeFFmpeg()` against the `ffmpegReady()` of the load
+starting immediately after. Never call `disposeFFmpeg()` straight from `clearGroup()`.
+
+**Both release with `{keepCore:true}`, and that is what makes Clear-then-load cheap.**
+`disposeFFmpeg()` frees two things with very different reacquisition costs: the **instances** (the
+primary, the helper pool, the dequant worker — each holding a live wasm heap that *grows* with what
+it has decoded, so this is the large and unbounded part, rebuilt in milliseconds) and the **core
+blob URLs** (the fetched ~32 MB of `ffmpeg-core.js`/`.wasm`, fixed size, and reacquiring them means
+fetching 32 MB again). Revoking the blobs is exactly what made pressing Clear and loading again
+re-download the core. `keepCore` frees only the instances, so the working set genuinely goes back
+while a reload costs a wasm compile; the blobs go when the page does. Default is still the full
+release, so `viewer.html`'s standalone fallback (done for good after one decode) is unaffected.
+`coreCached()` exists so the status line only promises "~31 MB, one-time" when a download is
+actually about to happen, and says "starting the decoder" otherwise.
+
+`disposeFFmpeg()` / `coreCached()` are **site-only additions to `decode_motion.js`** — upstream's
+copy has neither, and this file already diverges from it in `coreURLs()` too (see the module-relative
+note below). The "edit upstream and sync" rule covers the decode *math*, not this lifecycle helper.
+
+**Each comparison can also be given back.** `clearGroup()` is the counterpart to `startGroup()`:
+four cards already means seven WebGL contexts, seven scenes and every decoded motion array
+resident at once, and a fifth would be worse. It navigates each panel to **`about:blank`**, which
+*destroys* the panel document — GL context, textures, the motion it was sent, its rAF loop — and
+drops the host's own `p.scene` / `p.built` (keyframes are deliberately kept past decode to serve a
+panel that reloads, so nothing else frees them). `resetPane()` is shared with first-time init so
+the two cannot drift. It is also **Cancel**: `g.gen` is a generation counter that `loadGroup()`
+re-checks after every await, so an in-flight pass returns instead of writing into a group that no
+longer exists — it returns rather than throws, leaving pump()'s catch for genuine failures. An
+in-flight fetch is left to finish and its bytes dropped; aborting mid-stream would poison the HTTP
+cache for the reload that usually follows. Three quieting guards go with it: `stage()` no-ops when
+`!g.started` (a late fetch must not overwrite the "Not loaded" line), the message handler drops
+anything from a cleared group (a `ready` posted just before teardown would re-enable the
+transport), and pump()'s catch only reports when the group is still started. Load hides with
+**`hidden`, not `style.display`** — Clear restores it with `hidden=false`, which an inline
+`display:none` would outrank.
+
+**Navigating a long page: the contents list and the back-to-top control.** Four cards, each a few
+screens tall once loaded, so the page is long before anything is even running.
+
+- **`nav.toc`** sits under the *Playground* heading and links `#abCard` / `#amCard` / `#ptCard` /
+  `#fdCard`. Its link text is the card's `<h3>` **verbatim** so the link and its destination cannot
+  drift apart (and a screen reader announces the heading you are about to land on); a card renamed
+  without its entry is the one thing to watch, since nothing checks it. Same pill as the header's
+  `.back` button, so the two read as one family rather than two inventions, and it wraps rather
+  than scrolls horizontally, which would hide exactly the entry someone is hunting for. The card
+  ids reuse the `ab`/`am`/`pt`/`fd` prefixes the transports already use. `#ptCard` predates this:
+  it is also the trajectory group's `ui.root`, which `applyScene()` sweeps for `data-only`.
+- **`.totop`** is revealed only once the masthead has scrolled away, by an **IntersectionObserver
+  on `#top` in a CLASSIC script** at the foot of the body. Classic for the same reason the boot
+  watchdog is: navigation must not be what breaks when a decode-path fetch is dropped and the
+  module never evaluates, and a scroll affordance has no business waiting on a ~32 MB decoder
+  graph. An observer rather than a scroll handler so nothing runs per scroll event over a page
+  with four WebGL panels; where the API is missing the control is simply always shown, which is
+  the right way to fail for something whose job is to be reachable. Hidden state is
+  `visibility:hidden`, not just `opacity:0`, so it leaves the tab order while invisible.
+- One known overlap, judged acceptable: the control is fixed bottom-right, and so are the virtual
+  pad's up/down buttons *inside* a panel. It only bites on touch, on the americano card (the only
+  one that still flies), with the pad on, and with that panel at the viewport's bottom-right. On a
+  phone the grid is one column and the pad is on the FIRST panel, i.e. the topmost, so in practice
+  they do not meet. Move the control before adding a pad to another card.
+- `scroll-behavior:smooth` and `.subcard{scroll-margin-top}` make a jump land the card's top edge
+  just below the viewport edge instead of flush against it. Both are switched off in the
+  reduced-motion block, along with the two new transitions.
+
+**Each comparison is a `.subcard`** — heading, lede, panels, transport, status line and view
+options in one bordered block, so it is unambiguous which transport drives which panels. Three
+tones make the nesting read without extra rules: page `--bg`, card `#f7f9fc`, white boxes inside.
+It is deliberately **not** the landing page's `.card`: that one is an `<a>` with a gradient hover,
+and a comparison has no single destination to click. A third comparison is another `.subcard`
+plus its `GROUPS` entry.
+
+**Groups are the unit of synchronisation.** Clock and camera are per group — the two comparisons
+are different scenes with different frame counts, so linking them would be meaningless. The
+decoder and the view options are shared across the whole page. Adding a third comparison means
+one more entry in `GROUPS` plus its transport ids in the markup; nothing else changes.
+
+**The tri-plane card's example picker: `FIELD_SCENES`, and why the table rather than the markup.**
+Both panels of that card are one example, so the picker (`#fdScene`, resolved through the group's
+`ui` like every other control) swaps both `src`s at once and restarts the card if it was already
+showing something — leaving the old model on screen under a new label would be worse than the
+reload. `applyScene()` also rewrites the three pieces of prose that quote per-model numbers (the
+subtag, the Load button's size, and the lede's "plus six more, scaled by six numbers", which is a
+`<span>` because lego is rank 1) — **nothing checks those against the bundles**, so they live in the
+table beside the URLs rather than scattered through the markup. The markup's `data-src` still
+carries the default example so `verify.py` sees a real URL; the table wins at init, and if the two
+ever disagree the table is what loads.
+
+Two things a second example exposed, both fixed rather than worked around:
+
+- **`ready`-time slider clamps must not ratchet.** `castMax` / `sampleMax` narrow a slider to what
+  the loaded scene can actually supply, and they only ever *lower* the max — so switching from a
+  scene with few castable gaussians to one with many would have left the slider stuck low. `g.oMax`
+  remembers the markup's ceiling and every clamp starts from it.
+- **The tangent scale is reset on an example switch**, the one exception to this page's rule that a
+  view option keeps its value across a load. It is a calibration, not a preference: the two models'
+  tangents differ by ~10× in magnitude, so bouncingballs' ×120 draws lego's arrows several screens
+  long. Per-example defaults are `scale:` in the table.
+
+`triplanes.html` is **deliberately left on bouncingballs** and is not switched by the picker: it has
+no `?tri=` parameter, its rank selector is six hardcoded `<option>`s, and its prose counts "six
+weights at 75 knots" throughout. Making it follow the picker means data-driving all three — worth
+doing if a third example ever lands, but it is a page-sized edit, not a parameter.
+
+**The `cam` relay carries two flavours and the host does not care which.** A fly camera
+(`viewer.html`) sends `{pos,quat,speed}`; an orbit camera (`field.html`, `knots.html`) sends
+`{orbit:{yaw,pitch,dist,target}}`, because a shared eye is *not* enough to keep two turntables in
+step — the target and the distance are what the pointer handlers actually edit, and two panels that
+agreed only on the eye would drift apart the moment either panned. The host stores whichever arrived
+in `g.lastCam` and re-sends it to a panel that announces late (`flush()` sends it on the
+points/field path too, not just the keyframe path). Both orbit panels guard the echo the same way:
+`pushCam()` posts only on an actual change and `applyCam()` records what it adopted, and an adopted
+pose sets `adopted` so the loser of the load race does not yank the pair back to the opening pose
+when its own `frameScene()` runs. `home` is still the opening pose, so *reset view* is unaffected.
+
+**The americano panels render `fit=square`.** The capture camera is 536×960 portrait; the panel
+ignores that aspect and renders the full square canvas at the *wider* of the two FoVs, so the
+view covers at least what the camera saw on both axes and more on the narrow one. That
+deliberately exposes reconstruction outside the filmed frustum, floaters included — it reads as
+3D instead of as a replay of the one supervised view. Without `fit=square` the panel letterboxes
+to the camera, which is what bouncingballs (already square, 800×800) still does.
+
+- `viewer.html` is **one panel**, not a copy of the SMV viewer: render core only, no picker,
+  no monitor, no view-option panel. It takes `?scene=&id=` and is driven entirely from the
+  host page over `postMessage`. It has **no static imports** — hosted, it never fetches the
+  decode path at all; the standalone `viewer.html?scene=…` fallback (kept so one panel stays
+  debuggable alone) pulls it in with a dynamic `import()`.
+- **A scene with no motion renders as-is.** `num_frames: 1` and an empty `streams` (what
+  `export_canonical_scene.py` writes — see *Common tasks*) needs no new render path: `motion`
+  stays null and the renderer keeps showing the keyframe. The one thing that had to change is
+  the standalone loader, which now returns before `ffmpegReady()` rather than fetch ~31 MB of
+  wasm for a decode loop that runs zero times. `scenes/bouncingballs_canonical/` is such a scene.
+  **The host still cannot load one into a splat card** — `loadGroup()` reads `sg.streams.xyz.path`
+  unconditionally — and does not need to: the canonical cloud reaches the page through
+  `field.html`, which loads it itself. This guard is what keeps
+  `viewer.html?scene=scenes/bouncingballs_canonical/scene.json` working for inspection.
+- **One `<iframe>` per scene, deliberately.** The renderer keeps its scene in module-level
+  vars (`N`, `baseCenter`, `gops`, texture handles); two panels in one document would mean
+  two of every global or a refactor into a class. A document per panel also gives each its
+  own WebGL context, ffmpeg.wasm and worker.
+- **Cameras are always linked**, with no toggle — two panels at different poses would not be a
+  comparison. Dropping the toggle also removed the `reemitCam` message that only existed to
+  re-sync after re-ticking it.
+- **The host does all loading and decoding; the panels are pure renderers.** Motion decode is
+  one-shot preprocessing — once offsets are dequantised into the motion array nothing
+  downstream touches wasm — so no decoder lives per canvas. Decoding *in* the panels meant two
+  module graphs each instantiating a primary + `POOL` helper: **four ffmpeg.wasm instances,
+  four workers, four compiles of the ~32 MB core, none ever freed.** Now one instance set
+  serves both scenes and `disposeFFmpeg()` frees it when the last GOP lands. Do not move
+  decoding back into `viewer.html`.
+- **Keyframes are pushed before motion**, so both panels are on screen and orbitable before the
+  core is even fetched. All of a scene's keyframes are *cloned* (~900 KB per GOP, and the host
+  still needs them to decode).
+- **Motion arrays are cloned too, and freed only when the panel ACKs them** (the `gop` field on
+  `buffered`). They were originally *transferred* — cheaper, but it destroyed the host's only
+  copy at send time, so a panel that failed to load or had to be reloaded was permanently
+  unrecoverable. Do not "optimise" this back to a transfer without replacing the recovery path;
+  the retained copy is what makes the watchdog below able to serve a restarted frame.
+- **Two load failures are recovered explicitly, because a CDN drops requests and localhost does
+  not** — the symptom was one or both canvases blank on the deployed site until a manual refresh:
+  - *A panel that never says `hello`* (its document 404'd, or its script threw before
+    announcing) is reloaded by a watchdog, cache-busted, up to twice. No message can fix this —
+    the protocol needs the panel alive to begin.
+  - *The host module itself failing to load.* Module loading is all-or-nothing, so one dropped
+    fetch under `../smv/` or `vendor/` means `boot()` never runs and both panels wait for ever.
+    A **classic** `<script>` before the module arms a timer that the module clears via
+    `window.__spdefBooted`; it cannot be done from inside the module that failed. Keep it
+    classic, and keep the flag assignment at the very top of the module.
+  - *A panel that is alive but never installed its keyframe* gets the keyframe re-sent rather
+    than the whole frame reloaded — cheaper, and it keeps the GL context and any motion already
+    delivered.
+  - *A hung fetch.* **This was the real cause of the recurring "only 1 of 2 / 2 of 3 canvases,
+    and I cannot play".** A CDN request that hangs rather than fails leaves `await rd.read()`
+    pending for ever; panels were loaded in sequence, so one hung fetch rendered every earlier
+    panel and left every later one blank permanently — a prefix, which is the reported shape.
+    Nothing recovered, because those panels *had* said hello and were simply never sent anything,
+    and play stayed disabled because `minBuffered()` sat at 0. Fixes, all in `grab()` and
+    `loadGroup()`: an **idle** timeout (no-progress, not total-duration, so slow-but-alive is
+    fine) with cache-busted retries; panels fetched **concurrently** so one cannot block the
+    others; and per-panel failure isolation, so a dead panel costs only itself and the rest of the
+    comparison stays playable.
+  - *Any other unbounded await.* `ffmpegReady()` (a ~32 MB fetch) and `decodeMotionGopBundle()`
+    (a worker round-trip) are wrapped in `withTimeout`. On a decoder timeout the retry must go
+    through `recreateFFmpeg()`, since `ffmpegReady()` caches its in-flight promise and would
+    otherwise hand back the same hung one.
+  - *A backgrounded tab.* The decode loop yielded with bare `requestAnimationFrame`, which never
+    fires while hidden — pressing Load and switching tabs froze it mid-group. `yieldFrame()`
+    races rAF against a `setTimeout`.
+  - `status()` names a panel that has not come up. Silence is what made these look like a
+    rendering bug rather than a frame that never loaded.
+  - Watchdog timers run from the moment a group is **started**, not from page load — with
+    on-demand loading those are no longer the same instant.
+- **The decode loop is interleaved by GOP index, not scene by scene**, and recycles the ffmpeg
+  primary every 4 decodes (`recreateFFmpeg`) as the SMV loader does. Both are inert on the
+  single-GOP scenes shipped today — they are there so a multi-GOP packing can be dropped back
+  in without the timeline pinning at 0 or a long decode chain running on one wasm heap.
+- Protocol is `{ch:'spdef', …}`, `id` panel→host, `to` host→panel; add a message type to both
+  ends or it is silently dropped. Panels re-post `hello` until answered, because a panel's
+  module script can in principle run before the host attaches its listener.
+- **View options (hard ellipsoids / trajectories / colorize motion) live on the host and are
+  broadcast to every panel IN THEIR GROUP** via one `view` message carrying the whole option set.
+  Within a comparison they must agree — two scenes under different render settings would be
+  meaningless — but the comparisons are independent, so **each group has its own panel** next to
+  the thing it affects. Trail max differs for that reason: 150 for bouncingballs, 200 for
+  americano. `flush()` re-sends `viewState(p.g)` with the keyframe so a panel that installs late
+  doesn't sit at the defaults.
+- **Navigation is per panel: `viewer.html` takes `?nav=orbit`, and only the americano card still
+  flies.** The choice is a property of the *capture*, not of the renderer, which is why both modes
+  live in that file rather than one replacing the other. **Orbit** (bouncingballs' two panels, and
+  `knotsplat.html`, which has no fly path at all) is the vocabulary `points.html` / `field.html` /
+  `knots.html` already use: a synthetic D-NeRF subject sits at the origin, so rotating and dollying
+  *it* is what a reader wants, and one finger / two fingers reach all of it. **Fly** stays the
+  default and stays on americano: a close hand-held HyperNeRF capture of a table top, whose world
+  frame is not Z-up (the orbit path hardcodes `UP=[0,0,1]`) and which deliberately renders past the
+  filmed frustum, so "look around from in here" is the useful verb. Three things follow:
+  - **A group must be all one mode.** The `cam` relay carries either flavour and the host does not
+    care, but an orbit state cannot be applied to a fly camera — so `?nav=` is set the same way on
+    every panel of a card.
+  - **Orbiting, `resetView` restores `home` directly**, not through `frameScene()`: that function
+    deliberately declines to overwrite a pose adopted from the panel beside it, which is right on
+    load and wrong for a button whose entire job is to undo where you have got to.
+  - **An orbit card has no pad and omits `touch` from its `ui`** (see below). `setTouchUI()` also
+    refuses in orbit mode, so a standalone `?touch=1` or a stale host message cannot raise one.
+- **The virtual movement pad follows the CAMERA, not the kind.** It drives the WASD axes, so it
+  exists only for a card whose panels fly — **americano alone today**. `pushTouch()` no-ops when a
+  card has no `touch` id, which is what lets every caller stay unconditional. Do not reintroduce a
+  kind-keyed rule: bouncingballs and the knot example are both splat-drawing cards that orbit.
+- **The pad is per group, but only ever on ONE panel of it.** Same control as the
+  SMV viewer's (`#vctrl` / `#joy` / `#vbtns`, stick → the WASD axes, ▲▼ → the Q/E axis, folded into
+  `moveCam()`), but retinted: the SMV pad is translucent white over a dark scene, which on this
+  page's white panel is invisible. The pad has to live *in* the panel — it sits over that canvas and
+  drives that renderer's camera — but **ownership is a host decision**, sent as `{type:'touch',on}`
+  to every panel in the group, `on:false` included. The cameras in a group are linked, so a pad per
+  panel would be N controls for one camera, each covering a third of the comparison. `touchPane()`
+  picks the first *live and announced* panel — leftmost in the 1×N grid, topmost once it collapses
+  to one column — and `pushTouch()` re-pushes on every hello (via `flush`), every panel failure and
+  every toggle, so ownership can move without leaving a stale pad behind. The per-group checkbox
+  (`amTouch`, in the transport, id-addressed since it is not part of the repeated
+  `.viewopts` block) **defaults to `(pointer:coarse)`**: with no keyboard there is otherwise no way
+  to fly at all, only to orbit. It stays a checkbox because the detection is a guess and the pad is
+  useful with a mouse. Hiding the pad must also zero `joyX/joyY/joyUp` or the camera keeps drifting.
+  Standalone, `viewer.html` decides for itself, with `?touch=1` / `?touch=0` to force it.
+- **The pad's long-press suppression is load-bearing, in BOTH viewers.** Holding a control is the
+  normal way to use it, and a hold is also what a phone reads as *select this text* — long-pressing
+  ▲ raised iOS's selection callout and magnifier over the scene. `preventDefault()` on `pointerdown`
+  does not stop it, because the callout comes off the touch sequence rather than the pointer event.
+  What does: `-webkit-touch-callout:none` + both `user-select`s + `-webkit-tap-highlight-color` on
+  **`#vctrl` as a whole** (the stick is a hold too, and a selection started on it drags into the
+  surrounding text), plus a `contextmenu` `preventDefault()` on the same element for Android's
+  long-press menu, which the CSS does not cover. Same four declarations and same handler in
+  `projects/smv/index.html`; keep them in step.
+- **The options block is repeated per group, so its controls are addressed by `data-o`, not by
+  id** — ids must stay unique in a document. That puts them outside `verify.py`'s id check, so
+  `check_repeated_controls()` instead asserts every `.viewopts` block exposes the full key list
+  the host looks up. A missing control in one copy is otherwise invisible until someone clicks
+  that group's toggle. The panel's handler must invalidate *both*
+  `trajKey` (caches the built trail) and `builtFrame` (caches the written splat colours); an
+  option change that doesn't also bump the frame otherwise shows the previous state — the same
+  cache trap `syncViewOptions()` documents on the SMV side.
+- **Trail max is 150** (the whole sequence) versus the SMV viewer's 60. `buildTraj()` rebuilds
+  on every displayed frame, so the cost is real at the top of both sliders: count 1500 / trail
+  24 is 1.2 MB per rebuild, but count 5000 / trail 150 is 34.9 MB — ~2 GB/s of `bufferData`
+  across two panels at 30 fps. Defaults stay at 1500 / 24 for that reason.
+- **No PCA nav-alignment here**, unlike the SMV viewer's D-NeRF path. PCA is computed per
+  point cloud, so the two panels would end up with different world-up axes and the comparison
+  would no longer be the same view of the same thing. The held-out test camera is used
+  verbatim, and `build_web_bundle.py` embeds an identical one in both scenes.
+- **Opening elevation is per panel, via `?elev=` degrees** (default 20; americano uses 10 —
+  the same angle reads as far more tilt on a close hand-held capture than on a synthetic
+  turntable at distance 4). The view is orbited about the world origin, which both cameras aim
+  near, so distance and framing are preserved.
+- **`worldUp` is therefore derived from the test camera** (`-vrot(camquat,[0,1,0])` in
+  `frameScene()`), not left at the renderer's hardcoded `[0,-1,0]`. D-NeRF's world frame is
+  Z-up: that default is ~81° off the camera's up and 0.96 aligned with its *forward*, so Q/E
+  dollied in and out instead of rising and drag-yaw tumbled about a near-forward axis. Dropping
+  PCA without replacing the axis is what caused it. Any future scene here needs a real camera
+  in its `scene.json` for the same reason.
+
+### `triplanes.html` — the tri-plane inspector (linked from the fourth card)
+
+A lab page for the explanation card's second half: the deformation field's own storage. The
+field encodes space as three 128×128×**32** planes and time as 6 weights at 75 knots, and
+`DirectGrid4D` composes `base + Σ_r tw_r(t)·res_r`.
+
+**That is affine in the weights, and PCA is linear** — so with one fixed 3×32 basis the RGB
+image is affine in the same weights, and **7 images per plane plus the weight table reconstruct
+every knot exactly**. Hence a ~1 MB bundle and a continuous slider instead of an 11 MB 75-frame
+flipbook. Between knots the page lerps `tw`, which is `DirectGrid4D`'s own continuous-`time_step`
+path — **not** what the trained renderer does there: inference reads the field at both bracketing
+knots and cubic-Hermite interpolates the predicted *offsets*, which is what the `v_xyz` / `v_rot`
+heads exist for. Same knots, different interpolant, and the page says so. `projects/spdef/triplanes/bouncingballs/` is 6 atlas PNGs (7 tiles each,
+uint8 with per-tile per-channel min/range — costing 0.2 % of range) + `meta.json`. Built by
+`~/4d-relight/scripts/visualization/export_triplanes.py`; the page's compositing was checked
+against the checkpoint at continuous t and agrees to ≤0.35 % of range.
+
+Two things are deliberate, against the old `render_canonical_temporal_weights` this ports:
+**one basis and one display range for the whole sequence** (per-frame PCA re-derives the axes
+and their arbitrary signs every frame, so still regions churn), and **two bases to switch
+between** — `composed` fitted to the planes, `motion` fitted to their temporal deviation.
+
+**Occupancy is what makes it readable, and it is not cosmetic.** Most of a plane is cells no
+canonical gaussian ever projects into — 49 % of the xy plane, 82 % of xz. The field is
+unsupervised there, so its values are arbitrary, large and smooth, and unweighted they dominate
+both the PCA covariance and the display range: the old output was the scene as faint texture
+inside a wash. The exporter bilinearly splats the canonical cloud onto each plane (the same
+mapping the field reads it with), **fits the PCA weighted by that map, takes the display
+percentiles inside it**, and ships it as `occ_<plane>.png`; the page fades unsupervised cells to
+the card surface. Note the honest side effect: weighting *drops* explained variance from 47–70 %
+to 25–36 %, because the background was low-rank and inflated it. The supervised region genuinely
+needs more than three components — which is why the default view is not the PCA one.
+
+**Five views, two computations, and one distinction that is easy to get backwards.** `triplanes.html`
+offers: *motion at this t*, *motion overall*, *template*, *one residual plane*, *features (PCA)*.
+(`field.html` deliberately shows only the last of these — see its section.) The last three are all
+`base + Σ_r w_r·res_r`
+under different weights — `w(t)`, `⟨w⟩`, or a one-hot with the base dropped — so they are uniforms,
+not code paths. The trap: **"motion overall" is not the base.** Both magnitude modes use
+`c(t) = w(t) − ⟨w⟩`, in which the base *cancels out entirely*; overall is a summary of the
+**time-varying** part, static only because averaging over `t` leaves no `t`. The genuinely
+time-invariant plane is *template* = `base + Σ_r ⟨w_r⟩·res_r`. It is shown in the **composed**
+basis and the pages switch to it automatically, because the motion basis is centred on the template
+and renders it exactly flat — which looks like a bug and is not. A single residual gets its own
+display window from the atlas tile's quantisation bounds; it is not on the composed image's scale.
+
+**The default view is a magnitude map, and it is exact.** `‖Σ_r c_r·res_r‖` over all 32 channels
+is a quadratic form in the weight deviation `c`, so the 21 upper-triangle entries of the per-cell
+6×6 channel Gram recover the whole family: motion at time t (`c = w(t) − ⟨w⟩`), RMS over the
+sequence (`⟨c cᵀ⟩`), speed if wanted. That is one more 7-tile atlas per plane and it escapes the
+PCA's variance loss entirely. The Gram is stored **companded** as `sign(g)·√|g|` (undone as
+`v·|v|`): the form has cancelling terms, so a uniform 8-bit grid spends its whole error budget on
+the largest entries and mottles exactly the low-motion cells the map exists to distinguish — 4 %
+of display range plain, 1.6 % companded, same bytes.
+
+### `field.html` — canonical cloud + tri-planes in one 3D scene (a THIRD renderer)
+
+The fourth card's LEFT panel (`knots.html` is the right one): both halves of the model in the
+coordinates they are stored in. The
+renderer core (EWA splatting, the 16-bit depth bucketing) is lifted from `viewer.html`. It is a
+third renderer **on purpose** — it carries a shader branch the comparison panels must never grow,
+and `viewer.html` is what the two published comparisons depend on.
+
+- **It is a panel, not a page.** Chrome-less, `{ch:'spdef'}` protocol, `?scene=&tri=&id=`, driven
+  by the host's transport exactly as `points.html` is — including the standalone fallback that
+  runs its own clock so one panel stays debuggable alone. The host's Load/Clear applies: nothing
+  is fetched until asked, and Clear navigates the frame to `about:blank`.
+- **Orbit, not fly, and no virtual movement pad** — the same argument `points.html` makes. One
+  object on a turntable needs orbit/pan/dolly, and unlike a fly camera that vocabulary is fully
+  reachable by touch, which is the only reason the pad exists. The opening pose is the dataset's
+  test camera converted to orbit state (the D-NeRF cameras aim at the origin, so the target is the
+  origin), raised by `?elev=` and pulled back by `?zoom=`. The renderer's basis convention is
+  `viewer.html`'s — r/u/f as the view matrix's columns with **u pointing DOWN the screen**, since
+  the projection flips Y — so `camBasis()` builds the triad directly and there is no quaternion.
+  Checked offline: handedness `cross(r,u)·f = +1`, orthonormal, and the framing matches the pose
+  the earlier quaternion camera produced.
+- **The timeline is the sequence's 150 frames**, `frac:true`, from `meta.num_frames` — which the
+  exporter recovers from the sealed `deform_config.yaml` by inverting
+  `capacity = floor(num_time_steps · knot_ratio / interval_stride)`. The panel maps a seek to
+  `t = frame/(frames-1)`. Do not hardcode a frame count in the markup; a re-export would drift.
+
+- **One texture, one sort, one draw call, split by index.** Below `u_planeStart` a gaussian is a
+  canonical one and carries its own colour (plus SH); at or above it, `cen.w` is a packed
+  `plane<<28 | cellX<<14 | cellY` and the colour is computed **in the vertex shader** from the
+  atlas textures. Sheets and cloud therefore occlude each other correctly — they are one sorted
+  splat pass, which is the reason the sheet cells are gaussians rather than textured quads.
+- **Scrubbing time costs six uniforms** (`u_w[6]`) — no texture upload, no CPU compositing. The
+  splat texture is built once. This is the whole reason for the affine-in-the-weights property; do
+  not "simplify" it into a per-frame repack.
+- **One view, on purpose: the plane at time t** (`G(t) = base + Σ_r w_r(t)·res_r`, PCA-projected in
+  the **composed** basis, `BASIS` at the top of the module). This panel is a teaching figure, not an
+  inspector — the magnitude maps, the template, the per-residual planes and the basis switch all
+  live in `triplanes.html`, and the sheets here would only invite the reader to compare readings
+  instead of watching the field move. So `field.html` fetches only the three `composed_*` atlases
+  and the occupancy maps (~470 kB, one 896×384 RGBA32F texture); the Gram and the motion basis are
+  never loaded, and the shader has no magnitude branch. The exporter still writes all of it.
+- **Hard ellipsoids are the CLOUD ONLY, and that is why the flag is a varying.** Same control, same
+  units and the same shader branch as the two comparison cards (`ellip` / `ellipR`, radius in
+  std-devs), but here one draw call holds both kinds of splat, so the fragment shader is told which
+  it is by a `flat out float vHard` rather than by a global uniform. Hard-edging the sheet cells
+  would turn a continuous feature image into a grid of discs with gaps between them — the cells are
+  gaussians for occlusion, not because they are meant to read as points.
+- **`cast` draws the lookup itself.** One segment per sampled canonical gaussian per plane, from its
+  centre to the foot of its perpendicular on that face: that foot is the address the field is read
+  at, and the sheet's colour there is the value it gets back — which is the one thing the sheets
+  alone cannot show. Details that are load-bearing:
+  - Gaussians **outside the field's AABB are skipped, not clamped** (there is no foot on the sheet
+    to draw, and a clamped one would depict a lookup that never happens), as are near-transparent
+    floaters. That leaves fewer than the slider's nominal 3000, so the panel reports `castMax` on
+    `ready` and the host **clamps the slider to it** — a silent no-op at the top of a range is worse
+    than a shorter range.
+  - The buffer is built **once**, in a deterministic (fixed-seed LCG) shuffled order, and the count
+    slider draws a **prefix**. The shuffle is what makes a prefix an even sample of the cloud rather
+    than whatever order the exporter wrote; without it the slider would have to rebuild.
+  - Lines are gated on `u_show` **in the shader**, so hiding a sheet hides its lines with no second
+    control, and they are drawn **after** the splats with the ordinary `SRC_ALPHA` blend, handing
+    the front-to-back `under` operator back afterwards — the same two-line dance `drawTraj()` does
+    in `viewer.html`. Alpha ramps from 0.18 at the cloud end to 1.0 at the plane end: the cloud end
+    is the crowded one, the plane end is the one carrying the answer.
+- **A line program is back, and only for the above.** The old one drew a bounding-box wireframe to
+  prove the sheets sit on the field's own AABB; that is settled (and checked offline), and on a
+  teaching figure the box read as scene geometry. **Do not re-add the wireframe** — but the cast
+  lines are a different claim, not the same feature returning.
+- **Alignment is by construction and must stay that way.** Sheet cells sit on the faces of the
+  field's *own* AABB (from the checkpoint's `aabb_min/max`, which `meta.json` carries), addressed
+  by the same `lo + (hi-lo)·i/(n-1)` mapping the field reads them with — `xy` on the low-z face,
+  `xz` and `yz` on their high faces, as the original `render_gs.py` figure did. Nothing is fitted
+  or re-centred. Verified by re-rendering the scene in numpy: each sheet's occupied cells are the
+  cloud's shadow on that face.
+- **`alpha:true` + `premultipliedAlpha:true`, cleared to (0,0,0,0).** The splat blend is a
+  front-to-back `under` operator (`ONE_MINUS_DST_ALPHA, ONE`); clearing to opaque white leaves
+  `DST_ALPHA` at 1 and multiplies every splat by zero — a blank canvas. The panel's white
+  background comes from the `.stage`, through the canvas.
+- Cells below `occupancy.threshold` are **not emitted at all** (~14.5 k sheet cells survive out of
+  49 k), and the rest carry occupancy as their alpha, so the sheets fade out exactly where the
+  field stops being supervised.
+- The camera is the scene's test camera, raised by `?elev=` and **pulled back by `?zoom=`
+  (default 1.42)** — the field's box is much wider than the cloud, so the dataset framing crops
+  the sheets.
+
+**Shaders are checked, not hoped for.** `glslangValidator` from the Khronos release compiles all
+four — the splat pair and the cast-line pair — (`#version 300 es`) clean, and a deliberate typo was
+confirmed to fail; `-l` links each pair, though note it does *not* catch an interpolation-qualifier
+mismatch across stages, so `flat` on `vHard` has to be kept in step by hand. A shader error blanks
+the panel and nothing else on this site would catch it. The atlas→texture layout and the shader's
+`texelFetch` indexing were separately checked against the checkpoint (≤2 % of display range, i.e.
+quantisation only). Do the same after touching either.
+
+### `knots.html` — the pushed knots and their tangents (a FOURTH renderer)
+
+The fourth card's right-hand panel, and the teaser figure animated: for a sample of the canonical
+gaussians it draws `X^c` (red), where the field puts it at the knot **left** of the playhead (blue)
+and at the knot **right** of it (green), each knot's tangent, the cubic Hermite arc between them,
+and the point itself at `t` on that arc. Beside `field.html` — the storage — this is the output.
+
+It is a **fourth renderer** and a deliberately small one: points and lines, no splats, no depth
+sort, no SH, no decoder. It shares the `{ch:'spdef'}` protocol, the orbit camera and the standalone
+fallback clock with its neighbours **and nothing else**; the splat core would have been carried
+whole to draw 1-pixel segments.
+
+What is load-bearing:
+
+- **The interval is TINY, and the figure is built around that.** Consecutive knots are two frames
+  apart: the mean chord between them is 0.007 in a scene 2.6 across — a couple of pixels. Drawn
+  alone the two knot dots sit on top of each other, which is why the **whole trajectory (all 75
+  knots) is drawn faintly as context and is ON by default**: one interval is 1/74 of it, and
+  without something to be small against, "which interval am I in" is unreadable. Zooming resolves
+  the rest.
+- **Tangents are drawn SCALED and the HUD names the factor.** The trained tangent is the derivative
+  per *interval*, and this field's are ~0.0007 against a 0.007 chord, so true scale is sub-pixel.
+  The default is ×120. Scaling is the only way to show direction; hiding the multiplier would
+  misstate the magnitude, hence the readout — do not drop it from the HUD.
+- **THE TWO EXAMPLES ARE THE EXPERIMENT, and this is the number to look at.** Knot density decides
+  whether the stored tangents mean anything, and the card's picker puts the two ends of that beside
+  each other. Measured on the shipped bundles:
+
+  | | knots | per interval | `\|v\|/\|chord\|` | angle(v, chord) | tangent term | speed at knot / mid |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | bouncingballs | 75 | ~2 frames | 0.105 | 63° (28 % < 30°) | 1 % of the chord | 0.11× / 1.49× |
+  | lego (`lego_02`) | 7 | ~8 frames | **1.088** | **8° (98 % < 30°)** | 13 % of the chord | 1.09× / 0.99× |
+
+  At 8-frame intervals the tangents come out *tangent to the path*, at the magnitude a faithful C¹
+  interpolant wants (Catmull-Rom would say 1.0), and the rendered motion runs at near-constant speed
+  through the knots (1.09× / 0.99×) instead of the smoothstep stop-and-rush the dense run shows
+  (0.11× / 1.49×). That is the identifiability argument confirmed from the other side: give the
+  tangent term something to explain — 13 % of the chord rather than 1 % — and the loss constrains
+  it. **Do not "fix" the bouncingballs arrows.** If a run's arrows look wrong, measure these numbers
+  before touching anything.
+
+- **The grey arrow is the SECANT, and it exists because the trained tangents do not follow the
+  path.** Measured on the shipped bundle: `|v|` is **0.10** of the interval's chord and **64°** away
+  from it (28 % within 30°), and the tangent field is nearly spatially constant (`|mean unit vector|`
+  = **0.85** — every arrow parallel). That is the model, not the drawing: finite-differencing the
+  rendered arc at the knot reproduces the drawn vector to 9e-5, and the parity block ties the curve
+  to torch. The cause is identifiability — with `spline_interval_stride = 2` a knot lands every two
+  frames and the piecewise-linear part already explains the motion: the tangent term moves the
+  rendered curve by **~1 %** of the chord (median 0.010 of it, p90 0.069), which at this scene's
+  0.007 chord is *below the position quantisation step the shipped bundle uses*. The reconstruction
+  loss therefore has almost nothing to say about `v`, and `xyz_velocity_div_loss = 5000`, which
+  penalises velocity *differences between neighbours*, decides — minimised by one spatially constant
+  field of any magnitude, which is exactly the 0.85. The `bouncingballs_wo_reg` run is the control:
+  same measurement gives 2.79 and 86°, long and random.
+- **What tangents that small cost, and why it still renders fine.** The arc's departure from the
+  straight chord is `t(2t−1)(t−1)·(m̄ − secant) + t(1−t)·(m₀ − m₁)` — it is straight exactly when the
+  tangents equal the secant. Measured: 9.5 % of the chord against a pure `m = 0` (smoothstep)
+  reference of 9.62 %, i.e. **the trained motion is smoothstep between knots** — 0.105× the mean
+  speed at each knot, 1.49× mid-interval, a **14× speed swing every two frames**. Sub-pixel in
+  position at this knot spacing; it scales with the chord, so it is the thing to look at on a
+  sparse-knot run.
+- **The SECANT was drawn beside the tangents and then REMOVED — do not re-add it.** It made the
+  disagreement visible (that was the first thing a reader asked about), but a quantity computed in
+  the panel, sitting next to one the model stores, reads as though the model produced both. The
+  figure shows stored vectors only; the disagreement is documented in prose instead — this section,
+  the panel header and the control's tooltip.
+- **Only moving gaussians are in the bundle.** The field pushes *every* gaussian off its canonical
+  position (the canonical frame is not the t=0 pose), so `|d_xyz|` says nothing about motion; the
+  exporter selects on peak deviation from the point's **own time-mean** (> 0.02 → 6,181 of 14,534).
+  For the static half the two knot dots would coincide with zero-length tangents.
+- **A prefix is a sample.** Rows are written in a deterministic shuffled order, so the count slider
+  draws the first N and still gets an even sample — the same trick `field.html`'s cast lines use,
+  and the reason moving that slider rebuilds nothing but the geometry.
+- **No depth test, painter's order instead** (unlike `points.html`). There is no solid geometry to
+  occlude anything and one sample's three dots sit within a pixel of each other, so a depth test
+  would arbitrarily pick which survives. Order is context → interval → dots → the point at `t`.
+  That last one is a **ring**, not a disc (`u_mode` 2 vs 1), so it surrounds the two knot dots
+  instead of covering the thing the card exists to show.
+- **Parity is checked on load.** `meta.json` carries torch-computed positions at 8 points × 6 times
+  and a tolerance; a mismatch refuses to draw. Same contract `traj.js` has with `traj_codec.py`,
+  for the same reason — a curve that is subtly wrong still looks like a curve.
+- **The camera is linked**, so the projection is `field.html`'s *verbatim* (same eye formula, same
+  screen-down `u`, same Y-flipped matrix, same `elev`/`zoom` defaults). If the two disagreed, one
+  orbit state would frame two different views. See the `cam` relay note above.
+- Buffers are **pooled, not reallocated**: the interval geometry is rebuilt every time the playhead
+  crosses a knot — about every other frame at 30 fps — and at the top of the sample slider that is
+  ~3.5 MB of garbage per rebuild otherwise. The whole-path buffer is time-independent and rebuilt
+  only when the count or its toggle changes.
+
+The bundle is `projects/spdef/knots/bouncingballs/` — `meta.json` + a single 1.37 MB `knots.bin`
+(canonical f32, then `d_xyz` and `v_xyz` as int16 on a per-component (zero, scale) grid; **not**
+float16, because the tangents are ~5e-4 and their *absolute* resolution is what the figure needs).
+One file, not the points bundle's streamed-per-knot layout: at this size streaming would be
+machinery for nothing. It is a **plain git object, not LFS** — same reasoning as
+`projects/spdef/points/**/*.bin`. `verify.py` now follows any referenced `meta.json` to the `bin`
+it names, since no page mentions that file and a manifest committed without its payload would fail
+only in the browser.
+
+**Shaders here are NOT glslangValidator-checked** — unlike `field.html`'s four, which are. There
+was no network on the box they were written on; they are two short ones (a pass-through vertex
+shader with `gl_PointSize`, and a fragment shader whose only branch is the point-sprite mask) and
+the panel reports a compile failure through its own error path rather than blanking. Run the
+validator over them if you touch them.
+
+### `knotsplat.html` — a compressed scene played from its knots (a FIFTH renderer)
+
+The trajectory card's second example. A **knot bundle**
+(`scripts/compress/compress_knot_bundle.py`) stores the deformation field's own knots — a value
+and a tangent per knot — instead of one delta image per frame, so any timestep is a cubic-Hermite
+blend of the two knots bracketing it. For *hook*: **15 knot images per stream instead of 99 delta
+frames**, and 100 frames of 23,716 gaussians come out of 2.3 MB.
+
+It is a fifth renderer, not a mode of `viewer.html`, for the reason upstream split
+`web/player_knots/` off from `player_browser`: the two formats disagree on everything below the
+keyframe — four streams per chunk instead of two, one image per *knot* instead of per frame, a
+blend of two knots instead of keyframe-plus-delta, and no streaming window because the whole knot
+set is resident. `viewer.html` is what the two published comparisons depend on and its decode path
+is the one this file pins to `compression/decoder.py`; branching it for a second format is exactly
+the risk that rule exists to prevent. The renderer core (shaders, `RGBA32UI` splat texture,
+full-range 16-bit bucket sort) is `viewer.html`'s verbatim; the **orbit camera is `field.html`'s**,
+which shares the same basis convention — see *Navigation* below.
+
+- **Trails are the MESH card's, not `viewer.html`'s, and the Trails control is shared between the
+  two examples.** Each sampled gaussian's path is evaluated from the spline over the preceding
+  frames and the segment colour flips at every knot, so one stripe is one interval (about 7 frames
+  on hook, about 8 on astra). That is the whole reason the figure is worth drawing on a gaussian
+  scene at all: the colour change *is* the knot, which is the spacing the paper argues about.
+  `viewer.html`'s overlay is a different thing (a stored per-frame array, faded blue to red by age)
+  and would say nothing about knot spacing. Details that carry over from `points.html` unchanged:
+  the two stripe colours, alpha 0.65 further multiplied by `vAge`, the exact knot times inserted
+  into the uniform sample set so a stripe boundary lands **on** a knot, and per-interval runs drawn
+  as one `drawArrays` each. `evalSubset()` is `blendKnots` restricted to an index list, built from
+  the module's own `curveBasis`/`curveOrder` so there is still one definition of the curve; the
+  full-cloud path would evaluate all 23,716 rows per sample, which at ~200 samples a frame is not
+  affordable. **`TRAIL_POINTS`/`DETAIL` are 900/4, below points.html's 1500/5** — that card draws a
+  mesh and nothing else, while every frame here already costs a full-cloud blend, a splat-texture
+  upload and a depth sort, and the trail is rebuilt on top of that. **No motion filter is needed**
+  (unlike the bundle behind `knots.html`): every gaussian in hook moves, median peak deviation from
+  its own time-mean 0.216 in a scene 2.5 across, so a stride over the PLAS-sorted rows is already an
+  even sample. A trail crossing a CHUNK boundary is reported as absent rather than drawn: each chunk
+  has its own reference and its own PLAS order, so row *j* is a different gaussian either side.
+- **What it deliberately does NOT carry**, unlike `viewer.html`: the colorize-motion tint, which
+  reads a per-frame motion array that this format has none of.
+  Hard ellipsoids *is* shared: it is a property of the splat, not of how the splat got there.
+- **Per frame it is two 4-term blends per gaussian**, then the ordinary splat write and sort. No
+  decode, no new upload of offsets. That is why the timeline is genuinely continuous and why the
+  card's Speed slider means something here.
+- **The reference is the chunk's FIRST KNOT, and `xyz_d` is relative to it — but `rot_d` is
+  not.** Position adds the blend to the reference; rotation adds it to the *canonical* quaternion
+  and re-normalises. `compress_knot_bundle.py`'s docstring explains why the two references differ
+  in kind (the position bases sum to 1, so folding `d0` into the reference cancels; doing the same
+  for rotation would need a non-unit quaternion the reference grid cannot represent). Do not
+  "symmetrise" this.
+- **Parity is checked on load and reported in the status line.** At a knot the basis is
+  `[1,0,0,0]`, so the curve must return that knot's own stored offset; a mismatch means the panel
+  is rendering a deformation the model never predicted, which still looks like motion. Same
+  contract `traj.js` and `knots.html` have with their bundles.
+- **`knot_decode.js` is a COPY of `4d-relight/web/player_knots/knot_decode.js`** — re-copy it
+  whole rather than editing here, exactly as `traj.js` is re-copied; upstream's
+  `tests/test_knot_parity.py` is what ties its dequantisation and its curve to
+  `compression/offset_stream.py`. The one deliberate change is the three vendor specifiers
+  (`../player_browser/vendor/` → `../smv/vendor/`), which only its own `ffmpegReady()` reaches.
+  **The host never calls that** — `decodeKnotChunk()` takes the ffmpeg instance as an argument, so
+  the page keeps using the single instance `decode_motion.js` owns and there is never a second
+  ~32 MB core. Only the standalone `knotsplat.html?scene=…` fallback instantiates one.
+- **The host decodes, the panel renders** — same division as the splat cards, and it inherits
+  their hardening: `grab()`'s idle timeout and cache-busted retries, `withTimeout` around the
+  decoder, and a `gen` check after every await. `loadKnotGroup()` is a separate pass rather than a
+  branch inside `loadGroup()` because the manifest shapes genuinely differ (`chunks[]` with
+  `reference` and four streams, against `gops[]` with `reference_path` and two).
+
+**Only the upper byte of the position streams ships**, and that is a packaging decision, not an
+approximation invented in the viewer. A 16-bit stream is two planes (`xyz_*_u.mkv` +
+`xyz_*_l.mkv`); the lower planes are the bulk of the download and the least compressible part of
+it. `build_knot_web_bundle.py` copies only the upper plane and relabels the stream
+`png16_video` → `png16_upper_video` — a format `compression/offset_stream.py` already writes and
+reads, and what `compress_knot_bundle.py --no_full_precision` would have produced. Both readers
+reconstruct the identical value, `(u << 8)` rather than `(u << 8) | l`, a truncation toward the
+stream's minimum. `knot_decode.js` keys the low plane off the format string, so it needs no
+branch. **Verified offline**: the shipped files, read through the JS formulas, match
+`Png16UpperVideoReader` / `H2654ChReader` to 0.0, and the curve reproduces every knot exactly.
+Cost: max position error 4.8e-06 → **2.9e-03** world units in a scene 2.5 across, for 2.3 MB
+instead of 4.6 MB. Pass `--full_precision` to keep both planes.
+
+The upstream page has a live 16-bit/8-bit A/B toggle. **There is deliberately no such control
+here** — the low planes are not in the bundle, so the toggle would have nothing to switch back to.
+
+### Shared decode path — do NOT hoist `vendor/` out of `projects/smv/`
+
+`viewer.html` imports `../smv/decode.js` and `../smv/decode_motion.js`. ES module specifiers
+resolve against the *importing module*, so those modules still reach their own `./vendor/` —
+one copy of the ~31 MB ffmpeg core on disk and in cache, serving both pages. Sharing needs no
+move; a "shared lib" folder would only rename the same thing.
+
+The one thing that genuinely does not cross the boundary is **the service worker**: `sw.js`
+registered from `/projects/smv/` has scope `/projects/smv/` and cannot control the SpDef page,
+and GitHub Pages can't send `Service-Worker-Allowed` to widen it. To give SpDef the same
+durable vendor cache, move `sw.js` to `projects/sw.js` (default scope `/projects/`) and
+register `'../sw.js'` from both pages — its fetch handler already keys on `/vendor/` appearing
+anywhere in the path, so it needs no change. Not done yet; SpDef currently relies on the
+plain HTTP cache.
+
+**`coreURLs()` in `decode_motion.js` resolves `./vendor/core/*` against `import.meta.url`, not
+the document.** `toBlobURL` fetches, and `fetch` resolves relative strings against the *page* —
+the old document-relative form worked only for a page in that folder and 404'd from SpDef.
+Keep it module-relative when syncing from `4d-relight/web/player_browser/` (which still has
+the document-relative version).
+
+### `points.html` — the point-trajectory card (a SECOND renderer)
+
+Ported on 2026-07-31 from `4d-relight/web/player_points/` (`index.html` + `traj.js`), scene
+`bundles/humanoids/astra_samba_09_u8_mesh_s4` → `projects/spdef/points/astra_samba/`. It is the
+demo for the **GS-free** path (`scripts/train/run_anime_trainer.py`): the deformation field fitted
+straight to a DeformingThings4D `.anime` vertex sequence, with no rasteriser in the loop.
+
+`points.html` and `viewer.html` share the `{ch:'spdef'}` protocol **and nothing else** — different
+shaders, different data model, no decoder. Do not try to merge them.
+
+- **What ships is the spline, not a replay.** Per-point offset + tangent at each of 105 knots;
+  `traj.js` evaluates the same cubic Hermite the field uses, so the timeline is *continuous* and
+  every frame between the supervised ticks is inferred in the browser. That is the whole claim of
+  the card, which is why the group carries `frac:true` and the frame readout says
+  `· supervised` / `· inferred`, and why ⇤/⇥ step trained frames — scrubbing lands on one only by
+  accident. Those go out on `ready` as **`marks` / `markOn` / `markOff`** (from
+  `meta.train_frames`), the generic spelling the card's other example also uses for its knots; see
+  the `marks` note in the host section above.
+- **`traj.js` is a VERBATIM copy of the upstream module** and mirrors `traj_codec.py` /
+  `point_deform.py`. Every bundle carries a torch-computed `parity` block; the panel refuses to
+  render if it disagrees, the same contract the splat path has with `compression/decoder.py`. Do
+  not edit the curve math here — edit it upstream and re-copy.
+- **The PANEL loads its own bundle, unlike every other panel on the page.** The host owns loading
+  for splat scenes only because a decoder per canvas is four copies of a ~32 MB ffmpeg core. There
+  is no wasm here at all, and `traj.js` already streams the two knots bracketing the playhead with
+  its own LRU cache; hoisting that into the host would mean shipping knots over `postMessage`
+  every frame. So `startGroup()` **bypasses `pump()`** for a points card — queueing it behind a
+  splat decode would make it wait ~30 s for a resource it never touches — and the host's only jobs
+  are starting the frame, relaying `progress`, and catching a late/restarted panel up in `flush()`
+  (which for this kind sends `viewState` + a `seek`, and returns before the keyframe path).
+- **The eager load is 0.21 MB** (meta.json + canonical + faces); knots are ~48 KB per pair,
+  fetched on demand, so initial load is flat in sequence length. Every fetch goes through an
+  **idle-timeout wrapper with cache-busted retries**, injected as `traj.js`'s `fetchFn` — the same
+  lesson as the host's `grab()`, and the reason `hardFetch` drains the body itself rather than
+  handing back a real `Response` (the idle clock has to cover the read, not just the headers).
+- **Z-up.** DeformingThings4D is z-up — the canonical bounds settle it (tall axis spans 1.18
+  against 0.43/0.48) — and the character faces **−Y**. The upstream player orbits about world Y,
+  which lays it on its side. Opening pose is `?yaw=`/`?pitch=` in degrees (146/10), same idea as
+  `viewer.html`'s `?elev=`.
+- **Orbit, not fly, and no virtual movement pad.** One character on a turntable needs only
+  orbit/pan/dolly, and unlike the fly camera that vocabulary is fully reachable by touch (drag,
+  two-finger pinch and pan) — which is the thing the pad exists to work around. Hence no
+  `touch:` id in this group's `ui`.
+- **Retinted for a white panel, except the surface.** Upstream is a dark standalone page, so its
+  pale cloud and pastel stripes are invisible here. The surface shading `abs(n*0.5+0.5)` off
+  screen-space derivatives is deliberately left alone: it is the same convention as
+  `utils/mesh_render.py`, so a web frame and a paper figure still look alike.
+- **The panel opens one trail-length in** (`openAt` on `ready`), because a trail covers the past
+  and frame 0 is the one state where the card's main feature has nothing to draw. It also refuses
+  to draw at all until the first successful `evaluate()` — `positions` is zero-filled before that,
+  and drawing would paint the mesh collapsed to the origin.
+- **The ground-truth overlay was dropped, data and all.** The export carries GT at every 60th
+  frame only (`--gt_stride 60`, 14 of 837), so the checkbox did nothing at 98 % of the timeline.
+  Removing it let **`arrays.gt` come out of `meta.json` and `gt.bin` off disk** — 665 KB, which
+  was 80 % of what the card fetched before you touched anything. `traj.js` fetches GT only when
+  the manifest declares it, so no code there had to change. Restoring the overlay means putting
+  the file and its meta entry back as well as the control; a checkbox alone will find no data.
+
+**What is deliberately NOT a control here** (upstream ships all three as sliders/checkboxes):
+
+- **Knot stripes are always on** (`STRIPES` in `points.html`). The colour flip *is* the knot, and
+  it is the one thing on screen that shows the spacing the paper argues about; a trail in one
+  colour says nothing the mesh did not already say. Stripe pair is **`#59B292` / `#FA6781`**.
+- **Sample density is fixed at `DETAIL = 5`.** It trades a cost nobody can see against smoothness
+  everybody can. Note the *peak* cost is set by `MAX_TRAIL_SAMPLES = 256`, not by DETAIL: the cap
+  binds from length ≈ 51 upward, so raising DETAIL from 3 to 5 moved the *low* end of the slider
+  up (6.1 → 10.4 MB per rebuild) and left the ceiling at ~12.9 MB. That ceiling is the number to
+  watch if `TRAIL_POINTS` (1500) or the cap is ever changed.
+- Trail alpha is **0.65**, further multiplied by `vAge` in the shader. 1500 overlapping polylines
+  at full strength wash out the mesh they are drawn over.
+
+**Playback rate (`g.rate`, the Speed slider) exists only on this card, and that is the point.** A
+splat scene has exactly one decoded pose per frame, so slowing it down can only repeat them; the
+spline evaluates poses that were never stored. `tick()` uses `g.rate` for a `frac` group and the
+shared `FPS` elsewhere. It survives Clear, like the view options — a preference, not scene state.
+The slider carries **percent and the label shows a multiple** (`1.00×`); an absolute fps readout
+was tried and read as a rendering setting rather than a playback one.
+
+**`g.rate` is DERIVED from the slider, never assumed** — `applySpeed(g)`, called from init, from
+the slider's `input`, and from `startGroup()`. It used to be initialised to `FPS` and only ever
+updated by the handler, which left exactly one window where the control and the clock disagreed:
+before the first drag. That is the common case, not a corner — a browser restores a range input's
+value on reload without firing `input`, so a card reopened at 0.50× played at 1.00× until the
+slider was nudged. Any new control whose state the host caches needs the same treatment; it is the
+transport's version of the rule `syncViewOptions()` states for the render options.
+
+**The status line reports streamed bytes as a fraction, not a running total.** `bundleBytes()` in
+the panel derives the whole sequence's size from `meta.json` (`arrays[].bytes`, plus
+`num_points × 3 × CODE_BYTES[dtype]` per knot) and sends it as `totalMB` on `ready`; the panel's
+1 Hz `stats` carries `mb` and the host refreshes the status line on each. Derived rather than
+hardcoded so a re-export cannot make the page lie. A counter that only ever goes up is
+indistinguishable from one that never stops, which is the wrong impression for a page whose whole
+argument is that initial load does not grow with sequence length.
+
+**Three size figures have to agree, and one of them is manual.** `bundleBytes()` and the
+`fetchedBytes` counter both **include meta.json** — `hardFetch` counts every request and stashes
+the first one's size as `manifestBytes`, because `traj.js`'s own `bytesFetched` starts at
+`loadEager()` and misses the 46 KB manifest. The Load button, the subtag and the lede state
+**5.0 MB total / 0.2 MB up front** as literal text; nothing checks those against the bundle, so
+re-exporting means re-reading them. Current split: manifest 46 KB + canonical 47 KB + faces
+120 KB eager, 105 knot pairs × 48 KB streamed.
+
+**The mesh is decimated ≈4× and that is stated on the page** — 31,515 vertices → 7,921, via
+`--decimate_to 7879` (`cluster_decimate()` clusters and remaps faces, so a surface survives). Do
+not conflate it with `skip_step = 4`, the *temporal* subsampling that makes every 4th frame a
+supervised one: both are "×4" and they are different axes.
+
+## `projects/grain/` — WITHDRAWN, placeholder only (since 2026-09-14)
+
+The camera-noise playground is **offline ahead of a patent filing.** `projects/grain/index.html` is a
+static notice (header, authors, a link to the public arXiv paper, footer) and nothing else; it
+carries `noindex`. **Do not restore the playground, its parameters or any description of the
+method into this repo** (the repo and the Pages site are public) until Mingyang says the filing is
+done.
+
+- **Removed from the tree:** the playground page, `projects/grain/assets/grain_params.json` (the
+  measured parameters) and `assets/grain-analyzer-spec.md` (the calibration recipe, which had been
+  committed by mistake on 2026-08-08 despite being meant to stay untracked; it is now in
+  `.gitignore`). This file's long section on the page's method and synthesis was removed too.
+- **The private copy** of all of it, including that section, is `~/grain_page_backup_2026-09-14/`
+  on the cluster, outside the repo. Restore from there, not from git history.
+- **Still in the repo, deliberately:** the landing card (`index.html`, band `03`, still linking
+  here), `assets/grain_teaser.png` and `assets/grain_example.jpg` (now referenced by no page), and
+  their credits in `LICENSE`. `verify.py` keeps the page in `PAGES`; the placeholder passes.
+
+## `projects/tempformer/` — the sliding-block machine
+
+Results page for *TempFormer: Temporally Consistent Transformer for Video Denoising*
+(ECCV 2022, [doi:10.1007/978-3-031-19800-7_28](https://link.springer.com/chapter/10.1007/978-3-031-19800-7_28)),
+built 2026-08-16. Source repo is `~/tempformer` (`video_denoiser/`), same repo the grain page
+came out of.
+
+**Nothing is ported and nothing is published.** TempFormer++ is a 6-block spatio-temporal
+transformer with SpyNet flow and a Haar DWT — it does not run in a browser, and the checkpoints
+in `models_zoo/` are unpublishable anyway. So the page does not try. It shows **the schedule**,
+which is what the paper's temporal-consistency claim is actually about and is
+architecture-independent: five frames in and three out, windows sliding two at a time, one output
+slot poured twice, a leading inlet fed by the previous window, a label scalar, and a loss term on
+the disagreement. The renderer is a **weighted average of five numbers**, and the page says so in
+as many words. Do not "upgrade" it toward the real network.
+
+The metaphor is a bottle-filling machine: one bottle is one frame, its colour is the frame's
+content, the jitter between neighbours is the noise, and a smooth reference ribbon runs underneath
+so the jitter is legible as *error* rather than as a palette.
+
+**The wiring is `video_denoiser/train.py::recurrent_w_overlap` and `denoise.py`'s loop, checked
+against the code rather than remembered.** Two things there are easy to get wrong and both were
+got wrong on the first pass:
+
+- **Propagation feeds EVERY window, not just the second one.** `recurrent_w_overlap` replaces
+  `b1[:,:,0]` as well as `b2[:,:,0]`, and runs **both** windows at `label=[1.]`. Modelling window
+  A as a special all-noisy first block makes propagation look worse than it is and puts two
+  different tables on screen for what is one sliding machine.
+- **There is therefore ONE table in play per mode, not two.** Both windows are at the same label,
+  so the model computes the same function twice. Splitting the figure into two machine cards would
+  say the opposite of the thing being explained.
+
+**Sequences are NINE slots long and SEVEN are drawn** (drawn bottle `d` = array slot `d+2`,
+`OFF=2`). The two hidden slots on the left are what the window *before* window A reads. That is
+the price of the point above: if propagation feeds every window, window A needs a predecessor, and
+inventing one is cheaper than making A a special case. Windows are `array 2..6` → pours `3,4,5`
+and `array 4..8` → pours `5,6,7`; the shared slot is array 5 = **drawn slot 3**.
+
+- **`train.py` substitutes the CLEAN target for A's leading frame; the page runs the real unroll
+  instead, and the difference was measured.** On the scalar reference both give the same seam
+  (0.1222 vs 0.1230) but the clean substitute flatters the accuracy (err 0.2264 vs 0.2325),
+  because handing the machine the exact answer is better than any denoiser can be. So the training
+  device is a *good* stand-in — worth knowing — but the page uses the predecessor's actual pour and
+  therefore never has to caveat that it gave the machine the answer.
+- **The predecessor runs the SAME table, not a separate label-0 one.** The slide is a mid-clip
+  steady state: every window is fed by its predecessor, so window A and window B must be
+  structurally identical. Feeding A from a label-0 machine (the first draft) makes them different
+  for no reason the paper has. Both leading inlets are therefore functions of the table being
+  solved for, and the fixed point takes **~39 passes from cold** — `fitMachine`'s `W0` argument
+  warm-starts it from the previous table, which is the only reason the α slider stays live.
+- **α applies in both modes here, and the paper has no such setting.** `training_step` adds `l_ov`
+  only in the `tce_active` branch; `all_noisy` computes `ov1`/`ov2` and then never uses them. So
+  "α without propagation" is off the paper's map. The page offers it anyway — pulling the two
+  controls apart is the only way to see what each buys — and says so in the prose.
+- **The loss is L2 where the paper's is L1.** That is the one deliberate departure, and it is what
+  makes the minimiser a linear solve rather than an iteration. It is stated on the page.
+
+**The fit is a real least-squares solve, run in the browser on every control change**, not a baked
+table. 320 synthetic paths × 3 OKLab channels = 960 scalar rows; the 18×18 normal equations (15
+weights + 3 row-sum multipliers) are assembled from 5×5 covariances and solved by Gaussian
+elimination with partial pivoting. One table serves both windows, so the overlap term couples
+**row 2** (A's last pour) to **row 0** (B's first). With propagation the objective stops being
+quadratic — B's leading inlet is itself a function of the table — so the exact solve is iterated to
+a fixed point (converges in well under ten passes; the cap of 30 is a backstop).
+
+**THE SIGNAL MUST DRIFT, and this is the subtlest thing on the page.** `makePath` is a random walk
+through OKLCH — each frame is its predecessor plus a small step in hue and lightness. It was a
+four-term Fourier curve first, and that was **wrong in a way that inverted one of the page's
+conclusions**. A globally-parameterised path is pinned down by a handful of numbers, so frames
+10–14 determine frame 11 nearly as well as frames 8–12 do; the two windows then agree largely
+because they share input *noise*, and propagation — which replaces a shared noisy inlet with a
+cleaner one — **removed that spurious agreement and measurably widened the seam**, by ~20 % at
+every noise level and in every variant tried (fixed table vs refitted, mean-reverting vs not,
+noise/step ratio from 0.5 to 32). Under a drift the past carries information the future does not,
+propagation is real information transfer, and it cuts the seam by about a third. Mingyang flagged
+the symptom — "just introducing prop should reduce the seam" — and he was right. If the generator
+is ever changed, **re-run the propagation check before anything else**: a signal model that is
+merely prettier can silently reverse the physics.
+
+Two knock-ons of the drift model, both fine: the fitted kernel is **flatter** (0.24/0.27/0.20/0.16/
+0.14 rather than a sharp peak) because a drift is less predictable than a curve, and **no weight
+goes negative any more**, which is why `--neg` could be dropped with the grid. Rows still peak on
+their own outlet's inlet (1, 2, 3).
+
+**`HUE_DRIFT` = 15°/frame is a per-sequence constant rotation on top of the walk, and it is capped
+there by measurement.** The walk alone drifts only ~37° over nine frames (13·√8), so every bottle
+came out the same blue and the figure read as monochrome — Mingyang flagged it from a screenshot.
+A constant drift sweeps the sequence across the ring instead: at 15°/frame it covers **120°**.
+
+It cannot go much further, because a constant drift is a **global parameter**, and global
+predictability is exactly what inverted the propagation result once already. Measured at
+σ = 0.050, sweep 0 / 64 / 120 / 176 / 240°:
+
+| sweep | 0° | 64° | **120°** | 176° | 240° |
+| --- | --- | --- | --- | --- | --- |
+| propagation's effect on the seam | −33 % | −29 % | **−25 %** | −18 % | −3 % |
+| colour error ΔE | 4.09 | 4.17 | **4.31** | 4.49 | 4.74 |
+
+Past about 180° propagation stops doing anything. **Do not raise it to make the colours prettier.**
+
+**The two chunks can never be opposite each other, and no setting will fix that** — window A and
+window B *share bottles 2, 3 and 4*, the same water, so their contents differ by at most
+2·`HUE_DRIFT`. The identity colours (`--mA`/`--mB`) carry the opposition; the water carries the
+measurement. Asking the water to do both is asking it to lie.
+
+**THE OPENING SEQUENCE IS A CHOSEN SEED, and choosing one is the sanctioned way to get more colour
+out of the figure.** `D2.seed` is **4775864** (it was 5), picked on 2026-08-22 because its path
+sweeps **134°** against the 120° the drift alone gives, so the seven bottles cross the ring —
+lilac, blue, periwinkle, pink, orange, red, taupe — instead of sitting in one family. Two things
+make this safe where raising `HUE_DRIFT` is not. The ensemble the table is fitted on has its own
+fixed `ENS_SEED`, so **nothing about the machine moves with the display seed**; and the seed is not
+cherry-picked for a flattering readout, its seam sitting at the **61st percentile** over 1500
+sequences at the shipped σ. That is the rule for any future change here: pick the seed for hue, and
+check where its seam lands before shipping it. `scratchpad/page_check.py --scan` does both.
+
+The reroll chain is untouched by this — 4775864 is the value one press of *New sequence* already
+produced from the old default, so the page simply opens one step further along an LCG it walked
+anyway. Note that chain multiplies as **doubles**: past 2^53 the product is rounded before
+`>>>8` sees it, so an exact-integer replica of it silently diverges from the page after a few
+steps. `chain()` in `scratchpad/seed_scan.py` does it in float for that reason.
+
+**THE HUE DRIFT RATE CANNOT BE USED TO MAKE THE SEAM MORE VISIBLE — it measures backwards.** The
+obvious idea is to sweep the sequence through more hue so the two windows average over visibly
+different colour regions and disagree more. It does the opposite: a faster-drifting signal makes
+neighbours less informative, the fitted kernel narrows onto the frame itself, and since *both*
+windows hold that frame they agree more. Measured at σ = 0.050, α = 0, over `HUE_STEP`
+(the random-walk step, not `HUE_DRIFT`)
+13 → 20 → 28 → 36 → 45 → 60 °/frame: the seam falls **2.98 → 2.69 → 2.30 → 1.95 → 1.66 → 1.40**
+while the denoising gain collapses **49 % → 44 % → 39 % → 34 % → 29 % → 23 %**. Both numbers get
+worse for the page. `HUE_STEP = 13` is near the sweet spot; do not raise it to "make the colours
+more different".
+
+**Fitting one table across all three OKLab channels is deliberate** — it is what makes it a
+temporal kernel rather than a colour transform, and it is what the real model does, since the
+mixing is over frames and not over channels.
+
+**There is no `node` on this box, so the covariance-form assembly was validated in Python before
+being transcribed.** `scratchpad/ref_fit.py` runs the exact scalar-loop, plain-list algorithm the
+JS uses and compares it against a verified numpy reference on an identical ensemble: agreement to
+**1.3e-14**. Re-do that rather than trusting a JS edit, and syntax-check the page with esprima the
+way the museum page documents (`esprima.parseScript`, not `parseModule` — it is a classic script).
+That file is **gone**, like the first `page_check.py`: neither was ever committed, and `scratchpad/`
+is not in `.gitignore`, so the two now living there are worth keeping. `seed_scan.py` holds the
+generator replica (RNG, walk, noise, OKLab) and `page_check.py` imports it and adds the ensemble,
+the fit and the run.
+
+**Measured behaviour at the shipped default** (σ = 0.080, now the slider's top end). Re-measure
+with `scratchpad/page_check.py` if the generator or the ensemble changes. These are means over the
+320 fitting paths, three OKLab channels combined as ΔE:
+
+| | α = 0 | α = 0.2 | α = 1 | α = 3 |
+| --- | --- | --- | --- | --- |
+| seam ΔE, no propagation | 5.00 | 3.30 | 1.40 | 0.57 |
+| colour error ΔE, no propagation | 6.29 | 6.38 | 6.65 | 6.82 |
+| seam ΔE, **with** propagation | 3.44 | 2.17 | 0.88 | 0.35 |
+| colour error ΔE, with propagation | 5.88 | 5.93 | 6.09 | 6.19 |
+
+The noisy inputs sit **12.99 ΔE** from the truth, so the machine roughly halves the error. The
+outputs have to look visibly smoother than the inputs or the page has no first act. Row sums come
+back exactly 1 (≤2e-16). **The middle row does not move with α at all**, because it is not part of
+the seam. Nothing on the page states this any more; it is documented here only.
+
+`scratchpad/page_check.py` was rebuilt on 2026-08-22 (the earlier copy was never committed) and is
+**validated end to end against the browser**: at the shipped default it reproduces the seam and
+colour-error readouts the page renders, 5.67 and 6.41, to the last digit. That check covers the
+whole chain at once, since the RNG, the walk, the noise, the fit, the run and the OKLab conversion
+all have to be right to land on the same two numbers. Two small differences from the numbers this
+file carried before it: the no-propagation seams come out 5-7 % lower than the previous table said
+(2.78 rather than 2.98 at σ = 0.050), and below about σ = 0.02 propagation is a **dead heat**
+rather than a win (0.05 against 0.06 at σ = 0.005). Both are in regimes nothing on the page turns
+on, and the shipped default is not one of them, but do not quote a benefit at tiny σ.
+
+**The default noise was raised from 0.035 to 0.050 on 2026-08-17 and from 0.050 to 0.080 on
+2026-08-22, both times for legibility.** At 0.035 the shown seam was 1.54 ΔE, a couple of JNDs.
+0.050 put it at about 2.4 on the shipped sequence, and 0.080 puts it at **5.67**, which is the
+difference between suspecting the two halves of the shared glass differ and seeing that they do.
+It now opens at the slider's maximum, deliberately: the reader explores by turning the noise
+*down*, and the page's first act needs the flicker to be unmistakable before either fix means
+anything. Do not lower it back without checking the seam is still legible on a real screen.
+
+**A default only holds if the page reads its controls at boot, which it now does.** `D2` used to
+carry the opening state and nothing ever reconciled it with the markup, so a **reload** split the
+two: a browser restores a range input's and a checkbox's value without firing an event, and the
+figure went on rendering the default under a slider showing something else until it was nudged.
+`syncControls()` runs before the first `build2()` and takes σ, α and the propagate flag from the
+controls. It is the same rule the SpDef transport states for `g.rate`: derive the cached state from
+the control, never assume it. Any new control here needs a line in it.
+
+With propagation on, the table's first row goes to **`+0.59 +0.10 +0.07 +0.13 +0.11`**, i.e. 59 %
+of the weight on the propagated inlet. That is the single most legible thing in the figure: the
+machine visibly trusts the frame it was handed.
+
+**Propagation helps at every noise level, on both numbers — there is no crossover.** Measured
+across the slider (α = 0 throughout):
+
+| σ | 0.005 | 0.015 | 0.030 | 0.050 | 0.065 | 0.080 |
+| --- | --- | --- | --- | --- | --- | --- |
+| seam, propagation off | 0.01 | 0.42 | 1.52 | 2.98 | 4.01 | 5.02 |
+| seam, propagation on | 0.01 | 0.30 | 1.03 | 2.02 | 2.75 | 3.48 |
+
+An earlier build reported a sign flip at σ ≈ 0.027 and shipped copy describing it. **That was an
+artefact of the old Fourier signal model, not a property of the schedule** — see the drift note
+above. Do not reinstate a crossover claim without re-deriving it.
+
+**What α does to the table is exact, and is now stated in prose rather than shown.** Push α up and
+the two *edge* rows collapse onto the three bottles both windows can see: at α = 3 and the shipped
+σ they are mirror images, `+0.32 +0.34 +0.31 +0.02 +0.01` against `+0.01 +0.02 +0.31 +0.33 +0.32`,
+the same weights on the same three frames, which is precisely when the two pours of slot 3 must
+agree. The middle row never moves. With propagation on, the first row puts **+0.71** on the
+propagated inlet.
+
+**THE PLAYBACK LOOP IS GONE TOO** (removed 2026-08-17, same pass as the table: "the seam itself
+has told the story"). The frame swatch, the ▶ Play button, `showFrame()`, `togglePlay()` and the
+`FRAME_OF` labels are all out, along with the two control-hint paragraphs under it. What that
+costs is worth knowing before anyone reinstates it: **temporal inconsistency only exists in time**,
+and a static strip understates flicker. The seam glass and the meter carry the disagreement as a
+quantity; the loop was the only thing that showed it as an artefact. It was judged redundant, not
+wrong.
+
+**THE MIXING TABLE IS NO LONGER DISPLAYED** (removed 2026-08-17: "the table would be a bit hard to
+understand"). The 3x5 grid of weights, its two rows of inlet labels, the label-0/1 dial and the
+`drawTable()` renderer are all gone, along with the `--neg` token that only ever coloured a
+negative cell. **The fit itself is untouched** — `fitMachine()` still solves for the table on every
+control change, because the pours come from it; only the display went. Every weight quoted in this
+file is therefore still true of the shipped page, just not visible on it, and
+`tools/bake_tempformer_teaser.py` still prints the table when it runs.
+
+**Deleting a block of markup here has twice cut more than intended, and `verify.py` cannot see
+it.** Removing the playback row took `build2()`'s closing brace with it (the JS parsed as an
+unterminated function, which `verify.py` passes clean because it only checks ids, tags and CSS
+braces) and an over-broad end anchor also swallowed the *Citing this page* block from the Citation
+section. **Run the esprima check after every edit to this page** — it is the only thing between a
+bad cut and a page stuck on a blank panel. Do not put the grid back
+without a reason: it was the one element that asked the reader to interpret fifteen numbers before
+the figure paid off.
+
+**The page is the seam figure and the paper's citation, and nothing else** (trimmed 2026-08-17 at
+Mingyang's request).
+
+**There is NO self-citation, deliberately.** A *Citing this page* block with its own `@misc` entry
+was there and was removed on Mingyang's instruction: the machine is a proof of concept for the
+published work, not a separate artefact, so it is covered by citing the ECCV paper. Do not re-add
+an `@misc` for it. The Citation section is the paper link, the reference-format string and the
+`@inproceedings` entry, and that is the whole of it. (The other three project pages do carry a
+self-citation, because each of them ships something the paper does not: measured parameters, a
+compression bundle, a viewer.) A *The machine* section introducing the 5-in/3-out shape, a *What this is, and
+what it is not* section, a *Credits* section and a closing three-paragraph essay were all removed;
+the opening lede was rewritten to carry the minimum setup those had supplied, since without it
+nobody knows what the table or the ribbon are. Only the two ledes, the in-panel control hints and
+the citation survive. **Do not grow the explanations back** — if something needs saying, it goes in
+this file.
+
+**Three things make the seam legible, and none of them fakes the measurement.** The water always
+shows the true pours; the disagreement is small in absolute terms (2.98 ΔE at the default) and the
+figure has to work anyway.
+- **The two chunks are colour-coded on a rule UNDER each glass**, `--mA` for window A and `--mB`
+  for window B, with the shared glass carrying both. The identity cannot go in the water — the
+  water is the measurement — so it goes on the furniture.
+- **The shared glass is taller than its neighbours** (92 px against 72). The rig is
+  `align-items:end`, so it grows upward and every caption still sits on one line.
+- **The seam meter** (`#s2Meter`, a `scaleX` on a `--mA → --mB` ramp) is the gap against the same
+  scene with *both* controls off, so it empties as either one is applied. Readings at the default
+  noise: **100 % → 69 % (α .2) → 13 % (α 3)** with no propagation, and **68 % → 42 % → 7 %** with
+  it. `D2.ref` caches that full-scale fit per ensemble; it needs no fixed point, so it is one solve.
+
+**Palette: the first green one in the family** — pale bench-top green `#ebf0ea`, deep pine accent
+`#1c6b4b`, and it is hue-poor for the same reason Grain's is. Every saturated colour here is
+*data*, so an accent with a hue of its own competes with the thing being compared.
+
+**The two window identities are exact opposites on the ring, and low chroma** — `--mA` #3b6987 at
+h 239° and `--mB` #815939 at h 59°, **180.0° apart**, both L .50 / C .070. Equal lightness and
+equal chroma is what stops one window reading as the important one. Three things about it:
+- **Muting them raised the contrast**, because the pair they replaced was lighter: 5.90 / 6.14 on
+  `--surface` and 4.77 / 4.96 on `--panel-2`, against 5.40 / 4.37 before. All ≥ 4.5:1.
+- **The chroma drop is 30 % / 46 %** from the previous #2f6f9e / #9a4f8f. Every saturated colour on
+  this page is data; an identity that shouts competes with the water it labels.
+- **It is an accessibility fix too.** The old blue/plum sat 47° apart on the *same* side of the
+  wheel, which is the one pairing red-green colour blindness cannot separate. Blue against
+  terracotta is the standard safe opposition. Do not reintroduce a same-side pair.
+
+**THE TEASER IS MINGYANG'S OWN PAINTING, and it is the reason the landing card is a `.card.split`
+rather than a `.card.feat`.** The generated stand-in was deleted on 2026-08-17 and the placeholder
+`.teaserwip` block replaced by the drawing on 2026-08-22: a winter dusk over the city's rooftops,
+snow, lit windows, a green copper spire. It is **portrait, 0.75:1**, and that shape is what decides
+the layout. As a full-bleed `.teaser` at the card's 672px of interior it would stand ~900px tall,
+i.e. a screen of teaser above four lines of prose. In the split card it is the spdef pattern's
+200px figure column at 267px tall, which balances the text beside it. The `.teaserwip` rule and its
+"not filled yet" dashed box are **gone with it**, since the slot it stood in no longer exists.
+
+`.splitfig.paint` is the two declarations that go with a *painted* teaser: 10px radius and a
+hairline `--line` border, the same treatment `.photo` gives the header portrait. The other teasers
+are diagrams on a transparent ground and take neither. This one is an opaque rectangle, and without
+them it reads as a block dropped on the card rather than a picture sitting in it.
+
+**The shipped asset is derived and the master is not in the repo**, the same rule as `web_bg.png`
+and `misc_shelf.png`. The master is a 3024x4032 / 11.7 MB PNG; it arrived at
+`assets/temformer_teaser.png` (note the missing *p*) on 2026-08-22 and was taken back out the same
+day, so re-baking means fetching it from wherever Mingyang keeps it. There is no bake script,
+because the transform is a plain resize and encode: 690x920 covers 3x the 230px the phone layout
+paints and 3.45x the 200px column, and JPEG rather than PNG because a painting with no transparency
+quantises badly and encodes cheaply (103 KB, in family with
+`photo.jpg` at 129 KB and `misc_card.jpg` at 264 KB):
+
+```bash
+ffmpeg -y -i <master>.png -vf "scale=690:920:flags=lanczos" -q:v 2 assets/tempformer_teaser.jpg
+```
+
+**Do not re-run `tools/bake_tempformer_teaser.py` over `assets/tempformer_teaser.jpg`.** That
+script writes the generated seam figure and would overwrite the drawing; it also writes a `.png`,
+so the two no longer even collide by name.
+
+**Keep `tools/bake_tempformer_teaser.py` regardless.** It documents the page's OKLab and
+least-squares arithmetic in a form that runs offline, it prints the mixing table (now the only way
+to inspect it, since the page no longer draws one), and it can re-cut a figure for the page body.
+It writes a 1320x274 transparent PNG using the same colour model, the same drift generator and the
+same fit as the page, so anything it produces is a real frame of the demo rather than an
+illustration of one. Two details in it are load-bearing: the `glass()` helper pastes the right half
+from its own layer rather than drawing a second rounded rect, because overlapping two radii leaves
+a notch exactly at the midline where the figure wants a clean cut; and its `path()` must stay in
+step with the page's `makePath()`, drift included.
+
+**The shared glass has no divider line, deliberately.** Two windows pouring the same colour must
+look like one glass of water; a rule down the middle would draw a seam that is not there and would
+hide the moment α closes it. The caption under it does the naming.
+
+## Git LFS (read before touching scenes)
+
+Scene binaries are in **Git LFS** (`.gitattributes`): `*.mkv` and `*.npz`. The
+ffmpeg `*.wasm` is a plain binary git object, not LFS.
+
+- Clones and CI must run with LFS smudge enabled or scenes are pointer stubs
+  (`.github/workflows/pages.yml` already sets `lfs: true`).
+- Pages serves the built artifact from its CDN, so visitor traffic costs no LFS
+  bandwidth — only CI checkouts do.
+- **`projects/spdef/points/**/*.bin` and `projects/spdef/knots/**/*.bin` are deliberately NOT in
+  LFS.** LFS pays off for a few large
+  files; the points bundle is 214 files averaging 23 KB (one per knot per component — see the
+  build's reasoning in `web/README.md`), and 6.7 MB total. As plain git objects that costs
+  nothing recurring; in LFS it would be 214 objects re-downloaded on every CI checkout, against
+  a monthly bandwidth quota, for no packing benefit. The knot bundle is one 1.37 MB file, which is
+  under the threshold where LFS buys anything at all. If a much larger bundle is ever
+  added, revisit — but scope any rule to that path, since `*.bin` is far too generic a glob for
+  this repo.
+
+## Common tasks
+
+**Run locally** (ES modules + WebGL2 require `http://`, not `file://`):
+
+```bash
+python3 -m http.server 8137        # repo root; viewer at /projects/smv/
+```
+
+**Add / remove a scene:** drop or delete a folder under
+`projects/smv/scenes/<dataset>/<name>/` (must contain `scene.json` + per-GOP
+`reference.npz` + `.mkv` streams), then `python3 projects/smv/make_scenes_index.py`.
+Never hand-edit `scenes.json`.
+
+**Repackage a SpDef scene** from a training bundle (SpDef has no `scenes.json` — the two
+scenes are named directly in `projects/spdef/index.html`):
+
+```bash
+conda run -n 4dre python ~/4d-relight/web/player_browser/build_web_bundle.py \
+  --bundle /cluster/scratch/misong/4dre/dnerf/bouncingballs/bundle_1_packed \
+  --name spdef1_reg --no-index \
+  --scene_config /cluster/scratch/misong/4dre/dnerf/bouncingballs/scene_config.yaml \
+  --source_path /cluster/scratch/misong/datasets/dnerf/bouncingballs
+# americano is the same, from /cluster/scratch/misong/4dre/hyper/misc/<run>/bundle_single_packed
+# with that run's scene_config.yaml and --source_path .../datasets/hypernerf/misc/americano/
+# then move web/player_browser/scenes/<name>/ -> projects/spdef/scenes/bouncingballs_reg/
+# and set scene.json's "name" to the destination folder (the --name is only a build handle)
+```
+
+`--scene_config` is what embeds the held-out test camera; without it the viewer opens on a
+default square camera and the scene looks lost. Both SpDef scenes must carry the *same*
+camera or the side-by-side stops being a comparison.
+
+**Repackage the SpDef point bundle** (the third card) — different builder, different repo path,
+no camera to embed (it is framed from the AABB):
+
+```bash
+conda run -n smv python ~/4d-relight/web/player_points/build_point_bundle.py \
+  --model_path /cluster/scratch/misong/4dre/anime/x4/astra_SambaDancing_09 \
+  --name humanoids/astra_samba_09_u8_mesh_s4
+# then copy web/player_points/bundles/<name>/ -> projects/spdef/points/astra_samba/
+# and strip meta.json's source_path / model_path to their basenames: as built they are the
+# cluster's absolute paths, and this is a public site.
+```
+
+**Package a knot bundle for the web** (the trajectory card's second example — a *compressed*
+scene whose motion on disk is the spline's knots, not one image per frame). Different builder
+again, and note it writes only the **upper** position plane by default — see the `knotsplat.html`
+section for why that is exactly a `--no_full_precision` bundle and not an approximation:
+
+```bash
+conda run -n 4dre python ~/4d-relight/web/player_knots/build_knot_web_bundle.py \
+  --bundle /cluster/scratch/misong/4dre/dnerf/hook_mlp_06/knot_bundle_packed \
+  --out ~/mingyang-song.github.io/projects/spdef/scenes/hook_knots --name hook \
+  --scene_config /cluster/scratch/misong/4dre/dnerf/hook_mlp_06/scene_config.yaml \
+  --source_path /cluster/scratch/misong/datasets/dnerf/hook
+```
+
+`--scene_config` + `--source_path` embed the held-out test camera (it reuses
+`build_web_bundle.py`'s own `extract_camera`, so the pose convention cannot drift); without it the
+panel auto-frames and opens on a pose the paper never shows. `--camera_from` copies the block out
+of an existing `scene.json` instead. The bundle must be `format: knot_bundle` — a frame bundle
+goes to `build_web_bundle.py`. Re-packaging changes four strings the page states as literal text,
+all of them in `TRAJ_SCENES` rather than the markup: the subtag, the panel caption and its tag
+line, and the Load button's size.
+
+**Export a canonical cloud** (for the explanation card — the model's *canonical* Gaussians, the
+thing the deformation field moves, as a one-frame static scene):
+
+```bash
+cd ~/4d-relight && PYTHONPATH=. conda run -n 4dre python \
+  scripts/visualization/export_canonical_scene.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/bouncingballs \
+  --out ~/mingyang-song.github.io/projects/spdef/scenes/bouncingballs_canonical \
+  --camera_from projects/spdef/scenes/bouncingballs_reg/scene.json \
+  --check /cluster/scratch/misong/4dre/dnerf/bouncingballs/bundle_1_packed/gop_0/reference.npz
+```
+
+It quantises onto the **training grid** (bit widths and `quant_scene_scale` read from the model's
+sealed `online_quantizer_config.yaml`, SH-rest committed to the trained codebook), so the cloud
+is decoded by the same path as every other scene here. `--iteration` defaults to the latest,
+which is the one the shipped bundles were compressed from — 20000 for bouncingballs, 14,534
+gaussians. Note that a **bundle's `reference.npz` is not this**: it is the deformed state at the
+GOP's start frame, sorted and padded to a square, so only the grid, the codebook and the
+time-invariant attributes are comparable — which is exactly what `--check` compares, and they
+match exactly. `--camera_from` copies the held-out test camera out of an existing `scene.json`
+rather than re-extracting it, so the canonical panel opens on the same pose as the comparisons
+above it.
+
+**Export the knot bundle** (the same card's right-hand panel — what the field *predicts* at each
+knot, for a sample of the canonical gaussians):
+
+```bash
+cd ~/4d-relight && PYTHONPATH=. conda run -n 4dre python \
+  scripts/visualization/export_knots.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/bouncingballs \
+  --out ~/mingyang-song.github.io/projects/spdef/knots/bouncingballs \
+  --camera_from ~/mingyang-song.github.io/projects/spdef/scenes/bouncingballs_canonical/scene.json \
+  --check /cluster/scratch/misong/4dre/dnerf/bouncingballs/bundle_4_packed
+```
+
+This is the **only** one of the three exporters that actually runs the field — grid lookup, feature
+product, decoder MLPs, at 75 knots × 14,534 points (~25 s on a CPU). It re-implements that forward
+path from the flat state dict rather than importing `GridDeformCoordNN`, because
+`deformation_fields.modules.hashencoder` JIT-compiles a CUDA extension at *import*, so the real
+class cannot even be loaded on a CPU box. The re-implementation is what `--check` exists to prove,
+and it is a strong check: a packed bundle's `gop_k/reference.npz` is the deformed cloud at that
+GOP's start frame, written by the compressor from the trained renderer — a different code path end
+to end. `bundle_4_packed` is used rather than `bundle_1_packed` precisely because three of its four
+GOPs start **mid-interval** (frames 38 / 76 / 113 → `t_rel` 0.87 / 0.75 / 0.12), so the Hermite arc
+is exercised and not just the knot values. Current result: every sampled point matches a keyframe
+point to **4.88e-4**, i.e. one position-quantisation step, at all four frames — and that also pins
+the frame→time convention as `t = frame/(num_frames-1)`, which is what all four panels use.
+
+Re-exporting changes three numbers the page states as literal text — the Load button, the subtag
+(both in `FIELD_SCENES`, not the markup) and the samples slider's `max` (which the panel also clamps
+at runtime via `sampleMax`, so the slider cannot outrun the data even if the table goes stale).
+
+**Add an example to the tri-plane card** — three bundles from one trained model, then one entry in
+`FIELD_SCENES`. This is the full recipe used for `lego_02`, in order:
+
+```bash
+cd ~/4d-relight
+# 0. the held-out test camera. --camera_from copies one out of an existing scene.json, and a model
+#    with no shipped scene has none — so build the block the same way build_web_bundle.py does.
+#    (Loads camera POSES only; no image decode, no GPU.)
+PYTHONPATH=web/player_browser conda run -n 4dre python -c "
+import json;from build_web_bundle import extract_camera
+json.dump({'camera':extract_camera('/cluster/scratch/misong/4dre/dnerf/lego_02/scene_config.yaml',
+          '/cluster/scratch/misong/datasets/dnerf/lego', dataset_name='dnerf')}, open('/tmp/lego_cam.json','w'))"
+
+# 1. the canonical cloud   2. the tri-planes   3. the knots
+PYTHONPATH=. conda run -n 4dre python scripts/visualization/export_canonical_scene.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/lego_02 \
+  --out ~/mingyang-song.github.io/projects/spdef/scenes/lego_canonical --camera_from /tmp/lego_cam.json
+PYTHONPATH=. conda run -n 4dre python scripts/visualization/export_triplanes.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/lego_02 \
+  --out ~/mingyang-song.github.io/projects/spdef/triplanes/lego
+PYTHONPATH=. conda run -n 4dre python scripts/visualization/export_knots.py \
+  --model_path /cluster/scratch/misong/4dre/dnerf/lego_02 \
+  --out ~/mingyang-song.github.io/projects/spdef/knots/lego \
+  --camera_from ~/mingyang-song.github.io/projects/spdef/scenes/lego_canonical/scene.json
+```
+
+Both panels must be given the **same** camera or the linked cameras frame two different views —
+step 1 embeds it and step 3 copies it back out of what step 1 wrote, so they cannot drift. There is
+no `--check` for a model with no packed bundle (lego_02 has none); the browser-side `parity` block
+still ties the curve to torch, and the forward path itself was verified end-to-end on bouncingballs.
+
+**The frame count is NOT recoverable from the checkpoint alone, and getting it wrong is silent.**
+`capacity = floor(num_time_steps · knot_ratio / interval_stride)`, so inverting it gives a *range*:
+bouncingballs (ratio 1.0, stride 2) pins 75 knots to 150 frames, but lego at ratio 0.3 gives 7 knots
+for anything from **47 to 53** frames. The old code rounded `capacity·stride/ratio` and returned 47
+— three frames short, which misplaces every knot on a timeline that maps `t = frame/(frames-1)`, and
+nothing on the page would have looked broken. Both exporters now read `len(transforms_train.json
+frames)` via the `source_path` in `scene_config.yaml`, fall back to the inversion only where it is
+unambiguous, and otherwise demand `--num_frames`. The two copies of that logic (`export_knots.py`
+holds `frame_count_candidates` + `frames_from_dataset`, `export_triplanes.py` has it inline in
+`sequence_length`) must be changed together.
+
+A new example also needs the **rank** to be within the panel's reach: `field.html` carries
+`uniform float u_w[6]`, bounded at draw time by the field's own `u_rank` (bouncingballs 6, lego 1).
+A rank-1 atlas is two tiles wide, so an unbounded 6-term loop would `texelFetch` outside it —
+undefined per the ES 3.0 spec, and a NaN there poisons the whole splat colour. Rank > 6 throws on
+load rather than rendering something wrong.
+
+`traj.js` must be re-copied verbatim alongside any bundle whose format changed — `meta.version`
+is a hash of the metadata and cache-busts every binary URL, but it cannot cache-bust a decoder
+that no longer matches. The bundle's `parity` block is what catches that, on load, in the browser.
+
+**Deploy:** push to `main`.
+
+## Conventions & cautions
+
+- **Every page declares `color-scheme`, a `<meta name="theme-color">` tracking its `--bg`, and
+  a `background` on its `html` rule** — without them the page is tinted but the browser chrome
+  around it is not, and Chrome and Safari disagree about the gap. Enforced by `verify.py`;
+  rationale in the *Page chrome* section of `.claude/skills/site-design/SKILL.md`. Applies to
+  any new project page too.
+- The viewer is intentionally **one big `index.html`** with dense, single-line helpers
+  (quaternion/vector math, half-float packing, GLSL as template strings). Match that
+  terse style; don't reformat wholesale.
+- `projects/smv/vendor/` is vendored third-party code (ffmpeg.wasm, fflate) — read-only.
+- This is a **public site**: ship only publishable content. The D-NeRF scenes are
+  synthetic; `neur3d` has human faces and must never be committed.
+- Citation/paper metadata lives inline in each project page (search `citeAcm` / `citeBib`);
+  `projects/tempformer/` carries the ECCV 2022 entry and, unlike the other three, **no
+  third-party-licence clause in its footer** — it ships no data, no vendored code and no
+  webfont-independent assets, so there is nothing to except. The SpDef page carries its own
+  `citeAcm`/`citeBib` plus a **Datasets**
+  section crediting D-NeRF, HyperNeRF and DeformingThings4D — the three it actually uses. The
+  first two are verbatim copies of the SMV viewer's; keep them in sync if either is corrected.
+  A new card means a new entry here, not just new markup.

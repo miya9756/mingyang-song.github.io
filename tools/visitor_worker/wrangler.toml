@@ -1,0 +1,14 @@
+name = "smv-visitors"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# Origins allowed to read the counter. A browser can't forge Origin; curl can, but the
+# per-IP/day dedupe still binds, so the worst a spammer achieves is +1/day.
+[vars]
+ALLOWED_ORIGINS = "https://mingyang-song.github.io,http://localhost:8137"
+
+# Create with:  npx wrangler kv namespace create VISITS
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "VISITS"
+id = "PASTE_KV_NAMESPACE_ID_HERE"
