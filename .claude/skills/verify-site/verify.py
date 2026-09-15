@@ -38,7 +38,8 @@ PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
 # decode_motion.js, not from any page, so a page-only sweep would miss it entirely.
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
            "projects/smv/dequant_worker.js", "projects/smv/sw.js",
-           "projects/spdef/traj.js", "projects/spdef/knot_decode.js"]
+           "projects/spdef/traj.js", "projects/spdef/knot_decode.js",
+           "misc/museum/room/water.js"]
 
 VOID = {"br", "img", "input", "meta", "link", "hr", "source", "area", "base",
         "col", "embed", "param", "track", "wbr"}

@@ -164,7 +164,7 @@
 <header class="inner">
   <a class="back" href="../"><span class="barrow" aria-hidden="true">←</span> Digital Museum</a>
   <h1>The Painted Room</h1>
-  <p class="subtitle">Gilded things, borrowed light, and water where the floor once was.</p>
+  <p class="subtitle">Gilded things, borrowed light, and water over a sunken floor.</p>
 </header>
 
 <main>
@@ -173,7 +173,7 @@
          would tell a screen reader the opposite. The label under it names whatever is being faced,
          and the turn is reachable from the keyboard for anyone who cannot drag. -->
     <canvas id="gl" tabindex="0"
-            aria-label="A flooded salon seen in 3D: broken marble columns and arches, five paintings in carved gilded frames, a velvet chair, a fringed lamp, sunflowers, and books above reflective water. Drag or use arrow keys to look around, scroll or use plus and minus to zoom, and press 0 to reset the view."></canvas>
+            aria-label="A flooded salon seen in 3D: broken marble columns and arches, five paintings in carved gilded frames, a velvet chair, a fringed lamp, sunflowers, and books above shallow water, with ripples bending light across the stone floor. Drag or use arrow keys to look around, scroll or use plus and minus to zoom, and press 0 to reset the view."></canvas>
     <div id="status">Building the room…</div>
   </div>
 
@@ -228,9 +228,10 @@
 // them together and keep them beside each other.
 import * as THREE from './vendor/three.webgpu.min.js';
 import {carvedFrame, dressRoom} from './details.js';
+import {shallowWater} from './water.js';
 const {Fn, vec2, vec3, vec4, float, uniform, texture, uv, positionWorld, cameraPosition,
        mix, clamp, max, min, abs, exp, pow, smoothstep, normalize, length, fract, sin, dot,
-       reflector, screenUV, screenCoordinate, Loop, mx_noise_float, saturate, oneMinus,
+       screenCoordinate, Loop, mx_noise_float, saturate, oneMinus,
        step, bumpMap} = THREE.TSL;
 
 const canvas=document.getElementById('gl'),statusEl=document.getElementById('status');
@@ -277,7 +278,7 @@ const WORKS=[
 // visitor reads as "the room" is the ruin standing in the water, and everything past it is meant to
 // fall away into the dark, which is how the reference painting handles its own background.
 const ROOM_W=11.0, ROOM_D=[-9.0,5.0], ROOM_H=9.0;
-const WATER_Y=0;
+const WATER_Y=0, WATER_DEPTH=0.35, FLOOR_Y=WATER_Y-WATER_DEPTH;
 // ---------------------------------------------------------------------------------------------
 // THE LAMP. One light, as asked for, and it is a SPOTLIGHT rather than a bulb for three reasons
 // that all pull the same way: a cone is what a gallery actually hangs; one spotlight needs one
@@ -350,7 +351,7 @@ const SIM_C=0.22;           // wave speed² per step. Above ~0.25 the explicit i
 const SIM_DAMP=0.9955;      // per step. A ring should cross the room a few times and then be gone.
 const DROP_R=0.026;         // in sim uv, so ~0.5 m: a hand's worth of disturbance, not a pebble's.
 const DROP_A=0.55;
-const SWELL=0.065;           // the ambient breath, so the floor is never a mirror. Off under reduced
+const SWELL=0.24;           // small surface slopes, shared by refraction and caustics. Off under reduced
                             // motion -- see the note there.
 
 // ---------------------------------------------------------------------------------------------
@@ -447,7 +448,7 @@ const frameMat=new THREE.MeshStandardNodeMaterial({color:0xd7a965, roughness:0.3
     [0,ROOM_H/2,ROOM_D[1],2*ROOM_W,ROOM_H,0.35],
     [-ROOM_W,ROOM_H/2,mid,0.35,ROOM_H,depth],
     [ ROOM_W,ROOM_H/2,mid,0.35,ROOM_H,depth],
-    [0,WATER_Y-0.5,mid,2*ROOM_W,0.3,depth],
+    [0,FLOOR_Y-0.15,mid,2*ROOM_W,0.3,depth],
     [-7.5,ROOM_H,mid,7,0.4,depth],[7.5,ROOM_H,mid,7,0.4,depth],
     [0,ROOM_H,ROOM_D[0]+1.5,8,0.4,3],[0,ROOM_H,ROOM_D[1]-1.5,8,0.4,3]
   ]){
@@ -956,77 +957,9 @@ function stepWater(){
 }
 
 // ---------------------------------------------------------------------------------------------
-// THE WATER, PART TWO: how it looks.
-//
-// Shaded by hand rather than by a standard material, because a standard material would have to be
-// argued out of everything it is good at. What is wanted is four terms and no more: a nearly black
-// body, a planar reflection, a Fresnel mix between them, and one specular from the lamp. Given
-// one bright source and a mirror-flat surface, writing those four is shorter and more controllable
-// than persuading a PBR material to arrive at them -- and it keeps the reflection's distortion, the
-// ripple normal and the highlight reading from the SAME normal, which is the thing that sells it.
-const SIM_TO_UV=1/(2*SIM_HALF);
-const NRM_GAIN=9.0;      // height-field slope -> normal tilt. Taste, bounded by the water going
-                          // faceted above ~40 as the 8 cm grid starts to show.
-const DISTORT=0.026;      // how far the ripples drag the reflection across the screen
+// Water and caustics share the simulation and the actual lamp's position and colour.
 const uLampPos=uniform(new THREE.Vector3(LAMP_XZ[0],LAMP_Y,LAMP_XZ[1]));
-const uWaterTint=uniform(new THREE.Color(0x0d1a1e));
 const uLampTint=uniform(new THREE.Color(LAMP_COL));
-
-const water=new THREE.Mesh(new THREE.PlaneGeometry(2*SIM_HALF,2*SIM_HALF), new THREE.MeshBasicNodeMaterial());
-water.rotation.x=-Math.PI/2;
-water.position.y=WATER_Y;
-scene.add(water);
-
-// The planar reflection: the room rendered again from a camera mirrored through the water plane.
-// Half resolution -- it is about to be smeared by the ripples, and nobody has ever noticed a soft
-// reflection in moving water.
-const refl=reflector({resolutionScale:0.4});
-refl.target.rotation.x=-Math.PI/2;
-scene.add(refl.target);
-
-{
-  const pw=positionWorld;
-  const wuv=pw.xz.mul(SIM_TO_UV).add(0.5);
-  const e=1/SIM_N;
-  const hAt=(o)=>texture(simRT[0].texture, wuv.add(o)).x;
-  const dhx=hAt(vec2(e,0)).sub(hAt(vec2(-e,0)));
-  const dhz=hAt(vec2(0,e)).sub(hAt(vec2(0,-e)));
-
-  // THE SWELL IS NOT PART OF THE SIMULATION, and keeping it out is deliberate. Feeding a driving
-  // term back into an explicit integrator is how one goes unstable; and the swell is not a wave, it
-  // is the reason a real pool is never a mirror even when nothing has touched it. So it is added to
-  // the SLOPE at shading time, where it can be turned off (reduced motion) without the water
-  // changing state.
-  const t=uTime.mul(0.11);
-  const sx=mx_noise_float(vec3(pw.x.mul(0.62).add(11.3), pw.z.mul(0.62), t)).mul(uSwell);
-  const sz=mx_noise_float(vec3(pw.x.mul(0.62), pw.z.mul(0.62).add(4.7), t)).mul(uSwell);
-  const n=normalize(vec3(dhx.mul(-NRM_GAIN).sub(sx), float(1.0), dhz.mul(-NRM_GAIN).sub(sz)));
-
-  const V=normalize(cameraPosition.sub(pw));
-  // Schlick, with water's own 0.02 at normal incidence. At the grazing angles most of this floor is
-  // seen at, that term goes to 1 and the water becomes a mirror -- which is exactly what makes a
-  // shallow pool read as wet rather than as dark glass.
-  const fres=clamp(float(0.02).add(pow(oneMinus(max(dot(n,V),float(0))),float(5)).mul(0.98)), 0, 1);
-
-  const baseUV=refl.uvNode||screenUV.flipX();
-  refl.uvNode=baseUV.add(n.xz.mul(DISTORT));
-
-  // The body. Not black: a little of the room's own warmth, so the water has a colour where the
-  // reflection has nothing to give it -- straight down, which is most of the near field.
-  const tile=sin(pw.x.mul(2.2)).mul(sin(pw.z.mul(2.2)));
-  const body=uWaterTint.mul(mix(float(0.8),float(1.15),smoothstep(float(-0.1),float(0.1),tile)));
-
-  const L=normalize(uLampPos.sub(pw));
-  const H=normalize(L.add(V));
-  const spec=pow(max(dot(n,H),float(0)), float(420)).mul(2.6);
-  // Falls off with distance like the lamp itself does, or the highlight is as bright in the far
-  // corner as it is under the bulb.
-  const atten=float(1).div(float(1).add(pow(length(uLampPos.sub(pw)).mul(0.22), float(2))));
-
-  const m=water.material;
-  m.colorNode=mix(body, refl.mul(0.90), fres.mul(0.84).add(0.12)).add(uLampTint.mul(spec.mul(atten)));
-  m.toneMapped=true;
-}
 
 // ---------------------------------------------------------------------------------------------
 // THE VOLUMETRIC BEAM. Yes, volumetric media are doable on WebGPU, and this is the cheap honest
@@ -1073,6 +1006,16 @@ distMat.toneMapped=false;
 distMat.fog=false;
 
 const lightCam=new THREE.PerspectiveCamera(2*LAMP_CONE*180/Math.PI*1.12, 1, 0.35, LAMP_DIST);
+
+const {water,renderCaustics,causticsRT}=shallowWater({
+  scene,floorMat,simTexture:simRT[0].texture,simSize:SIM_N,halfSize:SIM_HALF,
+  waterY:WATER_Y,floorY:FLOOR_Y,time:uTime,swell:uSwell,
+  lampPos:uLampPos,lampDir:uLampDir,lampTint:uLampTint,lampIntensity:LAMP_INT,
+  cosOuter:uCosOuter,cosInner:uCosInner,lightVP:uLightVP,lightDepth:lightDepthRT.texture,
+  shadowFlip:uShadowFlip,shadowBias:LD_BIAS,
+  moonDirection:new THREE.Vector3(-Math.cos(ENV_GAP)*9,-13,-3-Math.sin(ENV_GAP)*9).normalize(),
+  moonColor:MOON_COL
+});
 
 // The room's air, as a box. Inset from the walls so depth testing can do the occluding.
 const volGeo=new THREE.BoxGeometry(2*ROOM_W-0.1, ROOM_H-0.12, (ROOM_D[1]-ROOM_D[0])-0.1);
@@ -1144,7 +1087,7 @@ function bakeLightDepth(){
 
   // The fitting is AT the lamp; left visible its own can would render at a few centimetres and
   // shadow the entire room. The volume box is what this map is for, so it cannot be its own input.
-  const hid=[fitting,volMesh,...noBake].map(o=>{const v=o.visible; o.visible=false; return [o,v];});
+  const hid=[fitting,volMesh,water,...noBake].map(o=>{const v=o.visible; o.visible=false; return [o,v];});
   scene.overrideMaterial=distMat;
   renderer.setRenderTarget(lightDepthRT);
   renderer.clear();
@@ -1464,6 +1407,7 @@ function frame(){
     adaptQuality(raw);
     stepWater();
     bakeLightDepth();
+    renderCaustics(renderer);
     paintLabel(nearestWork());
     renderer.render(scene, camera);
   }finally{ busy=false; }

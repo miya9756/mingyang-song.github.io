@@ -668,10 +668,23 @@ the wave speed for free. `ClampToEdge` on the sim texture is load-bearing — a 
 repeats the edge texel, which is a reflecting boundary, so rings **bounce off the walls of the grid**;
 the grid is sized to the room for that reason.
 
-It is **shaded by hand** rather than by a standard material: a nearly-black body, the planar
-reflection, a Fresnel mix, and one specular. Given one bright source and a flat surface, writing those
-four is shorter than persuading a PBR material to arrive at them — and it keeps the distortion, the
-ripple normal and the highlight reading from the *same* normal, which is what sells it.
+**`room/water.js` supplies shallow-water shading and floor caustics.** The floor sits
+`WATER_DEPTH=0.35` metres beneath `WATER_Y`; its stone slabs remain visible through refraction.
+The water reuses the opaque framebuffer through `viewportSharedTexture` and protects foreground
+silhouettes with `viewportSafeUV`. Absorption tints the transmitted view; Fresnel mixes it with the
+existing planar reflection. Keep that reflection **RGB** in the colour mix: promoting added RGB
+specular into RGBA can make alpha exceed one and produce coloured edges in transparent blending.
+The submerged slabs are muted green-grey, with stronger red absorption in the water and a 10%
+reflection floor added to Fresnel so the surface remains visible in the dim opening view.
+
+Caustics use two 160×160 refracted grids (moon and aimed spotlight), additively rasterised into
+one 512×512 half-float target. The ratio of each patch's original area to its refracted footprint
+estimates light concentration. The lamp reuses the volumetric depth map for occlusion; water is
+excluded from that depth bake so it transmits light. The top-down camera has up=-Z, so sampling
+the caustic map needs V opposite world Z. The simulation, reflection, refraction and caustics all
+share one normal field. This adds two grid draws and framebuffer copies, with no extra rendering
+of the room geometry. It approximates caustics on a **flat floor**, not submerged vertical faces or
+multiple scattering. Hardware frame rates have not been measured on this software-rendered host.
 
 **The swell is not part of the simulation**, and keeping it out is deliberate: feeding a driving term
 into an explicit integrator is how one goes unstable, and the swell is not a wave — it is the reason a
@@ -797,6 +810,11 @@ but the lamp. It measures the JPEG it wrote rather than the array it encoded, th
 museum page documents — and note the module has **no top-level `await`** for that reason: esprima
 predates it, and `boot()` exists so the file stays parseable by the one check that catches a module
 which never evaluates. Do not reintroduce top-level await.
+
+`python3 tools/check_room_water.py` renders the actual shaders, checks uniform illumination on flat
+water, light concentration after a ripple, spotlight projection, click-to-ripple interaction and reduced-motion idle behaviour,
+and saves desktop/phone previews to `/tmp/room-water`. Add `--webgpu` to check WGSL compilation and
+rendering separately; pixel readback and screenshots use WebGL2 because of the host limits above.
 
 ```bash
 python3 .claude/skills/verify-site/verify.py
