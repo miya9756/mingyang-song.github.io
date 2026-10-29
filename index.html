@@ -317,6 +317,19 @@
        color:var(--accent);white-space:nowrap}
   .cta .arrow{display:inline-block;transition:transform .2s}
   .band:hover .cta .arrow,.band:focus-visible .cta .arrow{transform:translateX(4px)}
+  /* THE "UPDATED" FLAG IS THE ONE PLACE THE GRADIENT SHOWS AT REST, and that is what makes it work.
+     Everywhere else --grad only appears under the cursor, so a pill of it standing still is the
+     loudest thing on the page without adding a colour. Its stops are --grad's, run there and back
+     so the slow drift loops without a seam. Ink is a fixed near-black in both themes because the
+     gradient is theme-independent: 5.4:1 on the periwinkle end (the minimum anywhere along it),
+     8.2:1 on the amber. It is a
+     notice, not a fixture - take it off the band once the news is old (CLAUDE.md, grain section). */
+  .flag{display:inline-block;vertical-align:.24em;margin-left:.55em;padding:.34em .72em .3em;
+        border-radius:999px;font-size:.6rem;font-weight:700;letter-spacing:.14em;line-height:1;
+        text-transform:uppercase;white-space:nowrap;color:#14161b;
+        background:linear-gradient(90deg,#6e89e0,#e0a34c,#6e89e0) 0 0/200% 100%;
+        animation:flagdrift 6s linear infinite}
+  @keyframes flagdrift{to{background-position:-200% 0}}
 
   /* --------------------------------- image tiles --------------------------------- */
   /* Elsewhere. These are the one thing on the page that is not glass - they are filled edge to
@@ -412,7 +425,7 @@
     .band:hover::after,.band:focus-visible::after{transform:none}
     .band:hover .cta .arrow,.band:focus-visible .cta .arrow{transform:none}
     .art:hover::before,.art:focus-visible::before{transform:none}
-    .live{animation:none}
+    .live,.flag{animation:none}
   }
 </style>
 </head>
@@ -481,9 +494,9 @@
     <span class="bidx" aria-hidden="true">03</span>
     <div class="bfield">
       <img class="fig" src="assets/grain_teaser.png" width="788" height="256" decoding="async"
-           alt="The same photographic crop three times: clean, then regrained as an LG G4 at ISO 800 and at ISO 1600, the noise visibly coarser and more coloured at the higher setting.">
+           alt="The same photograph of a palm-lined shore three times: clean, then with a Pixel phone's ISO 3200 sensor noise, fine and coloured, then with film grain, coarser, monochrome and softer. Both noisy versions come from the same model.">
       <div class="btext">
-        <h3>Parametric Gaussian Noise Mixer</h3>
+        <h3>Parametric Gaussian Noise Mixer <span class="flag">Updated</span></h3>
         <p>Camera noise and film grain from one explicit model &mdash; a convolution that correlates Gaussian noise across pixels and colours, and a lookup that turns it into the residual a real sensor or film stock leaves. Regrain your own photographs in the browser, read the code, or play with the math.</p>
       </div>
       <span class="bmeta">

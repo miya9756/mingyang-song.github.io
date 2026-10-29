@@ -1994,10 +1994,30 @@ horizontal scroll at 390 px. **Not glslangValidator-checked** — the cloud box 
 to GitHub releases — and **esprima would not build there**, so the modules were syntax-checked with
 `node --check`. Run both as documented above when this box is next used.
 
-**Still in the repo from the old page:** `assets/grain_teaser.png` (the landing card's banner, made
-with the *earlier* method from Kodak's kodim16 — a candidate for a PGNM re-bake) and
-`assets/grain_example.jpg` (referenced by no page), both credited in `LICENSE`. `verify.py` lists the
-page in `PAGES` and its three scripts in `MODULES`.
+**The landing banner, `assets/grain_teaser.png`, is re-baked with PGNM** (2026-10-29) by
+`python3 tools/bake_grain_teaser.py --pgnm <checkout>`: clean | Pixel ISO 3200 (`sidd/GP_3200`) |
+film r 0.2 (`film/r200`, with its blur B applied first, as the studio does), all three through the
+reference `pgnm.PGNM`, not the browser port. Picked from all 24 presets as the pair that reads at 1x
+banner size as two different worlds, coloured speckle against clumped monochrome grain; anything
+stronger buries the palms. Two things are load-bearing:
+- **The clean panel is the source and is read back out of the asset.** It is the 256×256 kodim16
+  crop the earlier method's teaser used (Kodak is not reachable from the cloud box, and the crop
+  parameters were never recorded), copied through untouched, so a re-run reads the pixels it wrote:
+  the bake is byte-stable (checked twice, same sha256) without shipping a second copy of the
+  photograph. Do not edit panel 1 by hand; it would become the new source.
+- **It stays 1x (788×256).** Noise is a per-pixel signal and a 2x render downsampled for retina
+  would average it away. The transparent corners are filled from their nearest opaque pixel before
+  the film blur, or the 7×7 kernel pulls a dark fringe into the rounded edge.
+
+**The band carries an `Updated` flag** (`.flag`, in its `<h3>`), at Mingyang's request, to draw
+eyes to the restored page. It is the one place `--grad` appears at rest, which is why it is loud
+without adding a colour; near-black ink measures 5.4:1 at worst anywhere along the gradient, and its
+drift is switched off under reduced motion. **It is a notice, not a fixture**: remove the span once
+the news is old (the rule can stay for the next one).
+
+**Still in the repo from the old page:** `assets/grain_example.jpg` (referenced by no page),
+credited in `LICENSE` along with the teaser's Kodak source. `verify.py` lists the page in `PAGES`
+and its three scripts in `MODULES`.
 
 ## `projects/tempformer/` — the sliding-block machine
 
