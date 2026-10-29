@@ -39,7 +39,8 @@ PAGES = ["index.html", "projects/smv/index.html", "projects/spdef/index.html",
 MODULES = ["projects/smv/decode.js", "projects/smv/decode_motion.js",
            "projects/smv/dequant_worker.js", "projects/smv/sw.js",
            "projects/spdef/traj.js", "projects/spdef/knot_decode.js",
-           "misc/museum/room/water.js"]
+           "misc/museum/room/water.js", "projects/grain/playground.js",
+           "projects/grain/engine.js", "projects/grain/scene.js"]
 
 VOID = {"br", "img", "input", "meta", "link", "hr", "source", "area", "base",
         "col", "embed", "param", "track", "wbr"}

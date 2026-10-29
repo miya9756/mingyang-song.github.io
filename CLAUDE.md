@@ -10,7 +10,7 @@ no build step, no bundler, no npm**. The only "build" is regenerating
 
 The landing page is `index.html` at the root, and it links four project pages:
 `projects/smv/` (SmoothMotionVectors), `projects/spdef/` (Spline Deformation Field),
-`projects/grain/` (camera-noise playground) and `projects/tempformer/` (the sliding-block
+`projects/grain/` (PGNM, the noise playground) and `projects/tempformer/` (the sliding-block
 machine). The substantial piece is
 `projects/smv/` — a 100 % client-side player for compressed dynamic 3D-Gaussian
 ("4D-GS") scenes, the results site for *SmoothMotionVectors* (SIGGRAPH 2026).
@@ -1914,23 +1914,90 @@ re-exporting means re-reading them. Current split: manifest 46 KB + canonical 47
 not conflate it with `skip_step = 4`, the *temporal* subsampling that makes every 4th frame a
 supervised one: both are "×4" and they are different axes.
 
-## `projects/grain/` — WITHDRAWN, placeholder only (since 2026-09-14)
+## `projects/grain/` — PGNM, the noise playground (restored 2026-10-29)
 
-The camera-noise playground is **offline ahead of a patent filing.** `projects/grain/index.html` is a
-static notice (header, authors, a link to the public arXiv paper, footer) and nothing else; it
-carries `noindex`. **Do not restore the playground, its parameters or any description of the
-method into this repo** (the repo and the Pages site are public) until Mingyang says the filing is
-done.
+Results page for *Parametric Gaussian Noise Mixer (PGNM): Unified Synthesis of Camera Noise and Film
+Grain* (Mingyang's sole-author technical report, ETH Zürich, October 2026). Code, presets and report
+are public at <https://github.com/miya9756/pgnm> (CC BY-NC-ND 4.0), and its in-browser studio is
+published from that repo to <https://miya9756.github.io/pgnm/> by its own workflow — **the studio is
+not in this repo**; this page links to it.
 
-- **Removed from the tree:** the playground page, `projects/grain/assets/grain_params.json` (the
-  measured parameters) and `assets/grain-analyzer-spec.md` (the calibration recipe, which had been
-  committed by mistake on 2026-08-08 despite being meant to stay untracked; it is now in
-  `.gitignore`). This file's long section on the page's method and synthesis was removed too.
-- **The private copy** of all of it, including that section, is `~/grain_page_backup_2026-09-14/`
-  on the cluster, outside the repo. Restore from there, not from git history.
-- **Still in the repo, deliberately:** the landing card (`index.html`, band `03`, still linking
-  here), `assets/grain_teaser.png` and `assets/grain_example.jpg` (now referenced by no page), and
-  their credits in `LICENSE`. `verify.py` keeps the page in `PAGES`; the placeholder passes.
+**The 2026-09-14 withdrawal is lifted, on a condition.** The page was a placeholder ahead of a patent
+filing; on 2026-10-29 Mingyang allowed the method to be described publicly **provided the page says the
+patent application is in progress and that commercial use is not permitted.** The header's `.notice`
+does exactly that — *Patent application in progress. No commercial use.* plus the licence. Keep it while
+the filing is pending, and do not say *patent pending* (that means filed) until Mingyang says it is.
+The private copy of the OLD page (`~/grain_page_backup_2026-09-14/`) is the earlier method's
+playground; it is **not** what this page is, so do not restore it over this one.
+
+**Order: the ways in first, then the playground.** Mingyang asked for the page to send people to the
+source code and the viewer before anything else, so the header ends in three `.way` buttons — the
+studio (the one accent focal point), the code, the report PDF — and the notice. Then *Playground*,
+*Earlier work* (the 2023 co-authored arXiv paper the page used to present, with its authors), the
+`@techreport` citation, *Datasets & credits* (SIDD; Newson's renderer and GrainNet's training pairs;
+Netflix's *Nocturne*, CC BY 4.0) and the footer, which carries the third-party clause because the page
+ships presets fitted on those datasets.
+
+**The playground is three `.subcard`s, each one idea**, all in `playground.js` (an ES module with **no
+top-level await** — `boot()` — for the same esprima reason as the museum):
+
+1. **From static to camera noise** — z → t = A∗z → n = g(x, t) → y on one 256×256 picture, adapted from
+   the supplementary video's 2D scene (`video/content.js`'s `panelFragment` in the research repo
+   `parametric-noise-modeling`): a convolution front sweeps across, then the lookup sweeps through the
+   clean intensities. WebGL2, with a CPU path that mirrors the shader (`residualAt`) and is also what
+   the strength bars are computed from, so they always describe exactly what the panel shows. Display
+   choices, all deliberate: z and t are shown at the residual's own std per channel (so only the
+   *distribution* of strength changes at the lookup, the video's choice); the gain is
+   `0.2 / mean std`, i.e. ±2.5 sd fills the grey range, and the panel states it; **the contour is a
+   texel crossing test, not the video's `exp(-|x − look| / 0.01)` glow** — the glow floods any flat
+   region near the level (it whited out the white sphere) — and the thumbnail runs the same test on the
+   CPU. Beside it: the nine 25×25 filters of A as signed square roots (the video's convention) and the
+   dark/mid/bright tertile bars. A shader that fails to compile falls back to the CPU path rather than
+   blanking. Four presets (`FIGURE` in the bake script): S6 ISO 3200, Pixel ISO 10000, film r 0.4,
+   Nocturne.
+2. **The lookup is a quantile machine** — particles drawn from 𝒩(0, 1) rise to the curve g(x, ·), fly
+   to a histogram and land as the *delivered* residual `clip(x + n) − x`, so the pile visibly hits the
+   black (or white) wall; *clipped* counts draws where the two differ. Under reduced motion there are no
+   particles and the histogram is filled from 3000 draws at once.
+3. **Mix your own noise** — the PGNM Designer's **joint** PCA space (6 filter + 12 lookup components over
+   all 24 presets) as a pad: filter PC1 across (camera right, film left; 96 % of filter variance) and
+   lookup PC1 up (strength; 82 %), the axes of the report's Fig. 7. Clicking a dot loads all 18 of that
+   preset's scores; dragging moves only the two PC1s and leaves the rest where the last preset put them,
+   which the caption says. Rendering is the Designer's: the field is kept as one part per filter
+   component, so a drag re-weights parts and re-evaluates the lookup, then the engine's repairs (unit
+   filter energy, sorted rows, |g| ≤ 1). Started lazily by an IntersectionObserver (~0.2 s of FFTs).
+
+**Film presets are rendered WITHOUT their blur B here**, as in the Designer; the studio applies it, and
+the page says so in one line under the mixer.
+
+**`engine.js` is a VERBATIM copy of `parametric-noise-modeling/frontend/engine.js`** (the PGNM
+Designer's browser engine, tested there against `pgnm/` by `tests/test_frontend.py`). Re-copy it whole;
+never edit it here. It is a **classic** script whose top-level `const PGNMEngine` is a global binding but
+**not a `window` property** — `window.PGNMEngine` is `undefined`, which is why `playground.js` names the
+bare global. `playground.js`'s own `residual()` is `engine.render()`'s lookup without the clip (the
+figure needs n on its own); checked: `clip(x + residual())` reproduces `render()` to **0** codes on all
+four presets. **`scene.js` is a copy of `web/js/scene.js` in the pgnm repo** — the studio's procedural
+still life, rendered at 256×256 as the clean image, so the page ships no picture.
+
+**`data/` is baked, never hand-edited:** `python3 tools/bake_grain_playground.py --pgnm <checkout of
+miya9756/pgnm>` writes the four figure presets (`presets/<id>.bin`: kernels then g, float32), `joint.bin`
+and `manifest.json`. **`joint.bin` is byte-identical to the Designer's `frontend/assets/joint.bin`**
+(sha256 `51b7ebb1…`, compared on 2026-10-29 against the research repo's file; every preset score agrees
+to 4e-14), which proves the public presets are the frozen ones; the script refuses to write a
+different one. 1.6 MB, plain git objects (no LFS rule covers it, deliberately — see *Git LFS*).
+Every data path in the module is resolved against the manifest's URL, so `data/manifest.json` is its
+only literal path — `verify.py` reads a bare `"data/"` prefix as a directory link and fails it.
+
+Checked in headless Chromium (SwiftShader WebGL2): no console errors; the bars are equal across tertiles
+until the lookup and then split (S6 ISO 3200: 36.2 / 36.2 / 36.7 → 40.6 / 35.9 / 32.1 codes); no
+horizontal scroll at 390 px. **Not glslangValidator-checked** — the cloud box that wrote it had no route
+to GitHub releases — and **esprima would not build there**, so the modules were syntax-checked with
+`node --check`. Run both as documented above when this box is next used.
+
+**Still in the repo from the old page:** `assets/grain_teaser.png` (the landing card's banner, made
+with the *earlier* method from Kodak's kodim16 — a candidate for a PGNM re-bake) and
+`assets/grain_example.jpg` (referenced by no page), both credited in `LICENSE`. `verify.py` lists the
+page in `PAGES` and its three scripts in `MODULES`.
 
 ## `projects/tempformer/` — the sliding-block machine
 

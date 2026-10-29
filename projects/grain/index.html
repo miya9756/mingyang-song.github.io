@@ -3,80 +3,332 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Digital Camera Noise Synthesis</title>
+<title>Parametric Gaussian Noise Mixer</title>
 <link rel="icon" type="image/png" sizes="64x64" href="../../assets/web_icon.png">
 <link rel="apple-touch-icon" href="../../assets/web_icon.png">
-<meta name="description" content="Digital Camera Noise Synthesis. The playground is temporarily offline ahead of a patent filing.">
-<meta name="robots" content="noindex">
+<meta name="description" content="PGNM: one small, explicit model for camera noise and film grain, fitted from clean/noisy photo pairs. Try the studio, read the code, and play with the two equations.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <meta name="theme-color" content="#f2f3f4"><!-- must track --bg; Safari tints its chrome from this -->
-<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
 <style>
-  /* Placeholder while the playground is withdrawn ahead of a patent filing. Same palette and bones
-     as the page it stands in for (graphite + darkroom amber, Fraunces, back pill, footer), so the
-     landing card still leads somewhere that belongs to the family. */
+  /* Grain: neutral graphite with one darkroom-amber accent. Hue-poor on purpose, like TempFormer:
+     on this page the saturated colour is the noise itself, so an accent with opinions would compete
+     with the thing the reader is looking at. Same bones as the other project pages (Fraunces, back
+     pill, card chrome, section order: work -> citation -> datasets -> footer). */
   :root{
     color-scheme:light;
-    --bg:#f2f3f4; --surface:#ffffff; --ink:#16181a; --muted:#5c6266; --line:#d9dcdf; --accent:#a85a12;
+    --bg:#f2f3f4; --surface:#ffffff; --panel-2:#e8eaec; --ink:#16181a; --muted:#5c6266; --line:#d9dcdf;
+    --accent:#a85a12; --accent-fg:#fff; --shadow:rgba(20,24,28,.12);
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
   html{-webkit-text-size-adjust:100%;background:var(--bg)}
-  body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--ink);
-       font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
-  .inner{width:100%;max-width:1180px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
-  header{background:linear-gradient(180deg,#fafbfb,#eff1f2);border-bottom:1px solid var(--line);padding:32px 0 26px}
+  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
+       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .inner{max-width:1180px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header{background:linear-gradient(180deg,#fafbfb,#eff1f2);border-bottom:1px solid var(--line);padding:32px 0 28px}
+  /* '../../', not an absolute path: the site is served from a project-site subpath */
   .back{display:inline-flex;align-items:center;gap:7px;margin:0 0 14px;font-size:13px;color:var(--muted);
         text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
         background:rgba(255,255,255,.6);transition:color .16s,border-color .16s,background-color .16s}
-  .back:hover,.back:focus-visible{color:var(--accent);border-color:var(--accent);background:#fff}
+  .back:hover{color:var(--accent);border-color:var(--accent);background:#fff;text-decoration:none}
   .back .barrow{display:inline-block;transition:transform .16s}
-  .back:hover .barrow,.back:focus-visible .barrow{transform:translateX(-3px)}
+  .back:hover .barrow{transform:translateX(-3px)}
+
   h1{margin:0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
-     font-weight:600;font-size:clamp(32px,5vw,50px);line-height:1.02;letter-spacing:-.018em}
-  .byline{margin:14px 0 0;font-size:13.5px;line-height:1.75;color:var(--muted)}
+     font-weight:600;font-size:clamp(30px,4.4vw,46px);line-height:1.05;letter-spacing:-.018em}
+  .subtitle{margin:10px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
+            font-size:clamp(15px,2vw,21px);line-height:1.25;opacity:.9}
+  .byline{margin:16px 0 0;font-size:13.5px;line-height:1.8;color:var(--muted)}
   .byline .authors{color:var(--ink);font-weight:500}
   .byline .affil{display:block;font-size:12px}
-  .byline sup{color:var(--accent);font-size:.7em;padding:0 1px}
-  .byline .authors a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);transition:color .15s,border-color .15s}
-  .byline .authors a:hover,.byline .authors a:focus-visible{color:var(--accent);border-bottom-color:var(--accent)}
-  /* main.inner, not main: .inner's padding shorthand is a class rule and would zero a type rule's
-     vertical padding; padding-block keeps .inner's side gutter */
-  main.inner{flex:1;padding-block:48px 64px}
-  .notice{max-width:620px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:26px 28px}
-  .notice .kicker{margin:0 0 8px;font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
-  .notice h2{margin:0 0 10px;font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:24px}
-  .notice p{margin:0;font-size:14.5px;line-height:1.65;color:var(--muted)}
-  .notice p + p{margin-top:12px}
-  .notice a{color:var(--accent)}
-  footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13px;color:var(--muted)}
-  @media(prefers-reduced-motion:reduce){.back,.back .barrow,.byline .authors a{transition:none}.back:hover .barrow,.back:focus-visible .barrow{transform:none}}
+
+  /* The three ways in, before any reading: the studio, the code, the report. One accent focal
+     point — the studio — and the other two quiet. */
+  .ways{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 0}
+  .way{display:inline-flex;align-items:center;gap:9px;padding:10px 16px;border-radius:10px;font-size:14.5px;
+       font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);
+       box-shadow:0 1px 2px var(--shadow);transition:color .16s,border-color .16s,transform .16s,box-shadow .16s}
+  .way:hover{text-decoration:none;color:var(--accent);border-color:var(--accent);transform:translateY(-1px);
+             box-shadow:0 6px 16px var(--shadow)}
+  .way.go{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+  .way.go:hover{color:var(--accent-fg);background:#93500f}
+  .way svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .notice{margin:16px 0 0;font-size:12.5px;line-height:1.6;color:var(--muted);max-width:78ch}
+  .notice b{color:var(--ink);font-weight:600}
+
+  main{padding:30px 0 20px}
+  section{margin:0 0 44px}
+  h2{font-family:'Fraunces',Georgia,serif;font-size:23px;font-weight:600;margin:0 0 14px}
+  h3{font-family:'Fraunces',Georgia,serif;font-size:17px;font-weight:600;margin:0 0 6px}
+  .lede{margin:0 0 16px;font-size:14.5px;color:var(--muted);max-width:78ch}
+  .lede em{font-style:normal;font-weight:600;color:var(--ink)}
+  code{font-family:var(--mono);font-size:.9em}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+
+  /* ── playground ─────────────────────────────────────────────────────────────
+     Three .subcards, one per idea. The noise is the only saturated colour on the page; the
+     chrome stays graphite and the accent marks the one thing you are moving. */
+  .eqs{display:grid;gap:8px;margin:0 0 22px;max-width:920px}
+  .eqs p{margin:0;display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:4px 18px;align-items:baseline;
+         padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+  .eqn{font-family:'Fraunces',Georgia,serif;font-size:19px;white-space:nowrap}
+  .eqk{font-size:13.5px;color:var(--muted)}
+  .subcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;margin:0 0 20px}
+  .subhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;margin:0 0 14px}
+  .subhead h3{margin:0}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font:500 12.5px/1 Inter,sans-serif;padding:7px 11px;border-radius:999px;border:1px solid var(--line);
+        background:var(--bg);color:var(--muted);cursor:pointer;transition:color .14s,border-color .14s,background-color .14s}
+  .chip:hover{color:var(--accent);border-color:var(--accent)}
+  .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+  .chips.small .chip{padding:5px 9px;font-size:11.5px}
+  .stepgrid{display:grid;grid-template-columns:minmax(0,512px) minmax(0,1fr);gap:22px;align-items:start}
+  figure{margin:0}
+  figcaption{margin:8px 0 0;font-size:13px;line-height:1.55;color:var(--muted)}
+  figcaption b{color:var(--ink);font-weight:600}
+  .stage canvas{display:block;width:100%;aspect-ratio:1;border-radius:8px;background:#7f7f7f;image-rendering:pixelated}
+  .steplist{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+  .steplist button{font:inherit;width:100%;display:grid;grid-template-columns:26px minmax(0,1fr);gap:2px 10px;text-align:left;
+                   padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);
+                   cursor:pointer;transition:border-color .14s,background-color .14s}
+  .steplist button:hover{border-color:var(--accent)}
+  .steplist .num{grid-row:1/3;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;
+                 border:1px solid var(--line);font:600 12px/1 var(--mono);color:var(--muted);background:var(--surface)}
+  .steplist .what{font-weight:600;font-size:13.5px}
+  .steplist .eq{font-family:'Fraunces',Georgia,serif;font-size:14.5px;color:var(--muted)}
+  .steplist button.done .num{background:var(--panel-2);color:var(--ink)}
+  .steplist button.on{border-color:var(--accent);background:var(--surface)}
+  .steplist button.on .num{background:var(--accent);border-color:var(--accent);color:#fff}
+  .transport{display:flex;align-items:center;gap:12px;margin:12px 0 16px}
+  .transport input{flex:1;accent-color:var(--accent)}
+  .ghost{font:inherit;font-size:13px;padding:7px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);
+         color:var(--ink);cursor:pointer;min-width:74px;transition:color .14s,border-color .14s}
+  .ghost:hover{color:var(--accent);border-color:var(--accent)}
+  .sidefigs{display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:end;margin:0 0 16px}
+  .thumb canvas{display:block;width:120px;height:120px;border-radius:6px}
+  .thumb figcaption{margin-top:4px}
+  #stepBars{display:flex;gap:14px;align-items:flex-end;height:120px;padding:0 4px;border-bottom:1px solid var(--line)}
+  .sbar{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;min-width:0}
+  .sbar i{display:block;width:100%;max-width:46px;height:78%;background:var(--ink);border-radius:4px 4px 0 0;
+          transform-origin:bottom;transform:scaleY(0);transition:transform .12s}
+  .sbar output{font:600 12px/1 var(--mono);color:var(--ink)}
+  .sbar span{font-size:11.5px;color:var(--muted);margin-bottom:-22px;height:16px}
+  .bars figcaption{margin-top:26px}
+  .filters{padding:10px;border:1px solid var(--line);border-radius:10px;transition:border-color .2s,box-shadow .2s}
+  .filters canvas{display:block;max-width:100%;height:auto;margin:0 auto}
+  .filters.live{border-color:var(--accent);box-shadow:0 0 0 3px rgba(168,90,18,.12)}
+  .hint{margin:9px 0 0;font-size:12.5px;color:var(--muted)}
+  .hint b{color:var(--ink);font-weight:600}
+
+  .bar{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:flex-end;margin:0 0 14px}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .field>label{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+               display:flex;justify-content:space-between;gap:10px}
+  .field>label i{text-transform:none}
+  output{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink);letter-spacing:0}
+  .xrow{display:flex;align-items:center;gap:10px}
+  .xrow input{width:220px;accent-color:var(--accent)}
+  .xrow .swatch{width:22px;height:22px;border-radius:6px;border:1px solid var(--line)}
+  #machineCanvas{display:block;width:100%;height:340px}
+
+  .mixgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,512px);gap:22px;align-items:start}
+  #mixPad{display:block;width:100%;aspect-ratio:1;max-height:512px;border:1px solid var(--line);border-radius:10px;
+          background:var(--bg);cursor:crosshair;touch-action:none}
+  #mixOut{display:block;width:100%;aspect-ratio:1;border-radius:8px;background:#7f7f7f;image-rendering:pixelated}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;vertical-align:baseline}
+  .dot.sidd{background:#2a78d6}
+  .dot.newson{background:#eb6834;border-radius:0;clip-path:polygon(50% 0,100% 100%,0 100%)}
+  #mixMode{display:inline-flex;vertical-align:middle;margin-right:6px}
+
+  @media (max-width:860px){
+    .stepgrid,.mixgrid{grid-template-columns:minmax(0,1fr)}
+    .eqs p{grid-template-columns:minmax(0,1fr)}
+    .eqn{white-space:normal}
+  }
+
+  .citebox{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:0 0 16px;overflow:hidden}
+  .citehd{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;
+          border-bottom:1px solid var(--line);font-size:11.5px;font-weight:600;letter-spacing:.06em;
+          text-transform:uppercase;color:var(--muted)}
+  .copybtn{font:inherit;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+           padding:4px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);
+           color:var(--muted);cursor:pointer;transition:color .16s,border-color .16s}
+  .copybtn:hover{color:var(--accent);border-color:var(--accent)}
+  pre{margin:0;padding:14px;overflow-x:auto;font:12.5px/1.7 var(--mono);color:var(--ink);
+      white-space:pre-wrap;word-break:break-word}
+  .paper{font-size:14px;color:var(--muted);margin:0 0 18px;line-height:1.7}
+  .datacard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .ref{margin:0;font-size:12.5px;line-height:1.7;color:var(--muted)}
+  .ref strong{color:var(--ink);font-weight:600}
+  .ref+.ref{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+  footer{border-top:1px solid var(--line);margin-top:20px;padding:26px 0 48px;color:var(--muted);font-size:13px}
+
+  :where(button,select,input,a):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  @media(prefers-reduced-motion:reduce){
+    .back,.back .barrow,.way,.copybtn,.chip,.steplist button,.ghost,.sbar i,.filters{transition:none}
+    .back:hover .barrow,.way:hover{transform:none}
+  }
 </style>
 </head>
 <body>
 <header>
   <div class="inner">
     <a class="back" href="../../"><span class="barrow" aria-hidden="true">←</span> Mingyang Song</a>
-    <h1>Digital Camera Noise Synthesis</h1>
+    <h1>Parametric Gaussian Noise Mixer</h1>
+    <p class="subtitle">One small, explicit model for camera noise and film grain, fitted straight from photo pairs.</p>
     <div class="byline">
-      <span class="authors">Mingyang Song<sup>1,2</sup>, <a href="https://scholar.google.com/citations?user=gwP_ARgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Yang Zhang</a><sup>2</sup>, <a href="https://scholar.google.com/citations?user=E0fxZeUAAAAJ&amp;hl=en" target="_blank" rel="noopener">Tun&ccedil; O. Ayd&#305;n</a><sup>2</sup>, Elham Amin Mansour<sup>1,2</sup>, <a href="https://scholar.google.com/citations?user=j0nCulgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Christopher Schroers</a><sup>2</sup></span>
-      <span class="affil"><sup>1</sup>ETH Zürich, Switzerland &nbsp;&nbsp; <sup>2</sup>DisneyResearch|Studios, Switzerland</span>
+      <span class="authors">Mingyang Song</span>
+      <span class="affil">ETH Zürich, Switzerland</span>
     </div>
+    <nav class="ways" aria-label="Studio, code and report">
+      <a class="way go" href="https://miya9756.github.io/pgnm/" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m4 18 5.5-5.5 4 4 2.5-2.5 4.5 4.5"/></svg>
+        Open the studio</a>
+      <a class="way" href="https://github.com/miya9756/pgnm" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8.5 7.5-5 4.5 5 4.5M15.5 7.5l5 4.5-5 4.5"/></svg>
+        Source code</a>
+      <a class="way" href="https://github.com/miya9756/pgnm/blob/main/PGNM.pdf" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M9.5 12.5h6M9.5 16h6"/></svg>
+        Technical report</a>
+    </nav>
+    <p class="notice"><b>Patent application in progress. No commercial use.</b> The code, presets and report are released for non-commercial use only, under CC&nbsp;BY-NC-ND&nbsp;4.0.</p>
   </div>
 </header>
 
 <main class="inner">
-  <section class="notice">
-    <p class="kicker">Temporarily offline</p>
-    <h2>Back soon</h2>
-    <p>The interactive playground is offline while a patent application is being prepared. It will return once that is done.</p>
-    <p>The published paper is still available: <a href="https://arxiv.org/abs/2303.09199" target="_blank" rel="noopener">A Generative Model for Digital Camera Noise Synthesis</a> (arXiv:2303.09199).</p>
+
+  <section id="playground">
+    <h2>Playground</h2>
+    <p class="lede">Every photograph holds two pictures: the scene, and the noise on top of it. PGNM describes the noise with <em>two arrays and two lines of math</em>, and both arrays are measured from pairs of clean and noisy photos, with no neural network and no model of the camera. The playground below takes the two lines apart one knob at a time.</p>
+    <div class="eqs" aria-label="The two equations of PGNM">
+      <p><span class="eqn">t<sub>c</sub> = ∑<sub>i</sub> A<sub>ci</sub> ∗ z<sub>i</sub></span><span class="eqk">mix: nine 25×25 filters turn independent static <i>z</i> into a correlated field <i>t</i></span></p>
+      <p><span class="eqn">y<sub>c</sub> = clip(x<sub>c</sub> + g<sub>c</sub>(x<sub>c</sub>, t<sub>c</sub>), 0, 1)</span><span class="eqk">shape: a lookup <i>g</i> turns each field value into the residual a real camera leaves at that brightness</span></p>
+    </div>
+
+    <div class="subcard" id="steps">
+      <div class="subhead">
+        <h3>From static to camera noise</h3>
+        <div class="chips" id="presetChips" role="group" aria-label="Preset"></div>
+      </div>
+      <div class="stepgrid">
+        <figure class="stage">
+          <canvas id="stepCanvas" aria-label="The noise being built in four steps on a picture of spheres"></canvas>
+          <figcaption id="stepCap">Loading the playground…</figcaption>
+        </figure>
+        <div class="side">
+          <ol class="steplist" id="stepList"></ol>
+          <div class="transport">
+            <button type="button" class="ghost" id="stepPlay">Play</button>
+            <input type="range" id="stepScrub" min="0" max="4" step="0.001" value="0" aria-label="Timeline">
+          </div>
+          <div class="sidefigs">
+            <figure class="thumb"><canvas id="stepClean" width="256" height="256" aria-label="The clean picture"></canvas><figcaption>clean <i>x</i></figcaption></figure>
+            <figure class="bars"><div id="stepBars">
+              <div class="sbar"><output>–</output><i></i><span>dark</span></div>
+              <div class="sbar"><output>–</output><i></i><span>mid</span></div>
+              <div class="sbar"><output>–</output><i></i><span>bright</span></div>
+            </div><figcaption>noise strength (8-bit codes) in the dark, mid and bright thirds</figcaption></figure>
+          </div>
+          <figure class="filters" id="stepFiltersFig"><canvas id="stepFilters" aria-label="The nine 25 by 25 filters of A"></canvas><figcaption><b>A</b>: rows are the output colour, columns the input colour. Red weights add, blue subtract; shown as signed square roots so the faint outer taps stay visible.</figcaption></figure>
+          <p class="hint" id="stepGain"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="subcard" id="machine">
+      <h3>The lookup is a quantile machine</h3>
+      <p class="lede">The field value <i>t</i> is a percentile in disguise: <i>t</i> = 1 means “brighter than 84 % of draws”. The lookup reads the same percentile off the residuals measured at this brightness, so a symmetric bell comes out as whatever the camera really does: lopsided, heavy-tailed, or squashed against black. Drag the brightness down and watch the pile hit the wall.</p>
+      <div class="bar">
+        <div class="field">
+          <label for="machineX">Brightness <i>x</i> <output id="machineXOut">40</output></label>
+          <span class="xrow"><input type="range" id="machineX" min="0" max="255" step="1" value="40"><span class="swatch" id="machineSwatch"></span></span>
+        </div>
+        <div class="chips" id="machineChannel" role="group" aria-label="Channel">
+          <button type="button" class="chip" data-c="0" aria-pressed="false">Red</button>
+          <button type="button" class="chip" data-c="1" aria-pressed="true">Green</button>
+          <button type="button" class="chip" data-c="2" aria-pressed="false">Blue</button>
+        </div>
+      </div>
+      <canvas id="machineCanvas" aria-label="Gaussian draws mapped through the lookup into a histogram of residuals"></canvas>
+      <p class="hint" id="machineStat"></p>
+    </div>
+
+    <div class="subcard" id="mixer">
+      <h3>Mix your own noise</h3>
+      <p class="lede">Every fitted preset is a point in one space. Seen through its first two principal components, camera noise and film grain fall on opposite sides, and ISO or grain size climbs upward. <em>Click a dot</em> to load that preset, then <em>drag</em> to wander between them: the noise is rebuilt live from the PGNM Designer's 6 filter and 12 lookup components.</p>
+      <div class="mixgrid">
+        <figure><canvas id="mixPad" tabindex="0" aria-label="Preset map: filter principal component 1 across, lookup principal component 1 up; drag or use the arrow keys"></canvas>
+          <figcaption><span class="dot sidd"></span> camera presets (SIDD), <span class="dot newson"></span> film grain (Newson), larger for higher ISO or radius.</figcaption></figure>
+        <figure><canvas id="mixOut" width="256" height="256" aria-label="The picture with the mixed noise"></canvas>
+          <figcaption><span class="chips small" id="mixMode" role="group" aria-label="Show"><button type="button" class="chip" data-mode="image" aria-pressed="true">Picture</button><button type="button" class="chip" data-mode="noise" aria-pressed="false">Noise ×2</button></span> <span id="mixCap">Scroll here to start the mixer.</span></figcaption></figure>
+      </div>
+    </div>
+    <p class="lede">Want it on your own photos, at full resolution? <a href="https://miya9756.github.io/pgnm/" target="_blank" rel="noopener">Open the studio</a>. Film presets were fitted on Newson's renderer, which also blurs the image; the studio applies that blur, the playground leaves it out.</p>
   </section>
+
+  <section>
+    <h2>Earlier work</h2>
+    <p class="paper">PGNM grew out of <a href="https://arxiv.org/abs/2303.09199" target="_blank" rel="noopener">A Generative Model for Digital Camera Noise Synthesis</a> (arXiv:2303.09199), by Mingyang Song, <a href="https://scholar.google.com/citations?user=gwP_ARgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Yang Zhang</a>, <a href="https://scholar.google.com/citations?user=E0fxZeUAAAAJ&amp;hl=en" target="_blank" rel="noopener">Tun&ccedil; O. Ayd&#305;n</a>, Elham Amin Mansour and <a href="https://scholar.google.com/citations?user=j0nCulgAAAAJ&amp;hl=en" target="_blank" rel="noopener">Christopher Schroers</a> (ETH Zürich and DisneyResearch|Studios).</p>
+  </section>
+
+  <section>
+    <h2>Citation</h2>
+    <p class="paper">📄 <a href="https://github.com/miya9756/pgnm/blob/main/PGNM.pdf" target="_blank" rel="noopener">Parametric Gaussian Noise Mixer (PGNM): Unified Synthesis of Camera Noise and Film Grain</a><br>Technical report, ETH Zürich, October 2026 · <a href="https://github.com/miya9756/pgnm" target="_blank" rel="noopener">Code and presets</a></p>
+    <div class="citebox">
+      <div class="citehd"><span>Reference format</span><button class="copybtn" data-target="citeAcm">Copy</button></div>
+      <pre id="citeAcm">Mingyang Song. 2026. Parametric Gaussian Noise Mixer (PGNM): Unified Synthesis of Camera Noise and Film Grain. Technical Report. ETH Zürich. https://github.com/miya9756/pgnm</pre>
+    </div>
+    <div class="citebox">
+      <div class="citehd"><span>BibTeX</span><button class="copybtn" data-target="citeBib">Copy</button></div>
+      <pre id="citeBib">@techreport{song2026pgnm,
+  author      = {Song, Mingyang},
+  title       = {Parametric Gaussian Noise Mixer ({PGNM}): Unified Synthesis of Camera Noise and Film Grain},
+  institution = {ETH Z{\"u}rich},
+  type        = {Technical Report},
+  year        = {2026},
+  month       = oct,
+  url         = {https://github.com/miya9756/pgnm}
+}</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Datasets &amp; credits</h2>
+    <div class="datacard">
+      <p class="ref"><strong>SIDD</strong> — camera presets are fitted on the Smartphone Image Denoising Dataset. Abdelrahman Abdelhamed, Stephen Lin and Michael S. Brown. A High-Quality Denoising Dataset for Smartphone Cameras. CVPR 2018.</p>
+      <p class="ref"><strong>Newson film grain</strong> — film presets are fitted on grain rendered by the model of Alasdair Newson, Julie Delon and Bruno Galerne. A Stochastic Film Grain Model for Resolution-Independent Rendering. Computer Graphics Forum 36(8), 2017; training pairs from GrainNet: Gwilherm Lesné, Yann Gousseau, Saïd Ladjal and Alasdair Newson. Neural Film Grain Rendering. Computer Graphics Forum 44(2), 2025.</p>
+      <p class="ref"><strong>Nocturne</strong> — the colour grain preset is fitted on Netflix's <em>Nocturne</em>, Netflix Open Content, licensed CC BY 4.0.</p>
+    </div>
+  </section>
+
 </main>
 
 <footer>
-  <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved.</div>
+  <!-- The reserved-rights claim covers Mingyang's own text, figures and code on this page. The PGNM
+       code and presets carry their own licence (CC BY-NC-ND 4.0, stated in the header), and the
+       datasets credited above keep theirs. -->
+  <div class="inner">&copy; 2026 Mingyang Song &middot; All rights reserved. Third-party code and datasets remain under their own licences.</div>
 </footer>
+
+<script src="engine.js"></script>
+<script type="module" src="playground.js"></script>
+<script>
+'use strict';
+for (const button of document.querySelectorAll('.copybtn')) {
+  button.addEventListener('click', async () => {
+    const text = document.getElementById(button.dataset.target).textContent;
+    try { await navigator.clipboard.writeText(text); button.textContent = 'Copied'; }
+    catch (error) { button.textContent = 'Select & copy'; }
+    setTimeout(() => { button.textContent = 'Copy'; }, 1600);
+  });
+}
+</script>
 </body>
 </html>
