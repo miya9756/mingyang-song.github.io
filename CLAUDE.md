@@ -1922,6 +1922,16 @@ are public at <https://github.com/miya9756/pgnm> (CC BY-NC-ND 4.0), and its in-b
 published from that repo to <https://miya9756.github.io/pgnm/> by its own workflow — **the studio is
 not in this repo**; this page links to it.
 
+**The paper is on arXiv: [2610.39868](https://arxiv.org/abs/2610.39868) [cs.CV]**, v1 submitted
+2026-10-29, same title, sole author, comments *Technical report. 49 pages: 9-page main paper and
+40-page supplementary material*. The page's paper button, its *Citation* block and the landing band's
+tag all point there now; the BibTeX is `@misc{song2026pgnm,…}` with arXiv's own fields (`eprint`,
+`archivePrefix`, `primaryClass = cs.CV`), and the pgnm README carries the same entry — keep the two
+identical. The record was read from arxiv.org itself (fetched on Mingyang's workstation, since the
+cloud box cannot reach arxiv.org), not inferred from the PDF. Its DOI, `10.48550/arXiv.2610.39868`,
+was still *pending registration* on 2026-10-30, which is why no citation carries it yet; add it once it
+resolves. If a v2 changes the title, all three places change together.
+
 **The 2026-09-14 withdrawal is lifted, on a condition.** The page was a placeholder ahead of a patent
 filing; on 2026-10-29 Mingyang allowed the method to be described publicly **provided the page says the
 patent application is in progress and that commercial use is not permitted.** The header's `.notice`
@@ -1932,9 +1942,9 @@ playground; it is **not** what this page is, so do not restore it over this one.
 
 **Order: the ways in first, then the playground.** Mingyang asked for the page to send people to the
 source code and the viewer before anything else, so the header ends in three `.way` buttons — the
-studio (the one accent focal point), the code, the report PDF — and the notice. Then *Playground*,
+studio (the one accent focal point), the code, the paper on arXiv — and the notice. Then *Playground*,
 *Earlier work* (the 2023 co-authored arXiv paper the page used to present, with its authors), the
-`@techreport` citation, *Datasets & credits* (SIDD; Newson's renderer and GrainNet's training pairs;
+arXiv `@misc` citation, *Datasets & credits* (SIDD; Newson's renderer and GrainNet's training pairs;
 Netflix's *Nocturne*, CC BY 4.0) and the footer, which carries the third-party clause because the page
 ships presets fitted on those datasets.
 
