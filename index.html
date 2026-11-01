@@ -331,6 +331,15 @@
         animation:flagdrift 6s linear infinite}
   @keyframes flagdrift{to{background-position:-200% 0}}
 
+  /* A THIN BAND hangs under the project it belongs to: no figure, one row, and a hook in the
+     numeral column instead of a number of its own, so the projects after it keep theirs. Same <a>,
+     same self-drawing rule on hover, same single accent (the CTA) - only the weight drops. */
+  .band.thin{padding:15px 30px 16px}
+  .band.thin .bidx{padding-top:.1em}
+  .band.thin .bfield{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 28px}
+  .band.thin h3{margin:0 0 .15em;font-size:1.02rem}
+  .band.thin p{font-size:.88rem}
+
   /* --------------------------------- image tiles --------------------------------- */
   /* Elsewhere. These are the one thing on the page that is not glass - they are filled edge to
      edge with an image, so they need no veil and would only lose the picture to one. Their text
@@ -403,6 +412,9 @@
     .band.banner .bmeta{flex-direction:row;align-items:center;gap:.6em 1.4em}
     .band.split .bmeta{padding-top:0}
     .band.split .fig{max-height:none;width:100%;max-width:280px}
+    .band.thin{padding:15px 22px 16px}
+    .band.thin .bidx{display:none}
+    .band.thin .bfield{grid-template-columns:1fr}
     .contact,footer{padding-left:22px;padding-right:22px}
     .art{min-height:180px}
   }
@@ -470,6 +482,22 @@
       <span class="bmeta">
         <span class="tag"><span class="live" aria-hidden="true"></span>SIGGRAPH &rsquo;26 &middot; Conference Track</span>
         <span class="cta">Open the live viewer <span class="arrow" aria-hidden="true">&rarr;</span></span>
+      </span>
+    </div>
+  </a>
+
+  <!-- Hangs under 01 and links out: the player lives in its own repo (miya9756/smv-viewer-prototype)
+       and nothing of it is committed here. See CLAUDE.md. -->
+  <a class="band thin pane" href="https://miya9756.github.io/smv-viewer-prototype/" target="_blank" rel="noopener">
+    <span class="bidx" aria-hidden="true">&#8627;</span>
+    <div class="bfield">
+      <div class="btext">
+        <h3>Viewer prototype</h3>
+        <p>The paper&rsquo;s Neural 3D Video and MeetRoom runs, in a minimal player.</p>
+      </div>
+      <span class="bmeta">
+        <span class="tag"><span class="live" aria-hidden="true"></span>42 scenes</span>
+        <span class="cta">Open the player <span class="arrow" aria-hidden="true">&rarr;</span></span>
       </span>
     </div>
   </a>

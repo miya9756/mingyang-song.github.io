@@ -15,6 +15,17 @@ machine). The substantial piece is
 `projects/smv/` — a 100 % client-side player for compressed dynamic 3D-Gaussian
 ("4D-GS") scenes, the results site for *SmoothMotionVectors* (SIGGRAPH 2026).
 
+**Under band 01 hangs a thin band, `.band.thin`, linking OUT to the SMV Viewer Prototype**
+(<https://miya9756.github.io/smv-viewer-prototype/>, repo `miya9756/smv-viewer-prototype`, checked out at
+`/media/disk2/repos/smv-viewer-prototype`), added 2026-11-01. That is a separate, web-only repo: a cut-down
+copy of `smoothmotionvector-assets/web/player_browser` (decode path verbatim, no relighting, fly and
+orbit) holding every Neural 3D Video and MeetRoom run of the paper's table, CC BY-NC-ND 4.0, checked and
+deployed by its own Actions workflow. **Nothing of it is committed here, and that is what keeps the
+`neur3d` rule under *Conventions* intact** — those scenes show people, and this repo only links to them.
+Do not pull the player or its scenes into `projects/`. The band is a project band with the figure removed
+and the weight dropped: one row, a `↳` in the numeral column instead of a number of its own (so 02-04
+keep theirs), and on a phone the hook is hidden, since above the title it would point at nothing.
+
 **The landing page's backdrop is a full-bleed photograph now, and there are two of them.**
 `assets/bg_landscape.jpg` and `assets/bg_portrait.jpg` — Mingyang's own paintings of the lake —
 are picked by `@media(orientation:portrait)`, since `cover` throws away the long axis and the 16:9
