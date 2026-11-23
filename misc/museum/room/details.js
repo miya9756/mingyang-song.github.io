@@ -267,7 +267,7 @@ export function pleatedShade(){
   return g;
 }
 
-export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
+export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood,floorY}){
   const c=new Carving();
   const bronze=new THREE.MeshStandardNodeMaterial({color:0x694832,metalness:0.7,roughness:0.48});
   const velvet=new THREE.MeshStandardNodeMaterial({color:0x643340,roughness:0.92});
@@ -278,7 +278,7 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
 
   // Layered arcades recede behind the surviving wall fragments. Every voussoir is
   // a closed, bevelled wedge; a missing block is a deliberate break in the arch.
-  for(const [x,z,r,spring,missing] of [[-4.1,-7.85,2.3,3.5,3],[2.9,-8.0,2.3,3.5,-1],[-0.5,-8.5,1.15,4.2,12]]){
+  for(const [x,z,r,spring,missing] of [[-4.1,-8.00,2.3,3.5,3],[2.9,-8.0,2.3,3.5,-1],[-0.5,-8.99,1.15,4.2,12]]){
     for(let i=0;i<17;i++){
       if(i===missing||i===missing+1&&missing>=0) continue;
       const key=i===8, inset=0.004;
@@ -302,7 +302,7 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
     }
   }
   // Bronze collars and an acanthus crown give the foreground shafts scale.
-  for(const [x,z,r,h] of [[-3.60,-0.70,0.74,5.0],[3.95,-1.10,0.68,4.6],[0.30,-6.40,0.48,5.18]]){
+  for(const [x,z,r,h] of [[-3.60,-0.70,0.74,5.0],[3.95,-1.10,0.68,4.6],[0.30,-5.96,0.48,5.18]]){
     for(const y of [0.22,0.35,h,h+0.18]) c.add(new THREE.TorusGeometry(r*1.035,0.028,6,48),gold,[x,y,z],[Math.PI/2,0,0]);
     for(let i=0;i<16;i++){
       const a=i/16*Math.PI*2;
@@ -312,17 +312,39 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
 
   // Fallen cornice stones and smaller chips; deterministic placement, concentrated
   // at the feet of the ruins so the central water still has room for reflections.
+  // The loose chips have fixed sites between the columns and exhibits. Seat
+  // each stone on its lowest rotated vertex on the floor beneath the water.
+  const chipSites=[
+    [-4.59,-4.17],[5.93,-0.10],[-5.27,0.44],[5.76,-6.51],[-3.28,-5.54],[6.26,-5.97],
+    [-6.83,-6.09],[3.55,-4.48],[-5.18,-6.25],[6.32,-6.63],[-3.81,-5.85],[5.03,-6.41],
+    [-5.32,-1.60],[4.87,-3.41],[-3.73,-3.05],[6.88,-0.40],[-3.98,-4.58],[7.71,-1.15],
+    [-7.18,-2.58],[5.21,-0.68],[-7.32,-1.81],[3.62,-2.31],[-4.89,-2.51],[5.35,-5.55],
+    [-4.47,-6.09],[3.08,-2.75],[-3.74,0.49],[2.97,-1.63],[-3.60,-1.86],[5.83,-5.76],
+    [-4.69,-1.29],[7.51,-3.72],[-6.39,-3.40],[4.30,-5.99],[-4.49,0.19],[4.90,-5.45],
+    [-3.03,-6.34],[7.03,-2.98],[-6.16,-1.06],[5.16,0.07],[-4.34,-2.08],[5.00,-2.34],
+    [-4.88,-5.50],[3.68,-2.99],[-6.94,-1.16],[4.13,-4.66],[-6.21,-6.27],[5.45,-2.74],
+    [-6.15,-3.75],[5.15,-4.26],[-5.84,-3.48],[6.55,0.05],[-4.19,-5.22],[6.48,-0.71],
+    [-3.78,-6.51],[2.92,-2.29],[-3.37,-3.41],[4.41,-3.93],[-4.38,-2.86],[7.10,-0.67],
+    [-6.11,-0.16],[3.60,-3.66],[-3.74,-2.60],[3.25,-5.51],[-7.06,-3.37]
+  ];
   let seed=917;
   const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
-  for(let i=0;i<65;i++){
-    const side=i%2?1:-1, x=side*(2.9+rand()*4.3),z=-6.9+rand()*6.5;
-    const size=0.08+rand()*0.30;
-    c.add(new THREE.DodecahedronGeometry(size,0),stoneMat,[x,-0.035+size*0.4,z],
-      [rand(),rand()*6,rand()],[1+rand(),0.65,1]);
+  for(const [x,z] of chipSites){
+    const stone=new THREE.DodecahedronGeometry(0.08+rand()*0.30,0);
+    const rotation=new THREE.Euler(rand(),rand()*6,rand());
+    stone.scale(1+rand(),0.65,1);
+    stone.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(rotation));
+    stone.computeBoundingBox();
+    c.add(stone,stoneMat,[x,floorY-stone.boundingBox.min.y,z]);
   }
-  for(const [x,z,ry] of [[-5.8,-2.6,0.4],[5.8,-3.2,-0.6]]){
-    for(let j=0;j<3;j++) c.add(box,stoneMat,[x,0.1+j*0.13,z],
-      [0.08,ry,0.05],[1.5+j*0.12,0.16,0.6+j*0.13]);
+  for(const [x,z,ry] of [[-6.03,-2.17,0.29],[6.73,-1.90,-0.48]]){
+    const tilt=new THREE.Euler(0.08,ry,0.05);
+    const up=new THREE.Vector3(0,1,0).applyEuler(tilt);
+    for(let j=0;j<3;j++){
+      const lift=j*0.16;
+      c.add(box,stoneMat,[x+up.x*lift,-0.19+up.y*lift,z+up.z*lift],
+        [tilt.x,tilt.y,tilt.z],[1.5+j*0.12,0.16,0.6+j*0.13]);
+    }
   }
 
   // An empty salon chair, slightly off-axis beneath the paintings: plum velvet,
@@ -347,7 +369,7 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
     const z=0.14+0.16*Math.sqrt(1-(x/0.61)**2-(y/0.90)**2)-tuftDepth(x,y);
     cc.add(sphere,gold,[x,1.52+y,z+0.014],[0,0,0],[0.021,0.021,0.012]);
   }
-  chair.add(cc.finish());chair.position.set(0.65,0,-3.55);chair.rotation.y=-0.20;scene.add(chair);
+  chair.add(cc.finish());chair.position.set(0.74,0,-3.65);chair.rotation.y=-0.29;scene.add(chair);
 
   // A tall shaded lamp with ribs and crystal fringe. The practical casts warm
   // light onto the chair and flowers; the visitor's overhead beam remains aimable.
@@ -369,12 +391,20 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
 
   // Sunflowers lean into the light on the right: two irregular petal courses,
   // raised seed heads and broad green leaves, with all faces modelled.
-  for(const [x,z,height,r,lean] of [[3.10,-3.0,3.2,0.39,-0.22],[3.55,-2.95,2.35,0.32,0.22],[3.35,-3.3,4.10,0.31,0.20]]){
-    c.add(closedTube([[x-lean,0.1,z],[x-0.15,height*0.5,z+0.1],[x,height,z]],0.022,22),green);
+  const vaseX=3.02,vaseZ=-3.24;
+  for(const [dx,dz,height,r] of [[-0.32,0.05,3.15,0.39],[0.42,0.10,2.39,0.32],[0.10,-0.15,3.96,0.31]]){
+    const x=vaseX+dx,z=vaseZ+dz;
+    // Keep each stalk inside the narrow mouth, then let it bend towards its flower.
+    const stemPoints=[[vaseX+dx*0.10,0.55,vaseZ+dz*0.10],[vaseX+dx*0.16,0.75,vaseZ+dz*0.16],
+      [vaseX+dx*0.55,height*0.60,vaseZ+dz*0.55],[x,height,z]];
+    const stem=new THREE.CatmullRomCurve3(stemPoints.map(p=>new THREE.Vector3(...p)));
+    c.add(closedTube(stemPoints,0.022,22),green);
     for(let j=0;j<4;j++){
-      const sx=j%2?1:-1;
-      c.add(leaf,green,[x+sx*0.18,height*(0.18+j*0.15),z],
-        [0.25,0,-sx*1.05],[0.16,0.40,0.10]);
+      const sx=j%2?1:-1, join=stem.getPointAt(0.22+j*0.16);
+      const tilt=-sx*1.05;
+      // The leaf mesh is centred. Plant its lower tip on the curved stalk.
+      c.add(leaf,green,[join.x-0.34*Math.sin(tilt),join.y+0.34*Math.cos(tilt),join.z],
+        [0,0,tilt],[0.16,0.40,0.10]);
     }
     c.add(sphere,seeds,[x,height,z+0.04],[0,0,0],[r*0.54,r*0.54,0.12]);
     for(let ring=0;ring<2;ring++) for(let j=0;j<17;j++){
@@ -389,10 +419,10 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
     }
   }
   const vaseSection=[[0,0],[0.25,0],[0.30,0.15],[0.23,0.48],[0.16,0.66],[0.19,0.70],[0.15,0.70],[0.12,0.61],[0.19,0.45],[0.25,0.15],[0,0.06]];
-  c.add(new THREE.LatheGeometry(vaseSection.map(p=>new THREE.Vector2(...p)),32),bronze,[3.35,-0.03,-3.1]);
+  c.add(new THREE.LatheGeometry(vaseSection.map(p=>new THREE.Vector2(...p)),32),bronze,[vaseX,-0.03,vaseZ]);
 
   // Books and a cup survive on a low round table near the water.
-  const tx=4.3,tz=-2.1;
+  const tx=4.46,tz=-2.76;
   c.add(new THREE.CylinderGeometry(0.72,0.74,0.09,40),wood,[tx,0.96,tz]);
   c.add(new THREE.TorusGeometry(0.73,0.023,8,40),gold,[tx,1.005,tz],[Math.PI/2,0,0]);
   c.add(new THREE.CylinderGeometry(0.055,0.09,0.95,12),bronze,[tx,0.46,tz]);

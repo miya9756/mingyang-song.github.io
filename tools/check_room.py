@@ -21,7 +21,7 @@ except ImportError:
         os.execv(str(PW_PY), [str(PW_PY), __file__] + sys.argv[1:])
     raise
 
-CHECK = r"""() => {
+CHECK = r"""async () => {
   const {THREE,flutedColumn,ruinWall,frameSweep,MOULDING,closedTube,archStone,tuftedBack,pleatedShade,shellCrest,acanthusLeaf,cornerRosette}=window.roomGeometry;
   function audit(g,label){
     const p=g.attributes.position, ids=g.index?Array.from(g.index.array):Array.from({length:p.count},(_,i)=>i);
@@ -57,6 +57,34 @@ CHECK = r"""() => {
   results.push(audit(archStone(2.3,0.54,0.8,0.97,0.77),'arch keystone'));
   results.push(audit(tuftedBack(),'tufted upholstery'));
   results.push(audit(pleatedShade(),'pleated lampshade'));
+  // Check the installed paintings too. Transform nearby solid triangles into
+  // canvas coordinates so an angled shaft or wall cannot cut through the image.
+  const {scene,works,WORKS,hangWork,volMesh,water}=window.roomGeometry;
+  await Promise.all(WORKS.map(hangWork));
+  scene.updateMatrixWorld(true);
+  for(const {mesh,slug} of works){
+    const {width,height}=mesh.geometry.parameters;
+    // Leave the outer millimetre for the mitred lip that holds the canvas.
+    const inset=0.001;
+    const half=new THREE.Vector3(width/2-inset,height/2-inset,inset);
+    const image=new THREE.Box3(half.clone().negate(),half);
+    const worldToImage=mesh.matrixWorld.clone().invert();
+    const tri=new THREE.Triangle();
+    scene.traverse(o=>{
+      if(!o.isMesh || o===mesh || o===water || o===volMesh || o.material.transparent || o.isInstancedMesh) return;
+      const g=o.geometry, transform=new THREE.Matrix4().multiplyMatrices(worldToImage,o.matrixWorld);
+      if(!g.boundingBox) g.computeBoundingBox();
+      if(!g.boundingBox.clone().applyMatrix4(transform).intersectsBox(image)) return;
+      const pos=g.attributes.position, index=g.index, count=index?index.count:pos.count;
+      for(let i=0;i<count;i+=3){
+        tri.a.fromBufferAttribute(pos,index?index.getX(i):i).applyMatrix4(transform);
+        tri.b.fromBufferAttribute(pos,index?index.getX(i+1):i+1).applyMatrix4(transform);
+        tri.c.fromBufferAttribute(pos,index?index.getX(i+2):i+2).applyMatrix4(transform);
+        if(image.intersectsTriangle(tri)) throw Error(slug+': '+o.geometry.type+' crosses the painted surface at '+tri.getMidpoint(new THREE.Vector3()).toArray().join(', '));
+      }
+    });
+    results.push(slug+': painted surface clear');
+  }
   return results;
 }"""
 
@@ -68,7 +96,7 @@ class Quiet(http.server.SimpleHTTPRequestHandler):
 def main():
     src = (ROOT / 'misc/museum/room/index.html').read_text()
     src = src.replace("import {carvedFrame, dressRoom}", "import {carvedFrame, dressRoom, closedTube, archStone, tuftedBack, pleatedShade, shellCrest, acanthusLeaf, cornerRosette}")
-    src = src.replace('\nboot();', '\nwindow.roomGeometry={THREE,flutedColumn,ruinWall,frameSweep,MOULDING,closedTube,archStone,tuftedBack,pleatedShade,shellCrest,acanthusLeaf,cornerRosette};')
+    src = src.replace('\nboot();', '\nwindow.roomGeometry={scene,works,WORKS,hangWork,volMesh,water,THREE,flutedColumn,ruinWall,frameSweep,MOULDING,closedTube,archStone,tuftedBack,pleatedShade,shellCrest,acanthusLeaf,cornerRosette};')
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Quiet, directory=str(ROOT)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
