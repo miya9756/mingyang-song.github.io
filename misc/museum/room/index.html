@@ -217,10 +217,11 @@
 import * as THREE from './vendor/three.webgpu.min.js';
 import {carvedFrame, dressRoom} from './details.js';
 import {shallowWater} from './water.js';
+import {goldLeaf, marble, oilOnLinen, walnut} from './materials.js';
 const {Fn, vec2, vec3, vec4, float, uniform, texture, uv, positionWorld, cameraPosition,
        mix, clamp, max, min, abs, exp, pow, smoothstep, normalize, length, fract, sin, dot,
-       screenCoordinate, Loop, mx_noise_float, saturate, oneMinus,
-       step, bumpMap} = THREE.TSL;
+       screenCoordinate, Loop, saturate, oneMinus,
+       step} = THREE.TSL;
 
 const canvas=document.getElementById('gl'),statusEl=document.getElementById('status');
 const labelEl=document.getElementById('label'),resetBtn=document.getElementById('reset');
@@ -383,48 +384,9 @@ scene.fog=new THREE.FogExp2(0x171420,0.038);
 const camera=new THREE.PerspectiveCamera(55,16/9,0.1,80);
 
 // ---------------------------------------------------------------------------------------------
-// Materials. There are only two sources in here -- the lamp and the sky -- so what separates stone
-// from gilding from canvas is only how each answers them: the stone drinks the light, the gilding
-// throws it back, the paintings sit between.
-//
-// The palette is a warm amber key against a cold blue-green fill, and that split is doing most of
-// the work. It is not decoration: with one warm source, everything the lamp misses would otherwise
-// be merely DARK, and a dark surface carries no form. Giving the shadow a colour of its own means
-// the far side of every column is still describing a cylinder.
-const stoneMat=new THREE.MeshStandardNodeMaterial({roughness:0.94, metalness:0.0});
-{
-  // Marble is not one colour, and a column rendered as one reads as plastic under a raking light --
-  // which is the only kind of light in here. Two octaves of noise in WORLD space: a broad mottle
-  // that varies block to block, and a fine one for the bump, so neighbouring drums of the same
-  // geometry do not come out identical. World space rather than uv, so the pattern runs THROUGH the
-  // stone -- a broken shaft and the drum that fell off it match across the break.
-  const p=positionWorld;
-  const cloud=mx_noise_float(p.mul(0.94));
-  const grain=mx_noise_float(p.mul(11));
-  // Fold a mineral bed through the volume. Thin warm seams sit inside a wider,
-  // desaturated halo, so they remain legible where the light grazes a flute.
-  const bed=p.y.mul(2.8).add(p.x.mul(1.65)).sub(p.z.mul(0.7)).add(cloud.mul(6.4)).add(grain.mul(0.18));
-  const seam=abs(sin(bed));
-  const halo=oneMinus(smoothstep(0.06,0.38,seam));
-  const calcite=oneMinus(smoothstep(0.015,0.10,seam));
-  const matrix=mix(vec3(0.069,0.052,0.077), vec3(0.29,0.24,0.26), cloud.mul(0.5).add(0.5));
-  const marble=mix(matrix,vec3(0.33,0.27,0.25),halo.mul(0.29)).add(calcite.mul(vec3(0.072,0.054,0.042)));
-  const wet=oneMinus(smoothstep(-0.10,0.65,p.y.add(cloud.mul(0.09))));
-  stoneMat.colorNode=marble.mul(grain.mul(0.10).add(1)).mul(oneMinus(wet.mul(0.40)));
-  stoneMat.roughnessNode=mix(float(0.79).sub(calcite.mul(0.14)),float(0.30),wet);
-  stoneMat.normalNode=bumpMap(grain, float(0.023));
-}
-const darkMat=new THREE.MeshStandardNodeMaterial({color:0x161420, roughness:1.0});
-const woodMat=new THREE.MeshStandardNodeMaterial({color:0x24161e, roughness:0.62});
-const floorMat=new THREE.MeshStandardNodeMaterial({color:0x1a1713, roughness:0.95});
-// Gilding, not gold: metalness just under 1 at a rough-ish finish, so the mouldings carry a
-// travelling highlight rather than mirroring the room.
-const frameMat=new THREE.MeshStandardNodeMaterial({color:0xd7a965, vertexColors:true, roughness:0.32, metalness:0.82});
-{
-  const patina=mx_noise_float(positionWorld.mul(7)).mul(0.5).add(0.5);
-  frameMat.colorNode=mix(vec3(0.22,0.105,0.041),vec3(0.76,0.48,0.20),smoothstep(0.15,0.76,patina));
-  frameMat.roughnessNode=mix(float(0.26),float(0.47),patina);
-}
+const stoneMat=marble(),frameMat=goldLeaf(),woodMat=walnut();
+const darkMat=new THREE.MeshStandardNodeMaterial({color:0x161420,roughness:1});
+const floorMat=new THREE.MeshStandardNodeMaterial({color:0x1a1713,roughness:0.95});
 
 // Solid enclosure pieces align to the room's actual depth. A recessed ceiling
 // surrounds the roof opening; all slab undersides and exposed edges are closed.
@@ -774,15 +736,7 @@ async function hangWork(work){
   const backing=new THREE.Mesh(new THREE.BoxGeometry(w+0.02,h+0.02,0.10), woodMat);
   backing.position.z=-0.045; backing.castShadow=true; g.add(backing);
 
-  // THE PAINTINGS ARE LIT, NOT PASTED. The image is treated as albedo and multiplied by whatever
-  // the lamp delivers, so a picture the lamp is not on falls into the dark -- which is what makes
-  // aiming it worth doing. Same reasoning the museum page's relight() sets out next door: the light
-  // already in the picture is the light of the day it was taken, and nothing here removes it.
-  const pm=new THREE.MeshStandardNodeMaterial({map:tex, roughness:0.62, metalness:0.0});
-  // AND THEY ARE OIL, so the brush has to catch the light. The bump is derived from the picture's
-  // own luminance -- there is no second map to ship and nothing to invent: where the tool laid a
-  // thick stroke the image is light, and that is where a real canvas stands proud.
-  pm.normalNode=bumpMap(texture(tex).r, float(0.34));
+  const pm=oilOnLinen(tex,w,h);
   const canvasMesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h), pm);
   canvasMesh.position.z=0.012;
   canvasMesh.receiveShadow=true;

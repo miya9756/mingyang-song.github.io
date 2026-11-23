@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.webgpu.min.js';
+import {bronzeHardware, linenShade, velvet as makeVelvet} from './materials.js';
 
 // All ornament is solid geometry. Repeated parts are merged by material, keeping the
 // reflection and shadow passes affordable without turning the relief into a texture.
@@ -269,11 +270,12 @@ export function pleatedShade(){
 
 export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood,floorY}){
   const c=new Carving();
-  const bronze=new THREE.MeshStandardNodeMaterial({color:0x694832,metalness:0.7,roughness:0.48});
-  const velvet=new THREE.MeshStandardNodeMaterial({color:0x643340,roughness:0.92});
-  const green=new THREE.MeshStandardNodeMaterial({color:0x354537,roughness:0.66,metalness:0.15});
-  const petal=new THREE.MeshStandardNodeMaterial({color:0xc39243,roughness:0.46,metalness:0.5});
+  const bronze=bronzeHardware();
+  const velvet=makeVelvet();
+  const green=new THREE.MeshStandardNodeMaterial({color:0x354537,roughness:0.77});
+  const petal=new THREE.MeshStandardNodeMaterial({color:0xd8a348,roughness:0.84});
   const seeds=new THREE.MeshStandardNodeMaterial({color:0x38231c,roughness:0.95});
+  const glaze=new THREE.MeshPhysicalNodeMaterial({color:0xc8b9a1,roughness:0.69,clearcoat:0.82,clearcoatRoughness:0.24});
   const paper=new THREE.MeshStandardNodeMaterial({color:0xb4a38c,roughness:0.96});
 
   // Layered arcades recede behind the surviving wall fragments. Every voussoir is
@@ -374,18 +376,17 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood,floorY}){
   // A tall shaded lamp with ribs and crystal fringe. The practical casts warm
   // light onto the chair and flowers; the visitor's overhead beam remains aimable.
   const lx=-1.4,lz=-3.3,ly=3.0;
-  c.add(new THREE.CylinderGeometry(0.032,0.046,2.7,12),gold,[lx,1.35,lz]);
+  c.add(new THREE.CylinderGeometry(0.032,0.046,2.7,12),bronze,[lx,1.35,lz]);
   c.add(sphere,bronze,[lx,0.10,lz],[0,0,0],[0.42,0.12,0.42]);
   // A closed section revolved into a hollow shade with a real rim and inner face.
-  const shadeGeo=pleatedShade();
-  const shadeMat=new THREE.MeshStandardNodeMaterial({color:0xbda078,emissive:0xffbe77,
-    emissiveIntensity:0.22,roughness:0.74});
-  c.add(shadeGeo,shadeMat,[lx,ly,lz]);
-  for(const [y,r] of [[ly+0.42,0.42],[ly-0.43,0.72]]) c.add(new THREE.TorusGeometry(r,0.022,8,48),gold,[lx,y,lz],[Math.PI/2,0,0]);
+  const shade=new THREE.Mesh(pleatedShade(),linenShade());
+  shade.position.set(lx,ly,lz);shade.castShadow=true;shade.receiveShadow=true;
+  scene.add(shade);
+  for(const [y,r] of [[ly+0.42,0.42],[ly-0.43,0.72]]) c.add(new THREE.TorusGeometry(r,0.022,8,48),bronze,[lx,y,lz],[Math.PI/2,0,0]);
   for(let i=0;i<16;i++){
     const a=i/16*Math.PI*2,s=Math.sin(a),co=Math.cos(a);
     c.add(closedTube([[lx+s*0.425,ly+0.42,lz+co*0.425],[lx+s*0.57,ly,lz+co*0.57],[lx+s*0.725,ly-0.43,lz+co*0.725]],0.012,12),gold);
-    c.add(new THREE.OctahedronGeometry(0.065),gold,[lx+s*0.72,ly-0.60-(i%2)*0.06,lz+co*0.72],[0,a,0],[0.5,1.7,0.5]);
+    c.add(new THREE.OctahedronGeometry(0.065),bronze,[lx+s*0.72,ly-0.60-(i%2)*0.06,lz+co*0.72],[0,a,0],[0.5,1.7,0.5]);
   }
   const warm=new THREE.PointLight(0xffbd80,36,11,2);warm.position.set(lx,ly-0.50,lz);scene.add(warm);
 
@@ -414,7 +415,7 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood,floorY}){
     }
     for(let j=0;j<65;j++){
       const a=j*2.39996,rr=Math.sqrt(j/65)*r*0.49;
-      c.add(sphere,bronze,[x+Math.cos(a)*rr,height+Math.sin(a)*rr,z+0.14],
+      c.add(sphere,seeds,[x+Math.cos(a)*rr,height+Math.sin(a)*rr,z+0.14],
         [0,0,a],[0.014,0.019,0.009]);
     }
   }
@@ -436,9 +437,9 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood,floorY}){
     for(const sy of [-1,1]) c.add(box,i%2?velvet:green,[tx-0.16,y+sy*0.052,tz],[0,angle,0],[0.51,0.018,0.36]);
     c.add(box,gold,[tx-0.16,y,tz+0.177],[0,angle,0],[0.035,0.09,0.018]);
   }
-  c.add(new THREE.CylinderGeometry(0.12,0.065,0.16,24),paper,[tx+0.32,1.09,tz+0.13]);
+  c.add(new THREE.CylinderGeometry(0.12,0.065,0.16,24),glaze,[tx+0.32,1.09,tz+0.13]);
   c.add(new THREE.TorusGeometry(0.064,0.014,8,20),gold,[tx+0.45,1.1,tz+0.13]);
-  c.add(new THREE.CylinderGeometry(0.17,0.15,0.018,24),paper,[tx+0.32,1.02,tz+0.13]);
+  c.add(new THREE.CylinderGeometry(0.17,0.15,0.018,24),glaze,[tx+0.32,1.02,tz+0.13]);
 
   const group=c.finish();group.name='Carved architecture and still life';scene.add(group);
   return {glows:[]};
