@@ -68,55 +68,203 @@ export function closedTube(points,radius=0.025,segments=24){
   return g;
 }
 
-function curlPoints(x,y,sx,sy,size,z){
-  const points=[];
-  for(let i=0;i<=32;i++){
-    const t=i/32,angle=t*Math.PI*3.1, r=size*(1-t*0.88);
-    points.push([x+sx*Math.cos(angle)*r,y+sy*Math.sin(angle)*r,z+t*0.025]);
+// A shallow carving has a modelled face, a back and a narrow cut edge. The
+// edge has its own normals so the gilded lip stays crisp in a raking light.
+function reliefGrid(columns,rows,sample){
+  const pos=[],idx=[],stride=columns+1,count=stride*(rows+1);
+  const back=[];
+  for(let y=0;y<=rows;y++) for(let x=0;x<=columns;x++){
+    const [px,py,face,base]=sample(x/columns,y/rows);
+    pos.push(px,py,face); back.push(px,py,base);
   }
-  return points;
+  pos.push(...back);
+  for(let y=0;y<rows;y++) for(let x=0;x<columns;x++){
+    const a=y*stride+x,b=a+1,d=a+stride,c=d+1;
+    idx.push(a,b,c,a,c,d, count+a,count+c,count+b,count+a,count+d,count+c);
+  }
+  const rim=[];
+  for(let x=0;x<columns;x++) rim.push(x);
+  for(let y=0;y<rows;y++) rim.push(y*stride+columns);
+  for(let x=columns;x>0;x--) rim.push(rows*stride+x);
+  for(let y=rows;y>0;y--) rim.push(y*stride);
+  const start=pos.length/3;
+  for(const i of rim) for(const j of [i,i+count]) pos.push(pos[j*3],pos[j*3+1],pos[j*3+2]);
+  for(let i=0;i<rim.length;i++){
+    const a=start+2*i,b=start+2*((i+1)%rim.length);
+    idx.push(a,a+1,b+1,a,b+1,b);
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
 }
 
-export function carvedFrame(w,h,k,gold){
-  const c=new Carving(), crest=h/2+0.15*k;
-  for(const sx of [-1,1]){
-    for(const sy of [-1,1]){
-      const x=sx*(w/2+0.065*k),y=sy*(h/2+0.06*k);
-      c.add(closedTube(curlPoints(x,y,sx,sy,0.13*k,0.06*k),0.015*k),gold);
-      for(let j=0;j<3;j++) c.add(leaf,gold,
-        [x-sx*j*0.07*k,y-sy*j*0.035*k,0.075*k],[0,0,-sx*sy*(0.55+j*0.3)],
-        [0.06*k,0.12*k,0.06*k]);
+// Nine radiating ribs swell from the hinge of a scallop. The same ribs
+// scallop its silhouette, so the shell still reads from across the water.
+export function shellCrest(){
+  return reliefGrid(72,9,(u,v)=>{
+    const angle=(u-0.5)*2.16;
+    const rib=0.5-0.5*Math.cos(2*Math.PI*9*u);
+    const r=0.048+v*(0.29+0.037*rib);
+    const x=Math.sin(angle)*r*1.16, y=Math.cos(angle)*r;
+    const back=0.014+0.039*v*v;
+    const face=back+0.016+0.061*Math.sin(Math.PI*v)+0.040*rib*v;
+    return [x,y,face,back];
+  });
+}
+
+// A leaf in the carver's local XY plane. The outline breaks into lobes,
+// while a raised midrib and oblique furrows give the blade a folded face.
+export function acanthusLeaf(){
+  return reliefGrid(10,16,(u,t)=>{
+    const s=u*2-1, blade=Math.sin(Math.PI*t);
+    const lobes=0.87+0.13*Math.cos(6*Math.PI*t);
+    const width=0.025+0.36*blade*lobes*(1-0.26*t);
+    const x=0.21*t*t+s*width;
+    const back=0.11*t*t;
+    const ribs=Math.cos(8*Math.PI*t-3.8*Math.abs(s));
+    const face=back+0.018+blade*(0.035+0.088*Math.exp(-10*s*s)+0.014*ribs*(1-s*s));
+    return [x,t,face,back];
+  });
+}
+
+// An eight-petal patera cut from a single boss. The rounded blank is flattened
+// at the rim and lobed before raising the petals and the central seed.
+export function cornerRosette(){
+  const g=new THREE.SphereGeometry(1,48,12);
+  g.rotateX(Math.PI/2);
+  const p=g.attributes.position;
+  for(let i=0;i<p.count;i++){
+    const x=p.getX(i),y=p.getY(i),z=p.getZ(i),r=Math.hypot(x,y);
+    const petal=0.5+0.5*Math.cos(8*Math.atan2(y,x));
+    const outline=1-0.19*Math.pow(r,3)*(1-petal);
+    const relief=z>0?0.27*petal*Math.sin(Math.PI*r)**2+0.32*Math.exp(-22*r*r):0;
+    p.setXYZ(i,x*outline,y*outline,0.26*z+relief);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+const foliage=acanthusLeaf(),rosette=cornerRosette(),shell=shellCrest();
+
+export function carvedFrame(w,h,k,gold,crest){
+  const c=new Carving(),crestY=h/2+0.073*k;
+  // A floral boss is carved in two depths: the petals have deep grooves,
+  // and the round seed stands proud of their meeting point.
+  function flower(x,y,z,rx,ry){
+    c.add(rosette,gold,[x,y,z],[0,0,Math.PI/8],[rx,ry,Math.min(rx,ry)]);
+    c.add(sphere,gold,[x,y,z+0.56*Math.min(rx,ry)],[0,0,0],[0.19*rx,0.19*ry,0.16*Math.min(rx,ry)]);
+  }
+  if(crest==='shell'){
+    c.add(shell,gold,[0,crestY,0.045*k],[0,0,0],[k,k,k]);
+    flower(0,crestY+0.035*k,0.087*k,0.058*k,0.045*k);
+    // Reflect the stalk's path to keep the triangle winding intact.
+    for(const side of [-1,1]){
+      const path=[[0.035,0.037],[0.18,0.010],[0.34,0.026],[0.43,0.118],
+        [0.397,0.196],[0.321,0.202],[0.286,0.155],[0.302,0.119],[0.334,0.124]];
+      c.add(closedTube(path.map(([x,y])=>[side*x*k,crestY+y*k,(0.076+y*0.16)*k]),0.015*k,36),gold);
+      c.add(foliage,gold,[side*0.19*k,crestY+0.012*k,0.069*k],[0,0,-side*0.94],[0.16*k,0.23*k,0.22*k]);
     }
-    // Paired volutes and a fan-shaped crest above each canvas.
-    c.add(closedTube(curlPoints(sx*0.19*k,crest,sx,1,0.18*k,0.07*k),0.018*k),gold);
-    for(let j=0;j<4;j++) c.add(leaf,gold,[sx*(0.055+j*0.066)*k,crest+0.045*k,0.07*k],
-      [0,0,-sx*(0.16+j*0.28)],[0.065*k,(0.17-j*0.017)*k,0.09*k]);
+  }else{
+    // A low, spreading crest on the broad landscapes leaves the sky open.
+    for(const side of [-1,1]){
+      const stem=[[0.02,0.01],[0.16,0.03],[0.31,0.06],[0.46,0.11],[0.50,0.16]];
+      c.add(closedTube(stem.map(([x,y])=>[side*x*k,crestY+y*k,0.073*k]),0.010*k,20),gold);
+      for(let j=0;j<4;j++){
+        const x=(0.065+0.11*j)*k,y=(0.016+0.010*j*j)*k;
+        const length=(0.16-0.014*j)*k;
+        c.add(foliage,gold,[side*x,crestY+y,0.070*k],[0,0,-side*0.69],[0.090*k,length,0.14*k]);
+        c.add(foliage,gold,[side*x,crestY+y,0.074*k],[0,0,-side*1.85],[0.086*k,length,0.11*k]);
+      }
+    }
+    flower(0,crestY+0.054*k,0.076*k,0.094*k,0.087*k);
   }
-  c.add(sphere,gold,[0,crest+0.04*k,0.11*k],[0,0,0],[0.068*k,0.095*k,0.042*k]);
-  // Leaf-and-dart course. The broad, alternating relief catches light at room scale.
-  for(const sy of [-1,1]){
-    const count=Math.floor(w/(0.13*k));
-    for(let i=0;i<count;i++) c.add(leaf,gold,
-      [-w/2+(i+0.5)*w/count,sy*(h/2+0.09*k),0.06*k],
-      [0,0,sy*0.55],[0.028*k,0.058*k,0.035*k]);
-  }
-  for(const sx of [-1,1]){
-    const count=Math.floor(h/(0.13*k));
-    for(let i=0;i<count;i++) c.add(leaf,gold,
-      [sx*(w/2+0.09*k),-h/2+(i+0.5)*h/count,0.06*k],
-      [0,0,sx*0.85],[0.032*k,0.065*k,0.035*k]);
+
+  for(const sx of [-1,1]) for(const sy of [-1,1]){
+    const x=sx*(w/2+0.076*k), y=sy*(h/2+0.076*k);
+    // Two sprays follow the mitre out along its rails. Keep the sight edge
+    // clear of the leaves, even on the narrow portrait canvas.
+    for(const alongTop of [true,false]){
+      const heading=alongTop?sx*Math.PI/2:(sy>0?Math.PI:0);
+      for(let i=0;i<3;i++){
+        const offset=(0.018+i*0.069)*k;
+        const lean=(i%2===0?1:-1)*0.24;
+        c.add(foliage,gold,[x-(alongTop?sx*offset:0),y-(alongTop?0:sy*offset),0.067*k],
+          [0,0,heading+lean],[0.126*k,(0.17-i*0.017)*k,0.19*k]);
+      }
+    }
+    flower(x,y,0.078*k,0.086*k,0.086*k);
   }
   return c.finish();
 }
 
-function archStone(radius,thickness,a,b,depth){
-  const s=new THREE.Shape();
-  s.absarc(0,0,radius+thickness,a,b,false);
-  s.lineTo(Math.cos(b)*radius,Math.sin(b)*radius);
-  s.absarc(0,0,radius,b,a,true); s.closePath();
-  const geo=new THREE.ExtrudeGeometry(s,{depth,bevelEnabled:true,bevelSize:0.025,
-    bevelThickness:0.025,bevelSegments:1,curveSegments:3,steps:1});
-  geo.translate(0,0,-depth/2); return geo;
+// Sweep one moulded cross-section around the arch. Each wedge has a deep
+// reveal, a bead around its inner lip and two stepped bands on its front face.
+export function archStone(radius,thickness,a,b,depth){
+  const t=thickness, z=depth/2;
+  const profile=[[0,-z+0.02],[0.02,-z],[t-0.02,-z],[t,-z+0.02],
+    [t,z+0.015],[t-0.02,z+0.042],[0.84*t,z+0.042],[0.80*t,z+0.012],
+    [0.70*t,z+0.012],[0.64*t,z-0.018],[0.31*t,z-0.018],[0.25*t,z+0.025],
+    [0.19*t,z+0.055],[0.11*t,z+0.060],[0.05*t,z+0.044],[0,z+0.015]];
+  const point=(angle,k)=>{const [r,front]=profile[k];return [(radius+r)*Math.cos(angle),(radius+r)*Math.sin(angle),front];};
+  const pos=[], steps=4;
+  for(let i=0;i<steps;i++){
+    const u=a+(b-a)*i/steps,v=a+(b-a)*(i+1)/steps;
+    for(let k=0;k<profile.length;k++){
+      const n=(k+1)%profile.length;
+      pos.push(...point(u,k),...point(v,k),...point(v,n),...point(u,k),...point(v,n),...point(u,n));
+    }
+  }
+  const ends=THREE.ShapeUtils.triangulateShape(profile.map(p=>new THREE.Vector2(...p)),[]);
+  for(const [i,j,k] of ends) pos.push(...point(a,i),...point(a,j),...point(a,k),...point(b,k),...point(b,j),...point(b,i));
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.computeVertexNormals();
+  return g;
+}
+
+// The button caps sit at the bottoms of the same depressions that shape the
+// velvet. Work in chair-local metres so a pull has the same width on each row.
+const tufts=[];
+for(let row=0;row<4;row++) for(let col=0;col<3;col++){
+  tufts.push([(col-1)*0.28+(row%2?0.07:-0.07),-0.54+row*0.34]);
+}
+function tuftDepth(x,y){
+  let depth=0;
+  for(const [bx,by] of tufts){
+    const dx=x-bx,dy=y-by;
+    const d2=dx*dx+dy*dy;
+    if(d2>0.052) continue;
+    const crease=Math.abs(Math.abs(dx)-Math.abs(dy)*0.80);
+    depth+=0.052*Math.exp(-d2/0.0033)+0.022*Math.exp(-d2/0.019-crease*crease/0.00023);
+  }
+  return depth;
+}
+export function tuftedBack(){
+  const g=new THREE.SphereGeometry(1,96,64), p=g.attributes.position;
+  for(let i=0;i<p.count;i++){
+    const x=p.getX(i)*0.61, y=p.getY(i)*0.90, z=p.getZ(i);
+    const pull=z>0?tuftDepth(x,y)*Math.min(1,z*3):0;
+    p.setXYZ(i,x,y,0.16*z-pull);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+export function pleatedShade(){
+  // Revolve the inner and outer cloth together. Pleats taper to the wire hoops.
+  const section=[[0.42,0.42],[0.39,0.42],[0.39,0.39],[0.52,0],[0.68,-0.40],[0.68,-0.43],
+    [0.72,-0.43],[0.72,-0.40],[0.56,0],[0.42,0.39],[0.42,0.42]];
+  const g=new THREE.LatheGeometry(section.map(p=>new THREE.Vector2(...p)),160);
+  const p=g.attributes.position;
+  for(let i=0;i<p.count;i++){
+    const x=p.getX(i),y=p.getY(i),z=p.getZ(i);
+    const angle=Math.atan2(x,z), span=Math.max(0,1-Math.pow(Math.abs((y+0.005)/0.425),5));
+    const scale=1-0.065*span*(1-Math.cos(angle*32))*0.5;
+    p.setXYZ(i,x*scale,y,z*scale);
+  }
+  g.computeVertexNormals();
+  return g;
 }
 
 export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
@@ -133,8 +281,8 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
   for(const [x,z,r,spring,missing] of [[-4.1,-7.85,2.3,3.5,3],[2.9,-8.0,2.3,3.5,-1],[-0.5,-8.5,1.15,4.2,12]]){
     for(let i=0;i<17;i++){
       if(i===missing||i===missing+1&&missing>=0) continue;
-      c.add(archStone(r,0.36,i*Math.PI/17+0.012,(i+1)*Math.PI/17-0.012,0.65),stoneMat,[x,spring,z]);
-      if(i%3===0) c.add(archStone(r-0.05,0.055,i*Math.PI/17+0.016,(i+1)*Math.PI/17-0.016,0.04),bronze,[x,spring,z+0.36]);
+      const key=i===8, inset=0.004;
+      c.add(archStone(key?r-0.065:r,key?0.54:0.36,i*Math.PI/17+inset,(i+1)*Math.PI/17-inset,key?0.77:0.65),stoneMat,[x,spring,z]);
     }
     for(const sx of [-1,1]){
       for(let row=0;row<6;row++) c.add(box,stoneMat,[x+sx*(r+0.18),row*0.55+0.20,z],
@@ -180,23 +328,24 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
   // An empty salon chair, slightly off-axis beneath the paintings: plum velvet,
   // tufted buttons, bowed gilt legs and a carved crown echo the illustrated room.
   const chair=new THREE.Group(),cc=new Carving();
-  cc.add(sphere,wood,[0,1.52,0],[0,0,0],[0.73,1.05,0.19]);
-  cc.add(sphere,velvet,[0,1.52,0.14],[0,0,0],[0.61,0.90,0.16]);
+  const cushion=new THREE.SphereGeometry(1,48,24);
+  cc.add(cushion,wood,[0,1.52,0],[0,0,0],[0.73,1.05,0.19]);
+  cc.add(tuftedBack(),velvet,[0,1.52,0.14]);
   const rim=[];
   for(let i=0;i<=64;i++){
     const a=i/64*Math.PI*2;rim.push([Math.cos(a)*0.67,1.52+Math.sin(a)*0.97,0.17]);
   }
   cc.add(closedTube(rim,0.045,72),gold);
-  cc.add(sphere,wood,[0,0.69,0.38],[0,0,0],[0.80,0.18,0.70]);
-  cc.add(sphere,velvet,[0,0.82,0.40],[0,0,0],[0.72,0.16,0.64]);
+  cc.add(cushion,wood,[0,0.69,0.38],[0,0,0],[0.80,0.18,0.70]);
+  cc.add(cushion,velvet,[0,0.82,0.40],[0,0,0],[0.72,0.16,0.64]);
   for(const sx of [-1,1]){
     for(const z of [-0.05,0.90]) cc.add(closedTube([[sx*0.63,0.73,z],[sx*0.59,0.38,z+0.03],[sx*0.76,0.04,z+0.10]],0.055,16),gold);
     cc.add(closedTube([[sx*0.60,1.44,0.02],[sx*0.84,1.18,0.43],[sx*0.78,1.15,0.91],[sx*0.65,0.7,0.94]],0.045,24),gold);
     for(let j=0;j<3;j++) cc.add(leaf,gold,[sx*(0.08+j*0.13),2.49,0.13],[0,0,-sx*(0.2+j*0.35)],[0.11,0.25-j*0.03,0.13]);
   }
-  for(let row=0;row<4;row++) for(let col=0;col<3;col++){
-    const x=(col-1)*0.28+(row%2)*0.09,y=0.95+row*0.34;
-    cc.add(sphere,gold,[x,y,0.30],[0,0,0],[0.024,0.024,0.012]);
+  for(const [x,y] of tufts){
+    const z=0.14+0.16*Math.sqrt(1-(x/0.61)**2-(y/0.90)**2)-tuftDepth(x,y);
+    cc.add(sphere,gold,[x,1.52+y,z+0.014],[0,0,0],[0.021,0.021,0.012]);
   }
   chair.add(cc.finish());chair.position.set(0.65,0,-3.55);chair.rotation.y=-0.20;scene.add(chair);
 
@@ -206,8 +355,7 @@ export function dressRoom({scene,stoneMat,frameMat:gold,woodMat:wood}){
   c.add(new THREE.CylinderGeometry(0.032,0.046,2.7,12),gold,[lx,1.35,lz]);
   c.add(sphere,bronze,[lx,0.10,lz],[0,0,0],[0.42,0.12,0.42]);
   // A closed section revolved into a hollow shade with a real rim and inner face.
-  const section=[[0.42,0.42],[0.72,-0.43],[0.68,-0.43],[0.385,0.42],[0.42,0.42]];
-  const shadeGeo=new THREE.LatheGeometry(section.map(p=>new THREE.Vector2(...p)),48);
+  const shadeGeo=pleatedShade();
   const shadeMat=new THREE.MeshStandardNodeMaterial({color:0xbda078,emissive:0xffbe77,
     emissiveIntensity:0.22,roughness:0.74});
   c.add(shadeGeo,shadeMat,[lx,ly,lz]);

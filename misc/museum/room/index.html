@@ -9,25 +9,9 @@
 <meta name="description" content="An interactive flooded salon inspired by Mingyang Song's illustration: five repainted photographs, carved gilded frames, broken marble columns, sunflowers, warm lamplight, and water that answers when you touch it.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Must track --bg. This room has no light switch: it is dark, permanently, so unlike the wall
-     next door there is only one value to track. -->
-<meta name="theme-color" content="#0b0c0e">
+<meta name="theme-color" content="#f4f0e7">
 
-<!-- THE PAINTINGS ARE PRELOADED, and it earns its place twice over.
-     Speed: they are the long pole. Nothing fetches them until the ~1 MB of three.js has parsed and
-     boot() has run, and by then the browser has been idle on the network for most of a second.
-     Naming them here starts all five in parallel with the library.
-     And checkability: the module builds their paths from a slug (`paintings/${slug}.webp`), so no
-     literal path exists anywhere for verify.py to resolve -- a renamed or uncommitted painting
-     would fail only in the browser, which is the failure this repo's static check exists to
-     prevent. These are the literals. Keep them in step with the WORKS table.
-
-     `crossorigin` IS REQUIRED AND IS NOT DECORATION. three's TextureLoader sets
-     crossOrigin='anonymous', so it fetches in CORS mode; a preload without the attribute is a
-     different credentials mode, the browser refuses to match the two, and every painting is
-     downloaded TWICE -- the preload turning into a 794 KB penalty rather than a saving. Chromium
-     says so in the console ("a preload ... is found, but is not used"), which is the only warning
-     you get. -->
+<!-- Match TextureLoader's anonymous CORS mode so each preload can also be reused by the catalogue. -->
 <link rel="preload" as="image" type="image/webp" crossorigin href="paintings/grossmunster.webp">
 <link rel="preload" as="image" type="image/webp" crossorigin href="paintings/snow.webp">
 <link rel="preload" as="image" type="image/webp" crossorigin href="paintings/ridge.webp">
@@ -37,171 +21,175 @@
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap"></noscript>
 <style>
-  /* THE ROOM IS DARK AND HAS NO SWITCH, which is the one palette decision here.
-     misc/museum/ is warm paper that CAN go dark; this page is that page's dark tokens, taken
-     verbatim and made the only state. Two reasons it is not themed:
-       - the exhibit is a room lit by a single lamp. A gallery after hours on warm paper would be
-         a black rectangle in a cream page, which reads as a broken image rather than as a room;
-         the museum page learned that when its own light switch was built.
-       - a canvas that IS the page's darkness cannot cross-fade with it. Next door the stage is a
-         pruned capture on paper and the room around it is CSS; here the room is inside the canvas.
-     Same tokens, never re-invented, so the shared bones below (back pill, hints, label, footer)
-     are byte-for-byte the museum's and the two pages read as one place. */
-  :root{
-    color-scheme:dark;
-    --bg:#0b0c0e; --surface:#15171a; --ink:#e8e6e1; --muted:#8b9199;
-    --line:#23262b; --accent:#c9a3c0; --shadow:rgba(0,0,0,.5);
-    --pill:rgba(255,255,255,.05); --pill-hi:rgba(255,255,255,.1); --kbd:#1c1f24; --err:#e6786c;
-  }
+  :root{color-scheme:light;--bg:#f4f0e7;--ink:#29271f;--muted:#665e51;--line:#c9c1b2;--accent:#853e2c;--serif:Fraunces,Georgia,'Times New Roman',serif;--sans:Inter,system-ui,sans-serif}
   *{box-sizing:border-box}
-  html{-webkit-text-size-adjust:100%;background:var(--bg)}
-  body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);
-       font:16px/1.65 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-       -webkit-font-smoothing:antialiased}
-  .inner{max-width:860px;margin:0 auto;padding:0 clamp(20px,4vw,48px)}
-  a{color:var(--accent);text-decoration:none}
-  a:hover{text-decoration:underline}
+  html{background:var(--bg);-webkit-text-size-adjust:100%}
+  body{margin:0;color:var(--ink);background:var(--bg);font:16px/1.5 var(--sans)}
+  .measure{width:min(1380px,calc(100% - clamp(36px,8vw,144px)));margin-inline:auto}
+  a{color:inherit;text-underline-offset:.2em}
+  button{font:inherit;color:inherit;cursor:pointer}
+  :where(a,button,summary):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+  .masthead,footer,.rail,.exhibit,.print-footer{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+  .masthead{padding:18px 0;border-bottom:1px solid var(--ink)}
+  .masthead a,footer a{text-decoration:none}
+  .masthead a:hover,footer a:hover{text-decoration:underline}
+  .museum{display:inline-flex;align-items:center;gap:10px;font:500 22px/1 var(--serif);letter-spacing:-.04em}
+  .arch{width:21px;height:24px;border:2px solid var(--accent);border-bottom-width:3px;border-radius:12px 12px 0 0;position:relative}
+  .arch::before{content:"";position:absolute;inset:3px 3px 0;border:1px solid var(--accent);border-radius:8px 8px 0 0;border-bottom:0}
+  .author{font-size:13px}
 
-  header.inner{padding-top:30px}
-  .back{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);
-        text-decoration:none;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;
-        background:var(--pill);transition:color .16s,border-color .16s,background-color .16s}
-  .back:hover{color:var(--accent);border-color:var(--accent);background:var(--pill-hi);text-decoration:none}
-  .back .barrow{display:inline-block;transition:transform .16s}
-  .back:hover .barrow{transform:translateX(-3px)}
-  h1{margin:16px 0 0;font-family:'Fraunces','Palatino Linotype',Georgia,'Times New Roman',serif;
-     font-weight:600;font-size:clamp(28px,4.2vw,42px);line-height:1.05;letter-spacing:-.018em}
-  .subtitle{margin:9px 0 0;font-family:'Fraunces',Georgia,serif;font-weight:400;font-style:italic;
-            font-size:clamp(15px,2vw,20px);opacity:.9;line-height:1.3}
-
-  /* THE STAGE IS WIDER AND SHORTER THAN THE WALL NEXT DOOR'S, and both halves of that are the
-     subject's doing. Next door a single painting hangs on the paper with no frame at all, so its
-     stage is a 4:3 box the picture sits inside. Here the canvas contains a ROOM -- five paintings
-     across a bay, and water running out to the walls -- so it is 16:9 and as wide as the measure
-     allows: crop the sides and the wing walls go with them, and the bay stops reading as a bay.
-     It DOES get a frame, unlike next door: this canvas is opaque (there is a room behind every
-     pixel, not a pruned capture on transparent paper), so an unbordered rectangle of near-black on
-     near-black paper would have no edge at all. A hairline and the page's own card radius give it
-     one, and the inset shadow keeps the room from looking pasted on. */
-  .stage{position:relative;width:min(calc(100% - 40px),1200px);aspect-ratio:16/9;margin:34px auto 0;
-         border:1px solid var(--line);border-radius:12px;overflow:hidden;
-         box-shadow:0 18px 50px -28px var(--shadow)}
-  /* The last four declarations are the same suppression the museum page and the SMV viewer's
-     movement pad carry, and for the same reason: a press-and-drag on a canvas is also what a touch
-     OS reads as "select this", and iOS raises its callout and magnifier over the scene.
-     preventDefault() on pointerdown does not stop it -- the callout comes off the touch sequence,
-     not the pointer event -- so it has to be refused in CSS. Android's long-press menu is refused
-     by the contextmenu handler in the script. */
-  #gl{position:absolute;inset:0;width:100%;height:100%;display:block;
-      touch-action:none;cursor:grab;outline:none;
-      -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
-      -webkit-tap-highlight-color:transparent}
+  .exhibit{align-items:flex-end;padding:clamp(32px,4vw,64px) 0 clamp(25px,2.8vw,42px)}
+  .folio,.micro{font:600 10px/1.4 var(--sans);text-transform:uppercase;letter-spacing:.16em}
+  .folio{margin:0 0 12px;color:var(--muted);display:flex;align-items:center;gap:12px}
+  .folio span{display:inline-flex;align-items:center;gap:12px;color:var(--accent)}
+  .folio span::after{content:"";width:27px;height:1px;background:currentColor}
+  h1,h2,.subtitle{font-family:var(--serif);font-weight:400}
+  h1{margin:0;font-size:clamp(50px,6.7vw,104px);letter-spacing:-.065em;line-height:1}
+  h1 i{color:var(--accent);font-weight:400}
+  .subtitle{margin:0 0 3px;font-size:clamp(17px,1.5vw,23px);line-height:1.35;font-style:italic;color:var(--muted)}
+  .spread{display:grid;grid-template-columns:minmax(0,3.25fr) minmax(220px,1fr);gap:clamp(24px,3vw,48px);align-items:start}
+  .frame{padding:5px;background:#352e29;border:1px solid #4f4336;box-shadow:0 4px 12px #30251724}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;background:#141015;overflow:hidden}
+  #gl,#status{position:absolute;inset:0;width:100%;height:100%}
+  #gl{display:block;touch-action:none;cursor:grab;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   #gl.drag{cursor:grabbing}
-  /* Keyboard focus must stay visible -- it is the only way anyone navigating by key can tell the
-     room is the thing they are about to turn. But POINTER focus must not: the script focuses the
-     canvas on pointerdown so the arrow keys work straight after a drag, and a browser that matches
-     :focus-visible on a programmatic focus() then draws a rectangle inside the frame every time you
-     touch it. `.quiet` is set for pointer focus and cleared on the next key or blur. Same pair, and
-     the same reasoning, as misc/museum/index.html. */
-  #gl:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+  #gl:focus-visible{outline:2px solid #ffddaa;outline-offset:-4px}
   #gl.quiet:focus-visible{outline:none}
-  @media(max-width:760px){.stage{width:calc(100% - 24px);margin-top:26px;border-radius:10px}}
-
-  /* Status sits OVER the stage rather than above it, so nothing reflows when it goes away. */
-  #status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-          text-align:center;padding:0 24px;color:var(--muted);font-size:13.5px;line-height:1.6;
-          background:var(--bg);transition:opacity .5s ease}
-  #status.err{color:var(--err)}
+  #status{display:flex;align-items:flex-end;justify-content:center;background:#161316 url("salon.webp") center/cover no-repeat;padding:16px;transition:opacity .35s}
+  #status span,.static-note{background:#211d19ef;color:#fff7e6;padding:7px 14px;text-align:center;font:13px/1.4 var(--sans)}
   #status.gone{opacity:0;pointer-events:none}
-  #status[hidden]{display:none}
-
-  /* THE WALL LABEL NAMES WHATEVER YOU ARE LOOKING AT, and it is written by the renderer rather
-     than by the markup -- see nearestWork() in the script. A room with five things in it has no one
-     caption, and a list of five would be a checklist rather than a label. So it behaves like a
-     gallery guide walking beside you: turn toward a picture and it names that picture.
-     Set like the museum's label, because it is the same object. */
-  .label{margin:24px auto 0;max-width:560px;text-align:center;min-height:76px;
-         transition:opacity .28s ease}
-  .label.fade{opacity:0}
-  .label .who{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
-  .label .what{margin:.35em 0 0;font-family:'Fraunces',Georgia,serif;font-style:italic;font-size:19px;line-height:1.35}
-  .label .med{margin:.35em 0 0;font-size:13px;color:var(--muted)}
-
-  .hints{margin:20px auto 0;max-width:660px;display:flex;flex-wrap:wrap;gap:8px 18px;
-         justify-content:center;font-size:12.5px;color:var(--muted)}
-  .hints b{color:var(--ink);font-weight:600}
-  .hints kbd{font:inherit;font-size:11px;background:var(--kbd);border:1px solid var(--line);border-bottom-width:2px;
-             border-radius:5px;padding:1px 6px;color:var(--ink)}
-  .hints .reset{font:inherit;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;
-                text-decoration:underline;text-underline-offset:2px}
-  .hints .reset:disabled{color:var(--muted);text-decoration:none;cursor:default;opacity:.6}
-
-  /* WHICH BACKEND ACTUALLY RAN. One line, and it is not an instrument panel -- see the museum's
-     note about not growing the render-settings bar back. It earns its place because this page's
-     whole premise is the backend: three.js falls back to WebGL2 silently where WebGPU is missing,
-     and a visitor comparing what they see against what the page claims deserves to know which one
-     drew it. Muted, small, and below the fold of the controls. */
-  .backend{margin:14px auto 0;text-align:center;font-size:11.5px;letter-spacing:.06em;
-           text-transform:uppercase;color:var(--muted);opacity:.75}
-  .backend[hidden]{display:none}
-
-  main{padding-bottom:10px}
-  footer.inner{border-top:1px solid var(--line);margin-top:46px;padding-top:26px;padding-bottom:48px;color:var(--muted);font-size:13px}
-  footer p{margin:0 0 8px}
-  :where(a,button):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-
-  /* Everything that moves on its own is switched off here, per the site rule. What survives is
-     everything the visitor asks for: turning, zooming, moving the lamp, and the ripples a touch
-     makes. See the WANDER / SWELL / reduced-motion notes in the script -- the room does not stop
-     being interactive, it stops being restless. */
-  @media(prefers-reduced-motion:reduce){
-    .back,.back .barrow,#status,.label{transition:none}
-    .back:hover .barrow{transform:none}
+  [hidden],#status[hidden]{display:none}
+  .static-note{position:absolute;inset:auto 0 0;margin:0}
+  .rail{padding:14px 0;border-bottom:1px solid var(--line);min-height:58px}
+  .view-label{display:flex;align-items:baseline;flex-wrap:wrap;gap:3px 13px}
+  .micro{color:var(--accent)}
+  #label{font:italic 19px/1.25 var(--serif)}
+  .reset,.controls{color:var(--muted);font-size:12px}
+  .reset{border:0;background:none;padding:8px 0 8px 8px;white-space:nowrap}
+  .reset span{font-size:17px;vertical-align:-1px}
+  .reset:disabled{cursor:default;color:#746e63}
+  .reset:enabled:hover,.controls summary:hover{color:var(--accent)}
+  .controls{padding-top:8px}
+  .controls summary{width:fit-content;padding:5px 0;cursor:pointer}
+  .controls p{max-width:70ch;margin:5px 0}
+  h2{font-size:clamp(25px,2vw,34px);line-height:1.12;letter-spacing:-.045em;margin:0}
+  .catalogue{border-top:3px double var(--ink);padding-top:16px}
+  .intro{font-size:12px;color:var(--muted);margin:6px 0 16px}
+  .plates{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+  .plates li{border-bottom:1px solid var(--line)}
+  .plates a{display:grid;grid-template-columns:clamp(51px,5.3vw,80px) 1fr;align-items:center;gap:14px;padding:11px 0;text-decoration:none;font:400 clamp(16px,1.45vw,22px)/1.17 var(--serif);letter-spacing:-.02em}
+  .plates a[aria-current="true"] img{outline:1px solid var(--accent);outline-offset:3px}
+  .plates img{width:100%;aspect-ratio:1.22;object-fit:cover}
+  .plates a:is(:hover,:focus-visible) span{color:var(--accent);text-decoration:underline}
+  .notes{display:grid;grid-template-columns:.95fr 2.05fr;gap:24px; margin-top:clamp(32px,5vw,75px);border-top:1px solid var(--ink);padding:25px 0 35px}
+  .notes p{max-width:55ch;margin:0;font:400 clamp(20px,2vw,29px)/1.42 var(--serif);letter-spacing:-.015em}
+  .notes .credit{font:13px/1.65 var(--sans);letter-spacing:normal;margin-top:14px;max-width:78ch;color:var(--muted)}
+  .notes a{color:var(--accent);text-decoration-thickness:1px}
+  footer{border-top:1px solid var(--line);padding:18px 0 30px;flex-wrap:wrap;color:var(--muted);font-size:12px}
+  footer small{font-size:inherit}
+  #backend{font-size:11px}
+  dialog{padding:0;width:fit-content;max-width:min(94vw,1120px);max-height:94vh;max-height:94dvh;background:#24211e;color:#f5f0e6;border:1px solid #928173}
+  dialog::backdrop{background:rgba(24,21,19,.9)}
+  body:has(dialog[open]){overflow:hidden}
+  .print-wrap{padding:14px;display:grid;gap:12px}
+  .print-wrap button{border:1px solid #85796a;background:transparent;color:inherit;padding:7px 12px;min-height:40px}
+  .print-wrap button:hover{background:#3e3831}
+  .print-wrap :focus-visible{outline-color:#efc99c}
+  #close-print{justify-self:end;font-size:13px}
+  #print-image{display:block;width:min(85vw,1000px);height:clamp(150px,60vh,720px);height:clamp(150px,60dvh,720px);object-fit:contain}
+  .print-footer{border-top:1px solid #685d51;padding:12px 4px 3px}
+  .print-footer .micro{color:#e8c598}
+  #print-title{font-size:clamp(19px,2.2vw,29px);margin:3px 0}
+  #print-medium{font-size:12px;margin:0;color:#d6cbbd}
+  .turn{display:flex;gap:6px}
+  @media(max-width:800px){
+    .spread{grid-template-columns:1fr;gap:28px}
+    .subtitle{font-size:16px}
+    .plates{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:0 16px}
   }
+  @media(max-width:600px){
+    .exhibit{display:block;padding:26px 0 20px}
+    .subtitle{margin:12px 0 0;font-size:16px}.subtitle br{display:none}
+    .folio{font-size:9px}.museum{font-size:20px}
+    .frame{padding:3px}.plates{display:block}
+    .plates a{grid-template-columns:70px 1fr;min-height:66px;font-size:20px}
+    .plates img{height:48px}
+    .notes{grid-template-columns:1fr;gap:14px}
+    .view-label{display:grid}.rail{gap:6px}
+  }
+  @media(prefers-reduced-motion:reduce){#status{transition:none}}
 </style>
+<noscript><style>#status span,#gl{display:none}</style></noscript>
 </head>
 <body>
-<header class="inner">
-  <a class="back" href="../"><span class="barrow" aria-hidden="true">←</span> Digital Museum</a>
-  <h1>The Painted Room</h1>
-  <p class="subtitle">Gilded things, borrowed light, and water over a sunken floor.</p>
+<header class="masthead measure">
+  <a class="museum" href="../"><span class="arch" aria-hidden="true"></span>Digital Museum</a>
+  <a class="author" href="../../../">Mingyang Song</a>
 </header>
 
-<main>
-  <div class="stage">
-    <!-- No role="img": the script makes this focusable and drag-turnable, and a static image role
-         would tell a screen reader the opposite. The label under it names whatever is being faced,
-         and the turn is reachable from the keyboard for anyone who cannot drag. -->
-    <canvas id="gl" tabindex="0"
-            aria-label="A flooded salon seen in 3D: broken marble columns and arches, five paintings in carved gilded frames, a velvet chair, a fringed lamp, sunflowers, and books above shallow water, with ripples bending light across the stone floor. Drag or use arrow keys to look around, scroll or use plus and minus to zoom, and press 0 to reset the view."></canvas>
-    <div id="status">Building the room…</div>
+<main class="measure">
+  <header class="exhibit">
+    <div>
+      <p class="folio"><span>Room III</span> Interactive installation</p>
+      <h1>The Painted <i>Room</i></h1>
+    </div>
+    <p class="subtitle">Gilded things, borrowed light, <br>and water over a sunken floor.</p>
+  </header>
+
+  <div class="spread">
+    <section class="salon" aria-label="Interactive room">
+      <div class="frame">
+        <div class="stage">
+          <canvas id="gl" tabindex="0" aria-label="A flooded salon with five gilded paintings, broken marble columns, sunflowers and a fringed lamp. Use arrow keys to turn, plus and minus to zoom, and 0 to reset."></canvas>
+          <div id="status" role="status"><span>Opening the room…</span></div>
+          <noscript><p class="static-note">Enable JavaScript to explore the room in 3D.</p></noscript>
+        </div>
+      </div>
+      <div class="rail">
+        <div class="view-label"><span class="micro">In view</span><span id="label">The flooded salon</span></div>
+        <button class="reset" id="reset" disabled><span aria-hidden="true">↺</span> Reset view</button>
+      </div>
+      <details class="controls">
+        <summary>Drag to look around · Tap to aim the lamp</summary>
+        <p>Drag or use the arrow keys to look around. Scroll, pinch or use + and − to step closer. Click or tap to aim the lamp. Touch the water to send a ripple across the floor.</p>
+      </details>
+    </section>
+
+    <section class="catalogue" aria-labelledby="works-heading">
+      <h2 id="works-heading">On the walls</h2>
+      <p class="intro">Select a painting to look closer.</p>
+      <ol class="plates">
+        <li><a href="paintings/grossmunster.webp" data-work="grossmunster" data-med="photograph, repainted · Zürich"><img src="paintings/grossmunster.webp" crossorigin alt="Zurich’s twin cathedral towers reflected in the blue Limmat."><span>The Grossmünster from the Limmat</span></a></li>
+        <li><a href="paintings/snow.webp" data-work="snow"><img src="paintings/snow.webp" crossorigin alt="A snow-covered path under bare trees and a pink dusk sky."><span>Snow at Dusk</span></a></li>
+        <li><a href="paintings/ridge.webp" data-work="ridge"><img src="paintings/ridge.webp" crossorigin alt="Sunlight breaks through clouds above a jagged mountain ridge."><span>Cloud Over the Ridge</span></a></li>
+        <li><a href="paintings/wisteria.webp" data-work="wisteria"><img src="paintings/wisteria.webp" crossorigin alt="Purple wisteria casts shadows on a sunlit courtyard wall."><span>Wisteria on a Courtyard Wall</span></a></li>
+        <li><a href="paintings/storm.webp" data-work="storm"><img src="paintings/storm.webp" crossorigin alt="A dark blue storm rolls over the city against a bright yellow horizon."><span>Storm Over the City</span></a></li>
+      </ol>
+    </section>
   </div>
 
-  <div class="label" id="label"></div>
-
-  <div class="hints">
-    <span><b>drag</b> to look around</span>
-    <span><b>scroll</b> or pinch to step closer</span>
-    <span><b>click</b> anywhere to aim the lamp</span>
-    <span>and <b>the water</b> answers</span>
-    <button class="reset" id="reset" disabled>reset view</button>
-  </div>
-
-  <p class="backend" id="backend" hidden></p>
+  <section class="notes" aria-labelledby="notes-title">
+    <h2 id="notes-title">Artist’s note</h2>
+    <div>
+      <p>The five paintings are my own photographs, repainted by <a href="https://miya9756.github.io/Oil-Paint-Tuner/" target="_blank" rel="noopener">Oil Paint Tuner</a>. The room takes its atmosphere from <a href="https://www.pixiv.net/artworks/113329102" target="_blank" rel="noopener">my illustration, <i>2023</i></a>.</p>
+      <p class="credit">The ruin is drawn with <a href="https://threejs.org/">three.js</a> on <a href="https://www.w3.org/TR/webgpu/">WebGPU</a>, with a WebGL2 fallback. AI contributor GPT-6 Astra (via Codex) worked on scene development, geometry, and code refinement under my artistic direction.</p>
+    </div>
+  </section>
 </main>
 
-<footer class="inner">
-  <p>The five paintings are my own photographs, repainted by
-     <a href="https://miya9756.github.io/Oil-Paint-Tuner/" target="_blank" rel="noopener">Oil Paint Tuner</a>.
-     The room takes its atmosphere from <a href="https://www.pixiv.net/artworks/113329102" target="_blank" rel="noopener">my illustration, <i>2023</i></a>.
-     The ruin they are lost in is drawn with
-     <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> on
-     <a href="https://www.w3.org/TR/webgpu/" target="_blank" rel="noopener">WebGPU</a>, falling back
-     to WebGL2 where that is not available.</p>
-  <p>AI contributor: GPT-6 Astra (via Codex) &mdash; scene development, geometry, and code refinement
-     under my artistic direction.</p>
-  <p>&copy; 2026 Mingyang Song &middot; All rights reserved. Third-party code remains under its own licence.</p>
-</footer>
+<footer class="measure"><a href="../">← Back to the museum</a><small>© 2026 Mingyang Song · All rights reserved. Third-party code remains under its own licence.</small><span id="backend" hidden></span></footer>
+
+<dialog id="print-view" aria-labelledby="print-title">
+  <div class="print-wrap">
+    <button id="close-print" type="button" autofocus>Close <span aria-hidden="true">×</span></button>
+    <img id="print-image" crossorigin alt="">
+    <div class="print-footer">
+      <div aria-live="polite"><span class="micro" id="print-count"></span><h2 id="print-title"></h2><p id="print-medium"></p></div>
+      <div class="turn"><button type="button" id="prev-print" aria-label="Previous painting">←</button><button type="button" id="next-print" aria-label="Next painting">→</button></div>
+    </div>
+  </div>
+</dialog>
+<script src="catalogue.js" defer></script>
 
 <script type="module">
 // THE PAINTED ROOM. Five of Mingyang's photographs, repainted by his own Oil Paint Tuner, hung in
@@ -237,37 +225,30 @@ const {Fn, vec2, vec3, vec4, float, uniform, texture, uv, positionWorld, cameraP
 const canvas=document.getElementById('gl'),statusEl=document.getElementById('status');
 const labelEl=document.getElementById('label'),resetBtn=document.getElementById('reset');
 const backendEl=document.getElementById('backend'),stage=document.querySelector('.stage');
-function say(msg,err){statusEl.hidden=false;statusEl.classList.remove('gone');statusEl.innerHTML=msg;statusEl.classList.toggle('err',!!err);}
+function say(msg,err){statusEl.hidden=false;statusEl.classList.remove('gone');statusEl.innerHTML='<span>'+msg+'</span>';statusEl.classList.toggle('err',!!err);}
+const printView=document.getElementById('print-view');
+printView.addEventListener('close',()=>nudge());
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 
 // ---------------------------------------------------------------------------------------------
-// THE WORKS. Everything that differs between the five lives here -- the file, the wall it hangs
-// on, where along that wall, how tall it is, and its label -- so hanging a sixth is an entry in
-// this array and a wall with room on it. Same contract as the SCENES table next door.
+// The position, size and orientation of each work in the room. Each slug identifies its catalogue entry.
 //
 // `ar` is the shipped file's width/height and is what sizes the canvas inside its frame; it is
 // PRINTED BY tools/bake_room_paintings.py for exactly this reason, so a re-bake that changes a
 // crop is caught by comparing two numbers rather than by noticing a stretched picture.
 //
-// THE TITLES ARE DESCRIPTIVE, NOT DOCUMENTARY. These are Mingyang's own photographs and only he
-// knows where and when; nothing here asserts a place except `grossmunster`, where the building is
-// unmistakable. Edit them here -- they are not written anywhere else.
+// The catalogue supplies the titles used by the live wall label.
 const WORKS=[
   // Two still hanging on what is left of the walls...
-  {slug:'grossmunster', ar:1.7778, h:1.95, pos:[-3.85,2.20,-6.87], rot:[0,0.06,0.012],
-   title:'The Grossmünster from the Limmat', med:'photograph, repainted · Zürich'},
-  {slug:'snow',         ar:0.5625, h:3.05, pos:[ 3.05,2.52,-6.80], rot:[0,-0.03,-0.008],
-   title:'Snow at Dusk',                     med:'photograph, repainted'},
+  {slug:'grossmunster', crest:'spray', ar:1.7778, h:1.95, pos:[-3.85,2.20,-6.79], rot:[0,0.012,0.012]},
+  {slug:'snow', crest:'shell',         ar:0.5625, h:3.05, pos:[ 3.05,2.52,-6.80], rot:[0,-0.03,-0.008]},
   // ...one propped on a fallen drum and leaning back against a column...
-  {slug:'ridge',        ar:1.3333, h:2.05, pos:[ 5.15,1.30,-4.95], rot:[-0.15,-0.55,0.03],
-   title:'Cloud Over the Ridge',             med:'photograph, repainted'},
+  {slug:'ridge', crest:'spray',        ar:1.3333, h:2.05, pos:[ 5.15,1.30,-4.95], rot:[-0.15,-0.55,0.03]},
   // ...one standing in the water against the left ruin...
-  {slug:'wisteria',     ar:1.7778, h:1.72, pos:[-5.05,1.15,-3.85], rot:[-0.12,0.62,-0.02],
-   title:'Wisteria on a Courtyard Wall',     med:'photograph, repainted'},
+  {slug:'wisteria', crest:'shell',     ar:1.7778, h:1.72, pos:[-5.05,1.15,-3.85], rot:[-0.12,0.62,-0.02]},
   // ...and one that has gone over, its lower edge under the surface. The reference painting has
   // exactly this: an ornate frame half in the flood, catching the lamp along its top moulding.
-  {slug:'storm',        ar:1.7778, h:1.35, pos:[-1.80,0.33,-0.15], rot:[-1.06,0.34,0.10],
-   title:'Storm Over the City',              med:'photograph, repainted'},
+  {slug:'storm', crest:'spray',        ar:1.7778, h:1.35, pos:[-1.80,0.33,-0.15], rot:[-1.06,0.34,0.10]},
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -417,22 +398,28 @@ const stoneMat=new THREE.MeshStandardNodeMaterial({roughness:0.94, metalness:0.0
   // that varies block to block, and a fine one for the bump, so neighbouring drums of the same
   // geometry do not come out identical. World space rather than uv, so the pattern runs THROUGH the
   // stone -- a broken shaft and the drum that fell off it match across the break.
-  const nA=mx_noise_float(positionWorld.mul(0.85)).mul(0.5).add(0.5);
-  const nB=mx_noise_float(positionWorld.mul(6.5));
-  stoneMat.colorNode=mix(vec3(0.070,0.059,0.081), vec3(0.22,0.19,0.21), nA)
-                      .mul(nB.mul(0.085).add(1.0));
-  const vein=pow(oneMinus(abs(sin(positionWorld.x.mul(1.7).add(positionWorld.y.mul(0.9)).add(nA.mul(7))))),float(20));
-  const wet=oneMinus(smoothstep(float(-0.1),float(0.65),positionWorld.y));
-  stoneMat.colorNode=stoneMat.colorNode.mul(oneMinus(vein.mul(0.28))).mul(oneMinus(wet.mul(0.40)));
-  stoneMat.roughnessNode=mix(float(0.86),float(0.30),wet);
-  stoneMat.normalNode=bumpMap(nB, float(0.035));
+  const p=positionWorld;
+  const cloud=mx_noise_float(p.mul(0.94));
+  const grain=mx_noise_float(p.mul(11));
+  // Fold a mineral bed through the volume. Thin warm seams sit inside a wider,
+  // desaturated halo, so they remain legible where the light grazes a flute.
+  const bed=p.y.mul(2.8).add(p.x.mul(1.65)).sub(p.z.mul(0.7)).add(cloud.mul(6.4)).add(grain.mul(0.18));
+  const seam=abs(sin(bed));
+  const halo=oneMinus(smoothstep(0.06,0.38,seam));
+  const calcite=oneMinus(smoothstep(0.015,0.10,seam));
+  const matrix=mix(vec3(0.069,0.052,0.077), vec3(0.29,0.24,0.26), cloud.mul(0.5).add(0.5));
+  const marble=mix(matrix,vec3(0.33,0.27,0.25),halo.mul(0.29)).add(calcite.mul(vec3(0.072,0.054,0.042)));
+  const wet=oneMinus(smoothstep(-0.10,0.65,p.y.add(cloud.mul(0.09))));
+  stoneMat.colorNode=marble.mul(grain.mul(0.10).add(1)).mul(oneMinus(wet.mul(0.40)));
+  stoneMat.roughnessNode=mix(float(0.79).sub(calcite.mul(0.14)),float(0.30),wet);
+  stoneMat.normalNode=bumpMap(grain, float(0.023));
 }
 const darkMat=new THREE.MeshStandardNodeMaterial({color:0x161420, roughness:1.0});
 const woodMat=new THREE.MeshStandardNodeMaterial({color:0x24161e, roughness:0.62});
 const floorMat=new THREE.MeshStandardNodeMaterial({color:0x1a1713, roughness:0.95});
 // Gilding, not gold: metalness just under 1 at a rough-ish finish, so the mouldings carry a
 // travelling highlight rather than mirroring the room.
-const frameMat=new THREE.MeshStandardNodeMaterial({color:0xd7a965, roughness:0.32, metalness:0.82});
+const frameMat=new THREE.MeshStandardNodeMaterial({color:0xd7a965, vertexColors:true, roughness:0.32, metalness:0.82});
 {
   const patina=mx_noise_float(positionWorld.mul(7)).mul(0.5).add(0.5);
   frameMat.colorNode=mix(vec3(0.22,0.105,0.041),vec3(0.76,0.48,0.20),smoothstep(0.15,0.76,patina));
@@ -471,14 +458,17 @@ const frameMat=new THREE.MeshStandardNodeMaterial({color:0xd7a965, roughness:0.3
 // truncated, which is exactly what a ruin must not look like.
 function flutedColumn(R, H, seed, brk, flutes){
   flutes=flutes||22;
-  const NA=flutes*6, NH=Math.max(10, Math.round(H*7));
+  const NA=flutes*10;
   const pos=[], idx=[];
   const ang=i=>i/NA*Math.PI*2;
   // r(theta): a scalloped section. The fillets between flutes are what keep it from reading as a gear.
   const rad=(a,y)=>{
-    const t=y/H, taper=1-0.07*t;
-    const f=Math.pow(Math.max(0,Math.cos(flutes*a)),0.65);
-    return R*taper*(1-0.055*f);
+    const t=y/H;
+    const taper=1-0.07*t+0.019*Math.sin(Math.PI*t);
+    // A concave channel separated from its neighbour by a narrow flat fillet.
+    const phase=(a*flutes/(2*Math.PI))%1;
+    const u=Math.min(1,Math.abs(phase-0.5)/0.42);
+    return R*taper*(1-0.066*Math.sqrt(Math.max(0,1-u*u)));
   };
   // THE BREAK IS MEASURED IN RADII, NOT IN THE COLUMN'S HEIGHT, and getting that wrong is the most
   // visible mistake this file has made. The first version varied the top by a FRACTION OF H, so a
@@ -494,31 +484,48 @@ function flutedColumn(R, H, seed, brk, flutes){
   // higher terms are the roughness on it.
   const topAt=a=>H + R*brk*(0.75*Math.cos(a-seed)+0.25*Math.sin(a*3+seed*2.1)
                             +0.10*Math.sin(a*7+seed*1.3));
+  // Put vertices exactly at the chamfers between drums. Interpolating their
+  // height from the foot keeps the courses level despite the broken upper rim.
+  const joints=Math.max(0,Math.round(H/(2.8*R))-1);
+  const rings=[[0,0]];
+  for(let j=1;j<=joints;j++){
+    const y=(H-0.8*R)*j/(joints+1);
+    rings.push([y-0.027*R,0],[y,0.022*R],[y+0.027*R,0]);
+  }
+  const NH=rings.length+1;
   for(let i=0;i<=NA;i++){
-    const a=ang(i), ty=topAt(a);
-    for(let j=0;j<=NH;j++){
-      const y=ty*j/NH;
-      pos.push(Math.cos(a)*rad(a,y), y, Math.sin(a)*rad(a,y));
+    const a=ang(i), top=topAt(a);
+    const chip=brk*R*(0.023+0.022*Math.sin(5*a+seed));
+    for(const [y,inset] of [...rings,[top-0.12*R,0],[top,chip]]){
+      const r=rad(a,y)-inset;
+      pos.push(Math.cos(a)*r, y, Math.sin(a)*r);
     }
   }
   for(let i=0;i<NA;i++) for(let j=0;j<NH;j++){
     const p=i*(NH+1)+j, q=(i+1)*(NH+1)+j;
     idx.push(p,p+1,q, q,p+1,q+1);
   }
-  // Both ends are closed. The broken top is a fan to the mean height, so it is a rough surface
-  // rather than a disc; the foot is capped too, because half of these are lying down and a lying
-  // drum with an open end shows the inside of its own tube.
-  const fan=(y0,rimScale,flip)=>{
-    const c=pos.length/3; pos.push(0,y0,0);
-    const rim=[];
-    for(let i=0;i<=NA;i++){ const a=ang(i), ty=(rimScale==='top')?topAt(a):0;
-      rim.push(pos.length/3);
-      pos.push(Math.cos(a)*rad(a,ty), ty, Math.sin(a)*rad(a,ty)); }
-    for(let i=0;i<NA;i++) flip?idx.push(c,rim[i],rim[i+1]):idx.push(c,rim[i+1],rim[i]);
-  };
-  let mean=0; for(let i=0;i<NA;i++) mean+=topAt(ang(i))/NA;
-  fan(mean,'top',false);
-  fan(0,'bottom',true);
+  // Copy the exact side rims to keep caps watertight and their normals separate.
+  // A second, irregular ring on the fracture carries the break into the stone.
+  for(const top of [false,true]){
+    const rim=[],interior=[];
+    for(let i=0;i<NA;i++){
+      const offset=3*(i*(NH+1)+(top?NH:0));
+      const x=pos[offset],y=pos[offset+1],z=pos[offset+2],a=ang(i);
+      rim.push(pos.length/3); pos.push(x,y,z);
+      if(top){
+        const k=0.56+0.07*Math.sin(a*3+seed);
+        interior.push(pos.length/3);
+        pos.push(x*k,H+(y-H)*k+R*brk*0.12*Math.cos(a*4-seed),z*k);
+      }
+    }
+    const c=pos.length/3; pos.push(0,top?H:0,0);
+    for(let i=0;i<NA;i++){
+      const j=(i+1)%NA;
+      if(top) idx.push(rim[i],interior[i],rim[j], rim[j],interior[i],interior[j], c,interior[j],interior[i]);
+      else idx.push(c,rim[i],rim[j]);
+    }
+  }
   const g=new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
   g.setIndex(idx); g.computeVertexNormals();
@@ -679,76 +686,69 @@ for(const [x,y,z,rx,ry,rz,a,b,c] of [
 //
 // The profile below is a real one, read outward from the picture: a fillet at the rabbet, a bead, a
 // hollow, an ogee (the double curve that is the signature of a picture frame), a flat, and a
-// chamfer down to the outer edge -- then straight back to the wall to close it. Sixteen steps, so
-// the lamp finds five or six separate highlights across the width of the moulding instead of one.
+// chamfer down to the outer edge -- then straight back to the wall to close it. The changes of slope let
+// the lamp pick out several highlights across the width of the moulding.
 function frameSweep(w,h,profile){
-  const A=w/2, B=h/2, P=profile.length, pos=[];
+  const A=w/2, B=h/2, P=profile.length, pos=[], colors=[];
   const corner=(k,o)=>{const sx=(k===0||k===3)?1:-1, sy=(k<2)?1:-1; return [sx*(A+o), sy*(B+o)];};
   for(let i=0;i<P;i++){
-    const [o0,z0]=profile[i], [o1,z1]=profile[(i+1)%P];
+    const [o0,z0,t0]=profile[i], [o1,z1,t1]=profile[(i+1)%P];
     for(let k=0;k<4;k++){
       const k2=(k+1)%4;
       const a=corner(k,o0), b=corner(k2,o0), c=corner(k2,o1), d=corner(k,o1);
       pos.push(a[0],a[1],z0, c[0],c[1],z1, b[0],b[1],z0);
       pos.push(a[0],a[1],z0, d[0],d[1],z1, c[0],c[1],z1);
+      for(const t of [t0,t1,t0,t0,t1,t1]) colors.push(Math.sqrt(t),t,t*t);
     }
   }
   const g=new THREE.BufferGeometry();
   g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
   // Non-indexed with face normals, deliberately: a carved moulding wants its steps to CATCH, and
   // smoothing across them turns the whole profile into one soft roll.
   g.computeVertexNormals(); g.computeBoundingSphere();
   return g;
 }
-// out, forward. Starts at the rabbet (the lip the canvas sits behind) and wraps to the back.
-const MOULDING=[[0.000,0.014],[0.008,0.030],[0.017,0.034],[0.025,0.021],[0.031,0.024],
-                [0.040,0.049],[0.053,0.063],[0.068,0.060],[0.079,0.041],[0.090,0.045],
-                [0.104,0.062],[0.119,0.056],[0.130,0.028],[0.138,0.010],[0.138,-0.040],
-                [0.000,-0.040]];
-const BEAD_GEO=new THREE.SphereGeometry(1,9,7);
-const CORNER_GEO=new THREE.BoxGeometry(1,1,1);
+// (Offset from the canvas, depth toward the visitor, surviving gilding).
+// The dark bole shows most in the scoop and along the side of the timber.
+const MOULDING=[
+  [0.000,0.016,0.60],[0.004,0.028,1.00],[0.010,0.034,1.00],
+  [0.019,0.034,0.71],[0.024,0.031,0.62],[0.027,0.043,1.00],
+  [0.032,0.044,0.93],[0.037,0.032,0.63],[0.044,0.021,0.40],
+  [0.052,0.018,0.42],[0.064,0.021,0.52],[0.077,0.030,0.72],
+  [0.088,0.048,0.89],[0.096,0.065,0.97],[0.105,0.071,1.00],
+  [0.114,0.069,0.95],[0.123,0.057,0.82],[0.128,0.040,0.65],
+  [0.129,0.030,0.51],[0.137,0.032,0.96],[0.142,0.028,0.91],
+  [0.142,-0.018,0.52],[0.137,-0.024,0.37],[0.137,-0.062,0.35],
+  [0.129,-0.068,0.44],[0.000,-0.068,0.53]
+];
+const BEAD_GEO=new THREE.SphereGeometry(1,10,6);
 
-function ornateFrame(w,h,scale){
-  const k=scale||1, prof=MOULDING.map(([o,z])=>[o*k, z*k]);
+function ornateFrame(w,h,k,crest){
   const grp=new THREE.Group();
-  const m=new THREE.Mesh(frameSweep(w,h,prof), frameMat);
+  const prof=MOULDING.map(([offset,depth,gilding])=>[offset*k,depth*k,gilding]);
+  const m=new THREE.Mesh(frameSweep(w,h,prof),frameMat);
   m.castShadow=true; m.receiveShadow=true; grp.add(m);
 
-  // A BEAD COURSE round the rabbet. One instanced mesh, so a hundred beads cost one draw call --
-  // which is the only reason this is affordable at five frames. It is the detail that reads as
-  // *carving* rather than as a stepped extrusion, and it is right at the picture's edge where the
-  // eye already is.
-  // Small, and set back into the rabbet. The first pass used 2.5 cm beads standing proud of the
-  // moulding's crest, which under a warm lamp on a dark frame read as a string of fairy lights --
-  // the ornament has to be the same material catching the same light, not a row of highlights.
-  const r=0.0062*k, gap=r*2.7;
-  const nx=Math.max(2,Math.round(w/gap)), ny=Math.max(2,Math.round(h/gap));
-  const total=2*(nx+ny);
-  const beads=new THREE.InstancedMesh(BEAD_GEO, frameMat, total);
-  const mt=new THREE.Matrix4(), sc=new THREE.Vector3(r,r,r*0.8);
-  const q=new THREE.Quaternion(), off=0.010*k, zb=0.021*k;
+  // Turned beads separated by a pair of little reels on the sight edge.
+  // Fit whole repeats on each rail and seat their backs into the inner fillet.
+  const nx=Math.max(1,Math.round(w/(0.11*k))),ny=Math.max(1,Math.round(h/(0.11*k)));
+  const beads=new THREE.InstancedMesh(BEAD_GEO,frameMat,6*(nx+ny));
+  const mt=new THREE.Matrix4(),q=new THREE.Quaternion(),pos=new THREE.Vector3(),scale=new THREE.Vector3();
   let n=0;
-  const put=(x,y)=>{ mt.compose(new THREE.Vector3(x,y,zb), q, sc); beads.setMatrixAt(n++, mt); };
-  for(let i=0;i<nx;i++){ const x=-w/2+w*(i+0.5)/nx; put(x, h/2+off); put(x, -h/2-off); }
-  for(let i=0;i<ny;i++){ const y=-h/2+h*(i+0.5)/ny; put(w/2+off, y); put(-w/2-off, y); }
-  beads.count=n; beads.instanceMatrix.needsUpdate=true;
-  grp.add(beads);   // no shadow: a 6 mm bead casts nothing anyone can see, and it is 100 casters
-
-  // Corner blocks. A real frame breaks its moulding at the corners with a carved boss; without them
-  // the mitre runs straight through and the frame reads as machined.
-  // Corner bosses. They sit ON the moulding, over its crest, not outside its edge -- the first
-  // pass put them past the outer edge and they read as four tabs stuck to the corners rather than
-  // as carving. A lozenge (45 degrees in plane) because that is what breaks the mitre visually.
-  const cs=0.050*k;
-  for(const [sx,sy] of [[1,1],[-1,1],[1,-1],[-1,-1]]){
-    const c=new THREE.Mesh(CORNER_GEO, frameMat);
-    c.scale.set(cs*2.0, cs*2.0, cs*0.9);
-    c.position.set(sx*(w/2+0.070*k), sy*(h/2+0.070*k), 0.064*k);
-    c.rotation.z=Math.PI/4;
-    c.castShadow=true; c.receiveShadow=true;
-    grp.add(c);
+  for(const horizontal of [true,false]){
+    const length=horizontal?w:h,count=horizontal?nx:ny,pitch=length/count;
+    const edge=(horizontal?h:w)/2+0.014*k;
+    for(const side of [-1,1]) for(let i=0;i<count;i++){
+      for(const [phase,long,wide] of [[0.32,0.235,0.009],[0.71,0.053,0.011],[0.87,0.053,0.011]]){
+        const along=-length/2+(i+phase)*pitch;
+        pos.set(horizontal?along:side*edge,horizontal?side*edge:along,0.036*k);
+        scale.set(horizontal?long*pitch:wide*k,horizontal?wide*k:long*pitch,0.008*k);
+        beads.setMatrixAt(n++,mt.compose(pos,q,scale));
+      }
+    }
   }
-  grp.add(carvedFrame(w,h,k,frameMat));
+  grp.add(beads,carvedFrame(w,h,k,frameMat,crest));
   return grp;
 }
 
@@ -770,7 +770,7 @@ async function hangWork(work){
   // Frame weight scales with the picture but is CLAMPED at both ends: a 0.21 m moulding round a
   // 1.9 m canvas is about 7% of its width, which is what a heavy gilt frame actually is. The first
   // pass scaled it at h/1.9 and the mouldings came out at 4%, which reads as a passe-partout.
-  g.add(ornateFrame(w,h,Math.max(1.4, Math.min(2.2, h/1.3))));
+  g.add(ornateFrame(w,h,Math.max(1.4, Math.min(2.2, h/1.3)),work.crest));
   const backing=new THREE.Mesh(new THREE.BoxGeometry(w+0.02,h+0.02,0.10), woodMat);
   backing.position.z=-0.045; backing.castShadow=true; g.add(backing);
 
@@ -789,7 +789,8 @@ async function hangWork(work){
   g.add(canvasMesh);
 
   const nrm=new THREE.Vector3(0,0,1).applyEuler(g.rotation);
-  works.push(Object.assign({}, work, {centre:g.position.clone(), normal:nrm, mesh:canvasMesh}));
+  const entry=document.querySelector('[data-work="'+work.slug+'"]');
+  works.push(Object.assign({}, work, {entry, centre:g.position.clone(), normal:nrm, mesh:canvasMesh}));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1243,13 +1244,10 @@ function nearestWork(){
 }
 function paintLabel(w){
   if(w===shownWork) return;
+  if(shownWork) shownWork.entry.removeAttribute('aria-current');
   shownWork=w;
-  labelEl.classList.add('fade');
-  setTimeout(()=>{
-    labelEl.innerHTML = w ? `<div class="who">Mingyang Song</div>`+
-        `<div class="what">${w.title}</div><div class="med">${w.med}</div>` : '';
-    labelEl.classList.remove('fade');
-  }, reduced.matches?0:170);
+  if(w) w.entry.setAttribute('aria-current','true');
+  labelEl.textContent = w ? w.entry.querySelector('span').textContent : 'The flooded salon';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1305,7 +1303,7 @@ async function boot(){
   splash(-2.2, -1.4, DROP_A*0.7);
 
   backendEl.hidden=false;
-  backendEl.textContent=isWebGPU ? 'drawn with WebGPU' : 'WebGPU unavailable \u2014 drawn with WebGL2';
+  backendEl.textContent=isWebGPU ? 'Rendered with WebGPU' : 'Rendered with WebGL2';
   statusEl.classList.add('gone');
   setTimeout(()=>{statusEl.hidden=true;}, 600);
   resetBtn.disabled=true;
@@ -1371,7 +1369,7 @@ function nudge(){ settleUntil=performance.now()/1000-t0+6; }   // "something hap
 ['pointerdown','wheel','keydown'].forEach(k=>canvas.addEventListener(k,nudge,{passive:true}));
 
 function frame(){
-  if(busy) return;                       // a slow adapter must not queue frames behind itself
+  if(busy || printView.open) return;                       // a slow adapter must not queue frames behind itself
   // TWO DIFFERENT DELTAS, and sharing one variable made the quality ladder dead code. `raw` is how
   // long the last frame actually took, which is what adaptQuality has to see; `dt` is what the
   // simulation is allowed to advance by, clamped so that a hitch or a backgrounded tab cannot

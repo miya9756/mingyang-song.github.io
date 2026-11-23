@@ -22,7 +22,7 @@ except ImportError:
     raise
 
 CHECK = r"""() => {
-  const {THREE,flutedColumn,ruinWall,frameSweep,MOULDING,closedTube}=window.roomGeometry;
+  const {THREE,flutedColumn,ruinWall,frameSweep,MOULDING,closedTube,archStone,tuftedBack,pleatedShade,shellCrest,acanthusLeaf,cornerRosette}=window.roomGeometry;
   function audit(g,label){
     const p=g.attributes.position, ids=g.index?Array.from(g.index.array):Array.from({length:p.count},(_,i)=>i);
     const edges=new Map(); let volume=0,triangles=0;
@@ -48,9 +48,15 @@ CHECK = r"""() => {
     results.push(audit(flutedColumn(r,h,seed,brk),'column '+h));
   }
   for(const tilt of [-0.48,0.55]) results.push(audit(ruinWall(6.2,4.85,0.55,1.3,tilt),'wall '+tilt));
+  results.push(audit(shellCrest(),'scallop crest'));
+  results.push(audit(acanthusLeaf(),'acanthus leaf'));
+  results.push(audit(cornerRosette(),'corner rosette'));
   results.push(audit(frameSweep(3.4,1.9,MOULDING),'gilt frame'));
   results.push(audit(closedTube([[0,0,0],[0.2,0.5,0.1],[0,1,0]],0.03,24),'capped scroll'));
   results.push(audit(closedTube([[1,0,0],[0,1,0],[-1,0,0],[0,-1,0],[1,0,0]],0.03,48),'closed scroll'));
+  results.push(audit(archStone(2.3,0.54,0.8,0.97,0.77),'arch keystone'));
+  results.push(audit(tuftedBack(),'tufted upholstery'));
+  results.push(audit(pleatedShade(),'pleated lampshade'));
   return results;
 }"""
 
@@ -61,8 +67,8 @@ class Quiet(http.server.SimpleHTTPRequestHandler):
 
 def main():
     src = (ROOT / 'misc/museum/room/index.html').read_text()
-    src = src.replace("import {carvedFrame, dressRoom}", "import {carvedFrame, dressRoom, closedTube}")
-    src = src.replace('\nboot();', '\nwindow.roomGeometry={THREE,flutedColumn,ruinWall,frameSweep,MOULDING,closedTube};')
+    src = src.replace("import {carvedFrame, dressRoom}", "import {carvedFrame, dressRoom, closedTube, archStone, tuftedBack, pleatedShade, shellCrest, acanthusLeaf, cornerRosette}")
+    src = src.replace('\nboot();', '\nwindow.roomGeometry={THREE,flutedColumn,ruinWall,frameSweep,MOULDING,closedTube,archStone,tuftedBack,pleatedShade,shellCrest,acanthusLeaf,cornerRosette};')
     server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Quiet, directory=str(ROOT)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
